@@ -1,0 +1,8 @@
+# Fast linker for Windows
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+
+# Cargo aliases for development
+[alias]
+dev = "run --features bevy/dynamic_linking"
+dev-release = "run --release"
