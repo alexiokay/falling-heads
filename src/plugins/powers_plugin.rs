@@ -4,6 +4,9 @@ use crate::components::{
     explosive::{Tnt, Explosion},
     physics::Velocity,
     projectile::{Laser, Arrow},
+    hero::Hero,
+    villager::Villager,
+    enemy::Enemy,
 };
 use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
@@ -27,22 +30,29 @@ pub fn spawn_tnt(
     commands: &mut Commands,
     position: Vec3,
     textures: &GameTextures,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
 ) {
-    use crate::components::physics::{Gravity, Bouncy};
+    use crate::components::physics::Gravity;
 
+    // Spawn TNT as 3D cube with corrected texture orientation
     commands.spawn((
         Tnt {
             timer: Timer::from_seconds(3.0, TimerMode::Once),
         },
-        Sprite {
-            image: textures.tnt.clone(),
-            custom_size: Some(Vec2::new(32.0, 32.0)),  // 2D scale
-            ..default()
-        },
-        Transform::from_translation(position),
+        Mesh3d(meshes.add(Cuboid::new(64.0, 64.0, 64.0))),  // Full 3D cube 64x64x64
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            base_color_texture: Some(textures.tnt.clone()),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()  // Use default cull_mode (back-face culling)
+        })),
+        Transform::from_translation(position)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::PI)),  // Rotate 180° on X to flip texture upright
         Velocity { x: 0.0, y: 0.0 },
-        Gravity { force: -500.0 },  // 2D scale
-        Bouncy { restitution: 0.5 },
+        Gravity { force: -500.0 },
+        // NO Bouncy component - TNT doesn't bounce
     ));
 
     info!("TNT spawned at {:?}", position);
@@ -59,7 +69,7 @@ fn tnt_countdown(
         if tnt.timer.is_finished() {
             // Explode!
             commands.spawn((
-                Explosion { radius: 150.0 },  // 2D scale
+                Explosion { radius: 342.0 },  // Increased by 3 blocks (64*3=192): 150+192=342
                 Transform::from_translation(transform.translation),
             ));
 
@@ -73,6 +83,7 @@ fn tnt_explosion(
     mut commands: Commands,
     explosion_query: Query<(Entity, &Explosion, &Transform), Added<Explosion>>,
     block_query: Query<(Entity, &Transform), With<Block>>,
+    mut entity_query: Query<(&Transform, &mut Velocity), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
 ) {
     for (explosion_entity, explosion, explosion_transform) in explosion_query.iter() {
         let explosion_pos = explosion_transform.translation;
@@ -86,6 +97,27 @@ fn tnt_explosion(
             }
         }
 
+        // Push all entities away from explosion
+        let push_blocks = 3.0; // Push entities 3 blocks away
+        for (entity_transform, mut entity_velocity) in entity_query.iter_mut() {
+            let entity_pos = entity_transform.translation;
+            let distance = explosion_pos.distance(entity_pos);
+
+            if distance < explosion.radius && distance > 0.0 {
+                // Calculate push direction (away from explosion)
+                let direction = (entity_pos - explosion_pos).normalize();
+
+                // Push strength decreases with distance (inverse square law)
+                let push_strength = 800.0 * (1.0 - distance / explosion.radius);
+
+                // Apply push velocity
+                entity_velocity.x += direction.x * push_strength;
+                entity_velocity.y += direction.y * push_strength;
+
+                info!("Explosion pushed entity at distance {} with strength {}", distance, push_strength);
+            }
+        }
+
         info!("Explosion destroyed blocks in radius {}", explosion.radius);
 
         // Clean up explosion entity immediately
@@ -94,21 +126,28 @@ fn tnt_explosion(
 }
 
 // LASER spawning - fires downward from hero
-pub fn spawn_laser(commands: &mut Commands, position: Vec3) {
-    let width = 5.0; // 3D scale: 5 blocks wide
-    let height = 30.0; // 3D scale: tall laser beam
+pub fn spawn_laser(
+    commands: &mut Commands,
+    position: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    let width = 320.0; // 3D scale: wider laser
+    let height = 2000.0; // 3D scale: tall laser beam
 
     commands.spawn((
         Laser {
             timer: Timer::from_seconds(0.5, TimerMode::Once),
             width,
         },
-        Sprite {
-            color: Color::srgba(1.0, 0.0, 1.0, 0.7), // Purple semi-transparent
-            custom_size: Some(Vec2::new(width, height)),
+        Mesh3d(meshes.add(Rectangle::new(width, height))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.0, 1.0, 0.7), // Purple semi-transparent
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
             ..default()
-        },
-        Transform::from_translation(position + Vec3::new(0.0, -height / 2.0, 0.0)),
+        })),
+        Transform::from_translation(position + Vec3::new(0.0, -height / 2.0, 5.0)), // Z=5 for visibility
     ));
 
     info!("LASER spawned at {:?}", position);
@@ -130,12 +169,12 @@ fn laser_update(
 
             for (block_entity, block_transform) in block_query.iter() {
                 let block_pos = block_transform.translation;
-                let block_half = 0.5; // 3D scale: Block size / 2
+                let block_half = 32.0; // 3D scale: Block size / 2 (64/2)
 
                 // Check if block is within laser's horizontal range and below hero
                 if block_pos.x > laser_pos.x - laser_half_width - block_half
                     && block_pos.x < laser_pos.x + laser_half_width + block_half
-                    && block_pos.y < laser_pos.y + 15.0 // 3D scale: Below the laser origin
+                    && block_pos.y < laser_pos.y + 1000.0 // 3D scale: Below the laser origin
                 {
                     commands.entity(block_entity).despawn();
                 }
@@ -150,25 +189,32 @@ fn laser_update(
 }
 
 // ARROW spawning - circular barrage around hero
-pub fn spawn_arrows(commands: &mut Commands, position: Vec3) {
-    let num_arrows = 12;
-    let speed = 5.0;  // 3D scale
+pub fn spawn_arrows(
+    commands: &mut Commands,
+    position: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    let num_arrows = 8;
+    let speed = 300.0;  // 3D scale
 
     for i in 0..num_arrows {
         let angle = (i as f32 / num_arrows as f32) * std::f32::consts::TAU;
 
         commands.spawn((
-            Arrow { angle, speed },
-            Sprite {
-                color: Color::srgb(0.6, 0.4, 0.2),
-                custom_size: Some(Vec2::new(0.2, 0.5)),  // 3D scale
+            Arrow::new(1), // 1 damage per arrow
+            Mesh3d(meshes.add(Rectangle::new(16.0, 48.0))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.6, 0.4, 0.2),
+                unlit: true,
                 ..default()
-            },
-            Transform::from_translation(position),
+            })),
+            Transform::from_translation(position + Vec3::new(0.0, 0.0, 5.0)), // Z=5 for visibility
             Velocity {
                 x: angle.cos() * speed,
                 y: angle.sin() * speed,
             },
+            crate::components::physics::Gravity { force: -300.0 }, // Arrows have gravity
         ));
     }
 
@@ -187,7 +233,7 @@ fn arrow_update(
         for (block_entity, block_transform) in block_query.iter() {
             let distance = arrow_pos.distance(block_transform.translation);
 
-            if distance < 0.7 {  // 3D scale
+            if distance < 64.0 {  // 3D scale: block size
                 commands.entity(block_entity).despawn();
                 commands.entity(arrow_entity).despawn();
                 break;
@@ -195,8 +241,8 @@ fn arrow_update(
         }
 
         // Despawn arrows that go too far (3D scale)
-        if arrow_pos.y < -30.0 || arrow_pos.y > 30.0
-            || arrow_pos.x < -30.0 || arrow_pos.x > 30.0 {
+        if arrow_pos.y < -2000.0 || arrow_pos.y > 2000.0
+            || arrow_pos.x < -2000.0 || arrow_pos.x > 2000.0 {
             commands.entity(arrow_entity).despawn();
         }
     }

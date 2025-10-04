@@ -2,8 +2,17 @@ use bevy::prelude::*;
 
 #[derive(Component)]
 pub struct Arrow {
-    pub angle: f32,
-    pub speed: f32,
+    pub damage: u32,
+    pub lifetime: Timer,
+}
+
+impl Arrow {
+    pub fn new(damage: u32) -> Self {
+        Self {
+            damage,
+            lifetime: Timer::from_seconds(5.0, TimerMode::Once), // Despawn after 5 seconds
+        }
+    }
 }
 
 #[derive(Component)]

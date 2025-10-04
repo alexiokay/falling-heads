@@ -121,6 +121,8 @@ fn process_commands(
     mut commands: Commands,
     hero_query: Query<(Entity, &Transform), With<Hero>>,
     textures: Res<GameTextures>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut power_events: MessageWriter<PowerActivated>,
 ) {
     let Some(queue) = COMMAND_QUEUE.get() else {
@@ -139,7 +141,7 @@ fn process_commands(
             PowerCommand::Tnt => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
                     let spawn_pos = hero_transform.translation + Vec3::new(0.0, 50.0, 0.0);  // 2D scale
-                    spawn_tnt(&mut commands, spawn_pos, &textures);
+                    spawn_tnt(&mut commands, spawn_pos, &textures, &mut meshes, &mut materials);
                     info!("🧨 TNT power activated!");
                 }
             }
@@ -163,13 +165,13 @@ fn process_commands(
             }
             PowerCommand::Laser => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
-                    spawn_laser(&mut commands, hero_transform.translation);
+                    spawn_laser(&mut commands, hero_transform.translation, &mut meshes, &mut materials);
                     info!("💜 LASER power activated!");
                 }
             }
             PowerCommand::Arrow => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
-                    spawn_arrows(&mut commands, hero_transform.translation);
+                    spawn_arrows(&mut commands, hero_transform.translation, &mut meshes, &mut materials);
                     info!("🏹 ARROW barrage activated!");
                 }
             }

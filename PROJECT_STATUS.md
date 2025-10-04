@@ -68,12 +68,15 @@ assets/
 3. **Define resources** - GameState, Inventory, CommandQueue
 4. **Define events** - BlockDestroyed, PowerActivated, etc.
 
-### Current Implementation Status: ~45%
+### Current Implementation Status: ~60%
 - ✅ Foundation (5%)
 - ✅ Core Components (10%)
 - ✅ Physics System (10%)
 - ✅ Gameplay Loop (10%)
 - ✅ World Generation System (10%)
+- ✅ Health & Combat System (5%)
+- ✅ UI Systems (5%)
+- ✅ Background Rendering (5%)
 - ⏳ Powers (0%)
 - ⏳ API (0%)
 - ⏳ Polish (0%)
@@ -128,7 +131,7 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 - [ ] BOX - Loot drop
 - [ ] MAGNET - Resource attractor
 
-### Block Types (23 Total)
+### Block Types (35+ Total)
 **Terrain Blocks:**
 - [x] Stone, Dirt, Grass, Sand, Sandstone, Snow
 
@@ -145,6 +148,19 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 - [x] Pumpkin, Melon (Plains biome)
 - [x] Cactus, Dead Bush (Desert biome)
 - [x] Mushroom, Vines (Underground biome)
+
+**Nether Blocks:**
+- [x] Netherrack (terrain)
+- [x] Netherite (ore)
+- [x] Ancient Debris (rare ore, multi-texture)
+- [x] Soul Sand (decorative)
+- [x] Glowstone (decorative)
+
+**End Blocks:**
+- [x] End Stone (terrain)
+- [x] Obsidian (terrain)
+- [x] Chorus Fruit (decorative)
+- [x] Purpur (decorative)
 
 ---
 
@@ -180,7 +196,89 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 
 ---
 
-## 🎉 Recent Updates (October 4, 2025)
+## 🎉 Recent Updates
+
+### **October 4, 2025 - Session 2: Combat, Health, and Visual Systems**
+
+#### Major Features Implemented:
+
+1. **Enemy System**
+   - 4 enemy types: Zombie, Skeleton, Pigman, Enderman
+   - Enemy AI: Chase behavior toward hero
+   - Biome-specific spawning (Zombies/Skeletons in overworld, Pigmen in Nether, Endermen in End)
+   - Enemy-block collision and physics integration
+   - Size: 48x48 sprites rendered at Z=10.0
+
+2. **Health & Damage System**
+   - Created `EntityDamaged` and `EntityDied` message events
+   - Implemented `health_system.rs` with damage and death handlers
+   - Hero takes 1 damage on enemy contact (1-second cooldown)
+   - Entities auto-despawn when health reaches 0
+   - All entities (hero, enemies) have max 3 hearts
+
+3. **Heart UI System**
+   - Health bars rendered above all entities with Health component
+   - Visual hearts display: ♥ (filled) and ♡ (empty)
+   - Automatically follows entity position (40px offset for hero, 30px for enemies)
+   - Auto-cleanup when entity dies
+
+4. **Background Rendering System**
+   - Dynamic biome-based backgrounds
+   - Biome determination by depth:
+     - End: Y > 3200 (50 chunks)
+     - Plains/Surface: Y 0-3200
+     - Underground: Y -6400 to 0
+     - Nether: Y < -6400 (below -100 chunks)
+   - Nether uses `nether.png` texture
+   - Other biomes use color tints (sky blue, dark purple, dark gray)
+   - Background follows hero vertically
+
+5. **Multi-Texture Block System**
+   - Created `BlockTextures` resource for textured blocks
+   - Implemented texture loading for:
+     - Ancient Debris (top + side textures)
+     - Netherrack
+     - Obsidian
+     - Gold Block
+   - Textured blocks render with actual PNG files
+   - Non-textured blocks continue using solid colors
+
+6. **Expanded Biome System**
+   - Added 2 new biomes: **Nether** and **End**
+   - Total 7 biomes: Plains, Forest, Desert, Mountains, Underground, Nether, End
+   - Biome-specific enemy spawning rates
+   - Biome-specific cave generation patterns:
+     - Nether: Large bubble caves
+     - End: Alien/weird caves
+     - Underground: Classic caves with higher intensity
+
+#### New Files Created:
+- `src/events/damage_events.rs` - EntityDamaged, EntityDied messages
+- `src/systems/health_system.rs` - Damage and death handlers
+- `src/components/health_ui.rs` - HealthBar component
+- `src/systems/health_ui_system.rs` - Heart rendering system
+- `src/components/background.rs` - Background component
+- `src/systems/background_system.rs` - Biome-based background rendering
+- `src/resources/asset_handles.rs` - Extended with BlockTextures
+
+#### Modified Files:
+- `src/plugins/gameplay_plugin.rs` - Added health and UI systems
+- `src/plugins/physics_plugin.rs` - Added hero-enemy collision detection
+- `src/systems/world_generation.rs` - Added enemy spawning, textured blocks, Nether/End biomes
+- `src/components/block.rs` - Added Nether/End block types, BiomeType enum extended
+- `src/components/enemy.rs` - Added Health component, enemy types
+- `src/main.rs` - Load block textures
+
+#### Technical Improvements:
+- Fixed Bevy 0.17.1 API compatibility (Message vs Event)
+- Proper system ordering for damage → death → cleanup
+- Efficient health bar spawning (only for new entities)
+- Background system optimized to only update on biome change
+- Texture support for multi-face blocks (Ancient Debris top/side)
+
+---
+
+### **October 4, 2025 - Session 1: Initial Setup**
 
 ### **CRITICAL FIX: Unified 3D Rendering System**
 **Problem Solved:** Sprite positions were misaligned with physics on window resize due to 2D/3D coordinate space mismatch.

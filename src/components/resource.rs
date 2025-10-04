@@ -19,7 +19,7 @@ impl Default for RotatingResource {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResourceType {
     Coal,
     Iron,
@@ -27,4 +27,5 @@ pub enum ResourceType {
     Diamond,
     Emerald,
     Redstone,
+    Netherite,
 }

@@ -8,4 +8,5 @@ pub struct Inventory {
     pub diamond: u32,
     pub emerald: u32,
     pub redstone: u32,
+    pub netherite: u32,
 }

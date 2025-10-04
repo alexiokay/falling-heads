@@ -8,9 +8,12 @@ Control a falling hero as it bounces through an infinite chunk-based world with 
 
 ### ✨ Features
 - **🌍 Infinite procedural world** with chunk-based generation (16x16 blocks)
-- **🏔️ 5 Biomes** - Plains, Forest, Desert, Mountains, Underground
-- **🕳️ Cave systems** with pseudo-noise generation
-- **📦 23 Block types** - Terrain, Ores, and Decorative blocks
+- **🏔️ 7 Biomes** - Plains, Forest, Desert, Mountains, Underground, Nether, End
+- **🕳️ Biome-specific cave systems** with unique generation patterns
+- **📦 35+ Block types** - Terrain, Ores, Decorative blocks with multi-texture support
+- **👾 Enemy system** - 4 enemy types (Zombies, Skeletons, Pigmen, Endermen) with AI
+- **❤️ Health & Combat** - 3 hearts max, visual health bars, damage cooldown
+- **🎨 Dynamic backgrounds** - Biome-based backgrounds that change with depth
 - **⚡ 10 Power commands** via HTTP API (TNT, FAST, SLOW, ARROW, LASER, etc.)
 - **💎 Resource collection** (Coal, Iron, Gold, Diamond, Emerald, Redstone)
 - **🎯 Physics-based** AABB collision with bouncing

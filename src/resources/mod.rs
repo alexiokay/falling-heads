@@ -4,3 +4,6 @@ pub mod inventory;
 pub mod command_queue;
 pub mod world_config;
 pub mod asset_handles;
+pub mod material_cache;
+pub mod damage_cooldown;
+pub mod mesh_cache;

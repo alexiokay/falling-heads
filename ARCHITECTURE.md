@@ -61,14 +61,18 @@ minecraft-head-fall/
 │   ├── components/                 # ECS Components
 │   │   ├── mod.rs
 │   │   ├── hero.rs                 # Hero component
-│   │   ├── block.rs                # Block components (Health, BlockType)
+│   │   ├── block.rs                # Block components (BlockType, BiomeType)
 │   │   ├── resource.rs             # Resource/collectible components
 │   │   ├── physics.rs              # Velocity, Gravity, Bouncy
 │   │   ├── projectile.rs           # Arrow, Laser, Fireball components
-│   │   ├── enemy.rs                # Ghast, AI components
+│   │   ├── enemy.rs                # Enemy, EnemyType, Health components
 │   │   ├── explosive.rs            # TNT, Explosion components
 │   │   ├── power_effect.rs         # PowerEffect, Duration components
-│   │   └── visual.rs               # AnimationState, ParticleEmitter
+│   │   ├── visual.rs               # AnimationState, ParticleEmitter
+│   │   ├── villager.rs             # Villager AI component
+│   │   ├── chunk.rs                # Chunk and ChunkMember components
+│   │   ├── health_ui.rs            # HealthBar component
+│   │   └── background.rs           # Background component
 │   │
 │   ├── resources/                  # ECS Resources (global state)
 │   │   ├── mod.rs
@@ -77,7 +81,7 @@ minecraft-head-fall/
 │   │   ├── inventory.rs            # Player inventory
 │   │   ├── command_queue.rs        # External command queue
 │   │   ├── world_config.rs         # World generation config
-│   │   └── asset_handles.rs        # Cached asset handles
+│   │   └── asset_handles.rs        # GameTextures, BlockTextures handles
 │   │
 │   ├── systems/                    # ECS Systems
 │   │   ├── mod.rs
@@ -93,7 +97,7 @@ minecraft-head-fall/
 │   │   │   ├── mod.rs
 │   │   │   ├── hero_movement.rs    # Hero input handling
 │   │   │   ├── block_damage.rs     # Block health and damage
-│   │   │   ├── block_generator.rs  # Infinite block spawning
+│   │   │   ├── world_generation.rs # Chunk-based world generation with biomes
 │   │   │   ├── resource_drop.rs    # Resource spawning from blocks
 │   │   │   ├── resource_collect.rs # Resource collection
 │   │   │   └── camera_follow.rs    # Camera tracking hero
@@ -125,17 +129,22 @@ minecraft-head-fall/
 │   │   │   ├── damage_visual.rs    # Block crack visuals
 │   │   │   └── screen_shake.rs     # Camera shake effects
 │   │   │
-│   │   └── ui/                     # UI systems
-│   │       ├── mod.rs
-│   │       ├── hud.rs              # HUD updates
-│   │       ├── menu.rs             # Menu interactions
-│   │       └── notifications.rs    # Power notifications
+│   │   ├── ui/                     # UI systems
+│   │   │   ├── mod.rs
+│   │   │   ├── hud.rs              # HUD updates
+│   │   │   ├── menu.rs             # Menu interactions
+│   │   │   └── notifications.rs    # Power notifications
+│   │   │
+│   │   ├── health_system.rs        # Entity damage and death handling
+│   │   ├── health_ui_system.rs     # Health bar/hearts rendering
+│   │   └── background_system.rs    # Biome-based background rendering
 │   │
 │   ├── events/                     # Custom events
 │   │   ├── mod.rs
 │   │   ├── block_events.rs         # BlockDestroyed, BlockDamaged
 │   │   ├── resource_events.rs      # ResourceCollected
 │   │   ├── power_events.rs         # PowerActivated
+│   │   ├── damage_events.rs        # EntityDamaged, EntityDied
 │   │   └── game_events.rs          # GameOver, ScoreChanged
 │   │
 │   ├── plugins/                    # Bevy plugins (feature modules)
