@@ -117,13 +117,13 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 - [x] Resource collection system
 
 ### 10 Power Commands (External API)
-- [ ] TNT - Explosive
-- [ ] FAST - Speed boost
-- [ ] SLOW - Slow motion
+- [x] TNT - Explosive (implemented)
+- [x] FAST - Speed boost (2x for 5 seconds)
+- [x] SLOW - Slow motion (0.5x for 5 seconds)
+- [x] LASER - Beam weapon (implemented)
+- [x] ARROW - Circular arrow barrage (implemented)
 - [ ] FUSS - Chaos effect
 - [ ] BOLT - Lightning strike
-- [ ] ARROW - Circular arrow barrage
-- [ ] LASER - Beam weapon
 - [ ] GHAST - Enemy spawner
 - [ ] BOX - Loot drop
 - [ ] MAGNET - Resource attractor
@@ -180,12 +180,32 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 
 ---
 
-## 🎉 Recent Updates (October 3, 2025)
+## 🎉 Recent Updates (October 4, 2025)
+
+### **CRITICAL FIX: Unified 3D Rendering System**
+**Problem Solved:** Sprite positions were misaligned with physics on window resize due to 2D/3D coordinate space mismatch.
+
+**Solution Implemented:**
+1. **Converted 2D Sprites to 3D Textured Quads (Billboards)**
+   - Hero: Now uses `Mesh3d` with `Rectangle::new(64.0, 64.0)` + texture
+   - Villagers: Now uses `Mesh3d` with `Rectangle::new(56.0, 56.0)` + colored material
+   - All entities render in unified 3D world space at Z=10.0
+   - Removed Camera2d completely - single Camera3d for all rendering
+
+2. **Enhanced Collision System**
+   - Increased separation buffers (0.1 → 1.0 units) to prevent penetration
+   - Improved entity-entity collision with evenly split overlap resolution
+   - Higher bounce restitution (hero: 0.85, villagers: 0.8)
+
+3. **External API Updates**
+   - Changed server port from 3000 to 3029
+   - HTTP endpoint: `http://127.0.0.1:3029/command`
 
 ### Major Features Added:
 1. **2.5D Isometric Camera System**
-   - Orthographic projection with depth perception
-   - Camera follows hero smoothly
+   - Pure 3D perspective projection
+   - Camera follows hero smoothly at 80.0 offset
+   - Positioned at (30.0, 80.0, 1500.0) looking at origin
 
 2. **Biome System**
    - 5 distinct biomes: Plains, Forest, Desert, Mountains, Underground
@@ -210,24 +230,31 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
    - Terrain blocks (Stone, Dirt, Grass, Sand, Sandstone, Snow)
    - Decorative blocks (Wood, Leaves, Pumpkin, Melon, Cactus, etc.)
    - Biome-specific block distribution
+   - 3D cubes scaled to 64x64x64 to match entity sizes
 
 6. **Rotating Resource Drops**
    - Resources now rotate on X axis at 180°/second
    - Visual appeal for collectible items
    - Only ore blocks drop resources
 
+7. **Villager System**
+   - 5 villagers spawn around hero at start
+   - Each has random color and position offset
+   - Full physics integration with gravity and bouncing
+   - Entity-to-entity collision between hero and villagers
+
 ### New Files Created:
 - `src/components/chunk.rs` - Chunk management system
 - `src/systems/world_generation.rs` - World gen with biomes and caves
+- `src/components/villager.rs` - Villager component
 
 ### Modified Files:
+- `src/plugins/gameplay_plugin.rs` - **MAJOR**: Converted sprites to 3D billboards
+- `src/main.rs` - **MAJOR**: Removed Camera2d, unified 3D rendering
+- `src/plugins/physics_plugin.rs` - Enhanced collision resolution
+- `src/plugins/external_api_plugin.rs` - Changed port to 3029
 - `src/components/block.rs` - Added 16 new block types + BiomeType enum
 - `src/components/resource.rs` - Added RotatingResource component
-- `src/components/mod.rs` - Exported chunk module
-- `src/systems/mod.rs` - Exported world_generation module
-- `src/plugins/gameplay_plugin.rs` - Integrated new systems
-- `src/main.rs` - Updated camera to 2.5D isometric
-- `GAME_DESIGN.md` - Updated with new features
 - `.cargo/config.toml` - Added fast compile optimizations (LLD linker)
 - `Cargo.toml` - Added log optimization
 
@@ -235,7 +262,19 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 - Chunk despawning to prevent memory bloat
 - LLD linker for faster compile times
 - Cargo alias `cargo dev` for dynamic linking during development
+- Unified 3D coordinate space eliminates camera projection overhead
+
+### Technical Breakthroughs:
+- **Fixed window resize bug** by eliminating 2D/3D coordinate mismatch
+- **Fixed entity penetration** with unified 3D collision space
+- **Improved visual fidelity** with 3D textured quads vs 2D sprites
 
 ---
+
+## 📦 GitHub Repository
+**Published:** https://github.com/alexiokay/BevyCommunityGame-MineHeads.git
+- Initial commit with full feature set
+- 66 files, 10,363+ lines of code
+- Ready for community contributions
 
 Ready to build and test! 🎮

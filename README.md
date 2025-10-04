@@ -1,18 +1,22 @@
-# Falling Heads
+# MineHeads - Falling Block Breaker
 
-A 2.5D infinite falling game built with Bevy 0.17.1 where Minecraft-style heads descend through an endless column of destructible blocks.
+A 3D isometric infinite falling game built with Bevy 0.17.1 where Minecraft-style heads descend through an endless procedurally generated world of destructible blocks.
 
 ## 🎮 Game Overview
 
-Control a falling Minecraft head as it bounces through an infinite world of blocks. Break blocks by colliding with them, collect resources, and use powerful abilities triggered by external services!
+Control a falling hero as it bounces through an infinite chunk-based world with multiple biomes. Break blocks by colliding with them, collect resources, and use powerful abilities triggered by external HTTP API!
 
-### Features
-- **Infinite falling gameplay** with procedurally generated blocks
-- **10 unique powers** triggered via external API (TNT, FAST, SLOW, ARROW, LASER, BOLT, GHAST, BOX, MAGNET, FUSS)
-- **Resource collection system** (Coal, Iron, Gold, Diamond, Emerald, Redstone)
-- **Physics-based bouncing** and collision
-- **Block damage system** - blocks break after 5 hits
-- **2.5D graphics** with particle effects
+### ✨ Features
+- **🌍 Infinite procedural world** with chunk-based generation (16x16 blocks)
+- **🏔️ 5 Biomes** - Plains, Forest, Desert, Mountains, Underground
+- **🕳️ Cave systems** with pseudo-noise generation
+- **📦 23 Block types** - Terrain, Ores, and Decorative blocks
+- **⚡ 10 Power commands** via HTTP API (TNT, FAST, SLOW, ARROW, LASER, etc.)
+- **💎 Resource collection** (Coal, Iron, Gold, Diamond, Emerald, Redstone)
+- **🎯 Physics-based** AABB collision with bouncing
+- **🧑‍🤝‍🧑 Villager NPCs** with AI and collision
+- **🎨 3D isometric rendering** with unified coordinate space
+- **📊 Block damage system** - 5 hits to break, visual feedback
 
 ## 🚀 Getting Started
 
@@ -32,26 +36,26 @@ cargo run --release
 
 ## 🎯 External API
 
-The game exposes an HTTP API on `http://localhost:3000` for triggering powers:
+The game exposes an HTTP API on `http://localhost:3029` for triggering powers:
 
 ```bash
 # Example: Trigger TNT explosion
-curl -X POST http://localhost:3000/command \
+curl -X POST http://localhost:3029/command \
   -H "Content-Type: application/json" \
   -d '{"action": "TNT"}'
 ```
 
 ### Available Commands
-- `TNT` - Spawn explosive TNT
-- `FAST` - Speed up the hero
-- `SLOW` - Slow down the hero
-- `FUSS` - Create chaos
-- `BOLT` - Lightning strike
-- `ARROW` - Circular arrow barrage
-- `LASER` - Powerful laser beam
-- `GHAST` - Spawn shooting Ghast enemy
-- `BOX` - Spawn loot box
-- `MAGNET` - Attract all resources
+- `TNT` ✅ - Spawn explosive TNT above hero
+- `FAST` ✅ - Speed boost (2x for 5 seconds)
+- `SLOW` ✅ - Slow motion (0.5x for 5 seconds)
+- `LASER` ✅ - Powerful vertical laser beam
+- `ARROW` ✅ - Circular arrow barrage (8 arrows)
+- `FUSS` 🚧 - Create chaos effect (coming soon)
+- `BOLT` 🚧 - Lightning strike (coming soon)
+- `GHAST` 🚧 - Spawn shooting Ghast enemy (coming soon)
+- `BOX` 🚧 - Spawn loot box (coming soon)
+- `MAGNET` 🚧 - Attract all resources (coming soon)
 
 ## 📁 Project Structure
 
