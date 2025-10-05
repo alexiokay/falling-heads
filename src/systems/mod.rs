@@ -14,3 +14,7 @@ pub mod projectile_system;
 pub mod enemy_ai_system;
 pub mod heart_ui_system;
 pub mod damage_visual_system;
+pub mod block_damage_overlay_system;
+pub mod pause_menu_system;
+pub mod settings_menu_system;
+pub mod entity_spawn;

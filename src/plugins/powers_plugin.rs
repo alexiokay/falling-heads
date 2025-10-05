@@ -13,6 +13,16 @@ use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
 use crate::utils::constants::*;
 
+/// Component to handle sequential arrow spawning
+#[derive(Component)]
+pub struct ArrowBarrage {
+    pub spawn_timer: Timer,
+    pub arrows_remaining: u32,
+    pub current_angle: f32,
+    pub angle_step: f32,
+    pub follow_entity: Entity,  // Follow this entity's position (hero)
+}
+
 pub struct PowersPlugin;
 
 impl Plugin for PowersPlugin {
@@ -22,6 +32,7 @@ impl Plugin for PowersPlugin {
                 tnt_countdown,
                 tnt_explosion,
                 laser_update,
+                update_arrow_barrage,
             ).run_if(in_state(GameState::Playing)));
             // arrow_update REMOVED - handled by projectile_system with spatial hash instead
 
@@ -119,7 +130,7 @@ fn tnt_explosion(
             let distance = explosion_pos.distance(block_transform.translation);
 
             if distance < explosion.radius {
-                commands.entity(block_entity).despawn();
+                commands.entity(block_entity).despawn(); // Despawn children too (damage overlays)
             }
         }
 
@@ -205,7 +216,7 @@ fn laser_update(
                     && block_pos.x < laser_pos.x + laser_half_width + block_half
                     && block_pos.y < laser_pos.y + 1000.0 // 3D scale: Below the laser origin
                 {
-                    commands.entity(block_entity).despawn();
+                    commands.entity(block_entity).despawn(); // Despawn children too (damage overlays)
                 }
             }
         }
@@ -217,37 +228,98 @@ fn laser_update(
     }
 }
 
-// ARROW spawning - circular barrage around hero
+// ARROW spawning - creates a barrage controller that spawns arrows one by one
 pub fn spawn_arrows(
     commands: &mut Commands,
-    position: Vec3,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    hero_entity: Entity,
+    _meshes: &mut Assets<Mesh>,
+    _materials: &mut Assets<StandardMaterial>,
+    _projectile_textures: &crate::resources::asset_handles::ProjectileTextures,
 ) {
-    let num_arrows = 8;
-    let speed = 300.0;  // 3D scale
+    let num_arrows = 48;  // 48 arrows total = 2 full rotations (every 7.5 degrees)
+    let angle_step = -std::f32::consts::TAU / 24.0;  // Step size for 24 arrows per rotation
 
-    for i in 0..num_arrows {
-        let angle = (i as f32 / num_arrows as f32) * std::f32::consts::TAU;
+    // Spawn a barrage controller entity that follows the hero
+    commands.spawn(ArrowBarrage {
+        spawn_timer: Timer::from_seconds(0.05, TimerMode::Repeating),  // Spawn every 0.05 seconds
+        arrows_remaining: num_arrows,
+        current_angle: 0.0,  // Start at 0 degrees (right)
+        angle_step,
+        follow_entity: hero_entity,  // Track hero entity to follow their position
+    });
 
-        commands.spawn((
-            Arrow::new(1), // 1 damage per arrow
-            Mesh3d(meshes.add(Rectangle::new(16.0, 48.0))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.6, 0.4, 0.2),
+    info!("ARROW barrage started - will spawn {} arrows (2 rotations) counter-clockwise following hero", num_arrows);
+}
+
+/// System to spawn arrows one by one from barrage controllers
+fn update_arrow_barrage(
+    mut commands: Commands,
+    mut barrage_query: Query<(Entity, &mut ArrowBarrage)>,
+    hero_query: Query<&Transform, With<Hero>>,
+    time: Res<Time>,
+    projectile_textures: Option<Res<crate::resources::asset_handles::ProjectileTextures>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(projectile_textures) = projectile_textures else {
+        return;
+    };
+
+    for (barrage_entity, mut barrage) in barrage_query.iter_mut() {
+        barrage.spawn_timer.tick(time.delta());
+
+        if barrage.spawn_timer.just_finished() && barrage.arrows_remaining > 0 {
+            // Get current hero position (follow hero as they move)
+            let Ok(hero_transform) = hero_query.get(barrage.follow_entity) else {
+                // Hero doesn't exist anymore - despawn barrage
+                commands.entity(barrage_entity).despawn();
+                continue;
+            };
+
+            let hero_pos = hero_transform.translation;
+
+            // Calculate direction vector
+            let direction = Vec2::new(barrage.current_angle.cos(), barrage.current_angle.sin());
+            let velocity = direction * ARROW_SPEED;
+
+            // Spawn arrow slightly offset from hero to avoid instant collision
+            let spawn_offset = 80.0;
+            let spawn_pos = Vec3::new(
+                hero_pos.x + direction.x * spawn_offset,
+                hero_pos.y + direction.y * spawn_offset,
+                0.0  // Z=0 same as gameplay plane
+            );
+
+            let material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(projectile_textures.arrow.clone()),
                 unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                cull_mode: None,  // Double-sided rendering
                 ..default()
-            })),
-            Transform::from_translation(position + Vec3::new(0.0, 0.0, 5.0)), // Z=5 for visibility
-            Velocity {
-                x: angle.cos() * speed,
-                y: angle.sin() * speed,
-            },
-            crate::components::physics::Gravity { force: -300.0 }, // Arrows have gravity
-        ));
-    }
+            });
 
-    info!("ARROW barrage spawned with {} arrows", num_arrows);
+            commands.spawn((
+                crate::components::projectile::Arrow::new_friendly(1),  // Friendly arrow - won't hit hero/villagers
+                crate::components::bundles::PhysicsBundle::projectile(velocity, ARROW_GRAVITY),
+                crate::components::bundles::SpriteBundle3d::new(
+                    meshes.add(Rectangle::new(ARROW_WIDTH, ARROW_HEIGHT)),
+                    material,
+                    spawn_pos,
+                ),
+            ));
+
+            // Update for next arrow
+            barrage.current_angle += barrage.angle_step;
+            barrage.arrows_remaining -= 1;
+
+            // Despawn barrage controller when done
+            if barrage.arrows_remaining == 0 {
+                commands.entity(barrage_entity).despawn();
+                info!("ARROW barrage completed!");
+            }
+        }
+    }
 }
 
 fn arrow_update(
@@ -263,7 +335,7 @@ fn arrow_update(
             let distance = arrow_pos.distance(block_transform.translation);
 
             if distance < 64.0 {  // 3D scale: block size
-                commands.entity(block_entity).despawn();
+                commands.entity(block_entity).despawn(); // Despawn children too (damage overlays)
                 commands.entity(arrow_entity).despawn();
                 break;
             }

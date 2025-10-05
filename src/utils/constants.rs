@@ -26,8 +26,15 @@ pub const SKELETON_SHOOT_RANGE: f32 = 700.0;   // max distance to shoot (increas
 pub const SKELETON_IDEAL_RANGE: f32 = 400.0;   // Skeletons stay at this distance (good shooting distance)
 pub const SKELETON_MIN_RANGE: f32 = 300.0;     // Too close - back away
 pub const SKELETON_MAX_RANGE: f32 = 600.0;     // Too far - move closer
-pub const ARROW_SPEED: f32 = 400.0;  // Must be fast enough to fly horizontally before gravity pulls it down
+pub const ARROW_SPEED: f32 = 1200.0;  // Must be fast enough to fly horizontally before gravity pulls it down
 pub const ARROW_LIFETIME: f32 = 1000.0;           // seconds before despawn
+pub const ARROW_IMPACT_PUSH: f32 = 200.0;  // Horizontal push force when arrow hits
+pub const ARROW_IMPACT_LIFT: f32 = 100.0;  // Upward push force when arrow hits
+
+// Combat
+pub const HERO_MELEE_DAMAGE: u32 = 1;          // Hero melee damage (1 heart)
+pub const HERO_MELEE_COOLDOWN: f32 = 0.3;      // Per-enemy attack cooldown (industry standard)
+pub const BLOCK_DAMAGE_COOLDOWN: f32 = 0.25;   // Block damage cooldown (prevents multi-frame hits)
 
 // AI Movement
 pub const VILLAGER_MOVE_SPEED: f32 = 100.0;  // Horizontal movement speed

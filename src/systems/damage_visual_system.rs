@@ -29,10 +29,16 @@ fn apply_damage_visuals(
     mut damage_events: MessageReader<EntityDamaged>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    all_entities: Query<Entity>,
 ) {
     for event in damage_events.read() {
+        // Check if entity still exists (might have been despawned mid-frame)
+        if all_entities.get(event.entity).is_err() {
+            continue; // Entity already despawned, skip
+        }
+
         // Add damage visual effect (1.0 second duration with fade out)
-        commands.entity(event.entity).insert(DamageVisual::new(1.0));
+        commands.entity(event.entity).try_insert(DamageVisual::new(1.0));
 
         // Spawn red border as child entity
         let border = commands.spawn((
@@ -47,9 +53,14 @@ fn apply_damage_visuals(
             Transform::from_xyz(0.0, 0.0, -1.0), // Behind the entity
         )).id();
 
-        commands.entity(event.entity).add_child(border);
-
-        info!("Applied damage visual with border to entity {:?}", event.entity);
+        // Use get_entity to gracefully handle if parent was despawned mid-frame
+        if let Ok(mut parent_commands) = commands.get_entity(event.entity) {
+            parent_commands.add_child(border);
+            info!("Applied damage visual with border to entity {:?}", event.entity);
+        } else {
+            // Parent already despawned - clean up the orphan border we just created
+            commands.entity(border).despawn();
+        }
     }
 }
 
@@ -70,10 +81,13 @@ fn update_damage_visuals(
                 material.base_color = Color::WHITE; // Reset to white (shows original texture)
             }
 
-            // Despawn damage border child entities
+            // Despawn damage border child entities (only if not already despawned by parent death)
             for child in children.iter() {
                 if border_query.get(child).is_ok() {
-                    commands.entity(child).despawn();
+                    // Use get_entity to gracefully handle if already despawned
+                    if let Ok(mut entity_commands) = commands.get_entity(child) {
+                        entity_commands.despawn();
+                    }
                 }
             }
 

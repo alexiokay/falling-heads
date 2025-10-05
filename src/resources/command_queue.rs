@@ -18,4 +18,5 @@ pub enum PowerCommand {
     Ghast,
     Box,
     Magnet,
+    Villagers, // Spawn 5 villagers around hero
 }

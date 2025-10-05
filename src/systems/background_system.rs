@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::background::Background;
+use crate::components::background::{Background, BackgroundCache};
 use crate::components::block::BiomeType;
 use crate::components::hero::Hero;
 use crate::resources::asset_handles::{GameTextures, BlockTextures};
@@ -37,6 +37,7 @@ pub fn update_background(
     block_textures: Res<BlockTextures>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut bg_cache: ResMut<BackgroundCache>,
     windows: Query<&Window>,
 ) {
     let Ok(hero_transform) = hero_query.single() else {
@@ -96,15 +97,21 @@ pub fn update_background(
             ),
         };
 
-        let material = materials.add(StandardMaterial {
-            base_color: bg_color,
-            base_color_texture: Some(bg_texture),
-            unlit: true,
-            alpha_mode: AlphaMode::Opaque,
-            ..default()
-        });
+        // PERFORMANCE FIX: Reuse cached material for this biome (prevents 7k+ material leak!)
+        let material = bg_cache.materials.entry(current_biome).or_insert_with(|| {
+            materials.add(StandardMaterial {
+                base_color: bg_color,
+                base_color_texture: Some(bg_texture),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            })
+        }).clone();
 
-        let mesh_handle = meshes.add(Rectangle::new(block_size, block_size));
+        // PERFORMANCE FIX: Reuse single mesh for all backgrounds (prevents 7k+ mesh leak!)
+        let mesh_handle = bg_cache.mesh.get_or_insert_with(|| {
+            meshes.add(Rectangle::new(block_size, block_size))
+        }).clone();
 
         let camera_x = camera_transform.translation.x;
         let camera_y = camera_transform.translation.y;
@@ -131,13 +138,28 @@ pub fn update_background(
 
         info!("Background recreated: biome {:?}", current_biome);
     } else {
-        // Update all background blocks to follow camera - SNAPPED TO GRID
+        // PERFORMANCE FIX: Only update backgrounds when camera actually moves significantly
         let camera_x = camera_transform.translation.x;
         let camera_y = camera_transform.translation.y;
 
         // Snap camera position to block grid
         let snapped_camera_x = (camera_x / block_size).round() * block_size;
         let snapped_camera_y = (camera_y / block_size).round() * block_size;
+
+        // Check if camera has moved at least half a block (32 units) since last update
+        // Use first background entity to check if we need to update
+        if let Some((_, _, bg_transform)) = background_query.iter().next() {
+            let last_camera_x = bg_transform.translation.x;
+            let last_camera_y = bg_transform.translation.y;
+
+            let camera_moved_x = (snapped_camera_x - last_camera_x).abs();
+            let camera_moved_y = (snapped_camera_y - last_camera_y).abs();
+
+            // Only update if camera moved at least half a block
+            if camera_moved_x < block_size * 0.5 && camera_moved_y < block_size * 0.5 {
+                return; // Camera hasn't moved enough, skip update
+            }
+        }
 
         // Get grid dimensions from the first background entity
         let stored_grid = if let Some((_, bg, _)) = background_query.iter().next() {

@@ -24,6 +24,7 @@ pub fn generate_chunks_around_hero(
     material_cache: Res<MaterialCache>,
     mesh_cache: Option<Res<MeshCache>>,
     enemy_textures: Option<Res<crate::resources::asset_handles::EnemyTextures>>,
+    spawn_area: Res<crate::plugins::gameplay_plugin::SpawnArea>,
 ) {
     // Wait for caches to be initialized before spawning blocks
     if material_cache.materials.is_empty() || mesh_cache.is_none() || enemy_textures.is_none() {
@@ -46,7 +47,7 @@ pub fn generate_chunks_around_hero(
     for chunk_x in (hero_chunk_x - chunk_radius)..=(hero_chunk_x + chunk_radius) {
         for chunk_y in (hero_chunk_y - chunk_radius)..=(hero_chunk_y + chunk_radius) {
             if !loaded_chunks.is_loaded(chunk_x, chunk_y) {
-                generate_chunk(&mut commands, &mut meshes, &mut materials, chunk_x, chunk_y, &block_textures, &material_cache, &mesh_cache, &enemy_textures);
+                generate_chunk(&mut commands, &mut meshes, &mut materials, chunk_x, chunk_y, &block_textures, &material_cache, &mesh_cache, &enemy_textures, &spawn_area);
                 loaded_chunks.add(chunk_x, chunk_y);
             }
         }
@@ -83,22 +84,32 @@ pub fn despawn_distant_chunks(
     }
 
     // Now despawn blocks for all chunks that need to be despawned
-    for (chunk_entity, chunk_x, chunk_y) in chunks_to_despawn {
-        // Despawn all blocks in this chunk
-        for (block_entity, member) in block_query.iter() {
-            if member.chunk_x == chunk_x && member.chunk_y == chunk_y {
-                commands.entity(block_entity).despawn();
+    if !chunks_to_despawn.is_empty() {
+        let mut total_blocks_despawned = 0;
+        let num_chunks = chunks_to_despawn.len();
+
+        for (chunk_entity, chunk_x, chunk_y) in chunks_to_despawn {
+            // Despawn all blocks in this chunk
+            let mut blocks_in_chunk = 0;
+            for (block_entity, member) in block_query.iter() {
+                if member.chunk_x == chunk_x && member.chunk_y == chunk_y {
+                    commands.entity(block_entity).despawn(); // Despawn children too (damage overlays, borders)
+                    blocks_in_chunk += 1;
+                }
             }
+            total_blocks_despawned += blocks_in_chunk;
+
+            // Despawn chunk entity
+            commands.entity(chunk_entity).despawn();
+            loaded_chunks.remove(chunk_x, chunk_y);
         }
 
-        // Despawn chunk entity
-        commands.entity(chunk_entity).despawn();
-        loaded_chunks.remove(chunk_x, chunk_y);
+        info!("Despawned {} distant chunks ({} blocks total)", num_chunks, total_blocks_despawned);
     }
 }
 
 /// Generate a single chunk with blocks
-fn generate_chunk(
+pub fn generate_chunk(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -108,6 +119,7 @@ fn generate_chunk(
     material_cache: &Res<MaterialCache>,
     mesh_cache: &MeshCache,
     enemy_textures: &crate::resources::asset_handles::EnemyTextures,
+    spawn_area: &crate::plugins::gameplay_plugin::SpawnArea,
 ) {
     let mut rng = rand::thread_rng();
 
@@ -133,6 +145,15 @@ fn generate_chunk(
             let world_block_x = chunk_x * CHUNK_SIZE + local_x;
             let world_block_y = chunk_y * CHUNK_SIZE + local_y;
 
+            let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE * 64.0;
+            let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE * 64.0;
+
+            // Skip blocks in the spawn area (keep spawn area clear)
+            let distance_to_spawn = ((world_x - spawn_area.center.x).powi(2) + (world_y - spawn_area.center.y).powi(2)).sqrt();
+            if distance_to_spawn < spawn_area.radius {
+                continue; // Skip this block, it's in the spawn area
+            }
+
             // Cave generation check (biome-specific)
             if should_generate_cave(world_block_x, world_block_y, biome) {
                 continue; // Skip this block, it's part of a cave
@@ -141,8 +162,6 @@ fn generate_chunk(
             // Determine block type
             let block_type = determine_block_type(biome, world_block_x, world_block_y, &mut rng);
 
-            let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE * 64.0;  // Scale to 2D coordinates
-            let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE * 64.0;  // Scale to 2D coordinates
             let world_z = -10.0;  // Behind entities so they render in front of blocks
 
             // Render as 3D cubes scaled to match 2D

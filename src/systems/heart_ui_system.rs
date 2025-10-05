@@ -8,7 +8,8 @@ pub struct HeartUIPlugin;
 
 impl Plugin for HeartUIPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_hearts, update_hearts));
+        app.add_systems(Update, spawn_hearts)
+           .add_systems(PostUpdate, update_hearts); // Run after physics updates
     }
 }
 
@@ -40,7 +41,7 @@ fn spawn_hearts(
                         owner: entity,
                         heart_index: i,
                     },
-                    Mesh3d(meshes.add(Rectangle::new(16.0, 16.0))),
+                    Mesh3d(meshes.add(Rectangle::new(24.0, 24.0))), // Bigger hearts (16 → 24)
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::WHITE,
                         base_color_texture: Some(heart_textures.container.clone()),
@@ -72,12 +73,13 @@ fn update_hearts(
         if let Ok((owner_entity, owner_transform, health)) = entity_query.get(heart_ui.owner) {
             // Position heart above the entity (centered)
             let num_hearts = (health.max / 2) as f32;
-            let total_width = num_hearts * 18.0;
-            let start_x = -(total_width / 2.0) + 9.0; // Center and offset by half heart width
-            let x_offset = start_x + (heart_ui.heart_index as f32 * 18.0);
+            let heart_spacing = 26.0; // Bigger spacing for bigger hearts (18 → 26)
+            let total_width = num_hearts * heart_spacing;
+            let start_x = -(total_width / 2.0) + (heart_spacing / 2.0); // Center and offset by half heart width
+            let x_offset = start_x + (heart_ui.heart_index as f32 * heart_spacing);
 
             heart_transform.translation.x = owner_transform.translation.x + x_offset;
-            heart_transform.translation.y = owner_transform.translation.y + 40.0; // Above head
+            heart_transform.translation.y = owner_transform.translation.y + 60.0; // Higher above head (40 → 60)
             heart_transform.translation.z = 15.0; // Front layer
 
             // Calculate which texture to use based on health

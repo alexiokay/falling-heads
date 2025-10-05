@@ -42,6 +42,7 @@ pub fn handle_entity_death(
     mut commands: Commands,
     mut death_events: MessageReader<EntityDied>,
     hero_query: Query<Entity, With<Hero>>,
+    all_entities: Query<Entity>,
 ) {
     let hero_entity = hero_query.single().ok();
 
@@ -52,6 +53,11 @@ pub fn handle_entity_death(
                 warn!("Attempted to kill hero - hero is invincible!");
                 continue;
             }
+        }
+
+        // Check if entity still exists (might have been despawned by another system)
+        if all_entities.get(event.entity).is_err() {
+            continue; // Entity already despawned, skip
         }
 
         // Freeze entity and add death animation (1 second)
@@ -74,7 +80,7 @@ pub fn update_death_animations(
         death_anim.timer.tick(time.delta());
 
         if death_anim.timer.is_finished() {
-            commands.entity(entity).despawn();
+            commands.entity(entity).despawn(); // Despawn children too (health bars, hearts)
             info!("Death animation complete - despawned entity {:?}", entity);
         }
     }

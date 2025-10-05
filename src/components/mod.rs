@@ -16,3 +16,6 @@ pub mod heart_ui;
 pub mod head;
 pub mod bundles;
 pub mod damage_visual;
+pub mod damage_overlay;
+pub mod pause_menu;
+pub mod settings_menu;

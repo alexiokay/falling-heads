@@ -8,3 +8,4 @@ pub mod material_cache;
 pub mod damage_cooldown;
 pub mod mesh_cache;
 pub mod spatial_hash;
+pub mod settings;

@@ -5,11 +5,11 @@ use crate::components::{
     physics::Velocity,
     resource::{Resource, ResourceType, RotatingResource},
     power_effect::SpeedModifier,
-    villager::Villager,
     chunk::LoadedChunks,
     enemy::Health,
     buff::Buffable,
     bundles::{SpriteBundle3d, PhysicsBundle},
+    background::BackgroundCache,
 };
 use crate::events::block_events::{BlockDamaged, BlockDestroyed};
 use crate::events::resource_events::ResourceCollected;
@@ -21,7 +21,27 @@ use crate::systems::world_generation::{generate_chunks_around_hero, despawn_dist
 use crate::systems::health_system::{handle_entity_damage, handle_entity_death, update_death_animations};
 use crate::systems::health_ui_system::{spawn_health_bars, update_health_bars};
 use crate::systems::background_system::update_background;
+use crate::systems::entity_spawn::spawn_villagers_around_position;
 use crate::utils::constants::*;
+
+#[derive(Resource, Default, PartialEq)]
+struct EntitiesSpawned(bool);
+
+/// Tracks the spawn area that should be kept clear of blocks
+#[derive(Resource)]
+pub struct SpawnArea {
+    pub center: Vec3,
+    pub radius: f32,  // Radius in world units
+}
+
+impl Default for SpawnArea {
+    fn default() -> Self {
+        Self {
+            center: Vec3::new(0.0, -25000.0, 10.0),
+            radius: 200.0,  // 200 units radius = ~3 blocks
+        }
+    }
+}
 
 pub struct GameplayPlugin;
 
@@ -35,8 +55,11 @@ impl Plugin for GameplayPlugin {
             .add_message::<EntityDied>()
             .init_resource::<Inventory>()
             .init_resource::<LoadedChunks>()
-            .add_systems(OnEnter(GameState::Playing), (spawn_hero, spawn_villagers))
+            .init_resource::<SpawnArea>()
+            .init_resource::<BackgroundCache>()
+            .add_systems(OnEnter(GameState::Playing), (spawn_hero, spawn_villagers).run_if(resource_equals(EntitiesSpawned(false))))
             .add_systems(Startup, start_game)
+            .init_resource::<EntitiesSpawned>()
             .add_systems(Update, (
                 hero_movement,
                 handle_block_damage,
@@ -76,7 +99,9 @@ fn spawn_hero(
     textures: Res<GameTextures>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut spawned: ResMut<EntitiesSpawned>,
 ) {
+    spawned.0 = true;
     let material = materials.add(StandardMaterial {
         base_color_texture: Some(textures.hero.clone()),
         unlit: true,
@@ -109,50 +134,26 @@ fn spawn_villagers(
     hero_query: Query<&Transform, With<Hero>>,
     textures: Res<GameTextures>,
 ) {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-
     // Get hero position to spawn villagers nearby
-    let hero_y = if let Ok(hero_transform) = hero_query.single() {
-        hero_transform.translation.y
+    let hero_pos = if let Ok(hero_transform) = hero_query.single() {
+        hero_transform.translation
     } else {
-        -25000.0  // Default to nether depth if hero not found
+        Vec3::new(0.0, -25000.0, 10.0)  // Default to nether depth if hero not found
     };
 
-    // Spawn 5 villagers around the hero
-    for _i in 0..5 {
-        let offset_x = rng.gen_range(-128.0..128.0);
-        let offset_y = rng.gen_range(-64.0..64.0);
+    // Spawn 5 villagers around the hero using shared spawning logic
+    spawn_villagers_around_position(
+        &mut commands,
+        hero_pos,
+        5,
+        (-128.0, 128.0),
+        (-64.0, 64.0),
+        &textures,
+        &mut meshes,
+        &mut materials,
+    );
 
-        let material = materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            base_color_texture: Some(textures.villager.clone()),
-            unlit: true,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        });
-
-        // Random initial direction for variety
-        let initial_direction = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
-
-        commands.spawn((
-            Villager {
-                ai_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
-                move_direction: initial_direction,
-                direction_change_timer: Timer::from_seconds(VILLAGER_DIRECTION_CHANGE_INTERVAL, TimerMode::Repeating),
-            },
-            Health::new(6),
-            Buffable,
-            PhysicsBundle::new(Vec2::ZERO, STANDARD_GRAVITY, VILLAGER_BOUNCE),
-            SpriteBundle3d::new(
-                meshes.add(Rectangle::new(VILLAGER_SIZE, VILLAGER_SIZE)),
-                material,
-                Vec3::new(offset_x, hero_y + offset_y, 10.0),
-            ),
-        ));
-    }
-
-    info!("Spawned 5 villagers near hero at Y={}", hero_y);
+    info!("Spawned 5 villagers near hero at {:?}", hero_pos);
 }
 
 
@@ -202,7 +203,7 @@ fn handle_block_damage(
                     block_type: *block_type,
                     position: transform.translation,
                 });
-                commands.entity(event.entity).despawn();
+                commands.entity(event.entity).despawn(); // Despawn children too (damage overlays, borders)
                 info!("Block destroyed at {:?}", transform.translation);
             }
         }
@@ -322,6 +323,7 @@ fn collect_resources(
 fn camera_follow_hero(
     hero_query: Query<&Transform, With<Hero>>,
     mut camera_query: Query<&mut Transform, (With<Camera3d>, Without<Hero>)>,
+    time: Res<Time>,
 ) {
     let Ok(hero_transform) = hero_query.single() else {
         return;
@@ -335,8 +337,12 @@ fn camera_follow_hero(
         let offset_x = 30.0;  // Keep camera slightly offset from hero
         let offset_y = 80.0;  // Keep camera above hero
 
-        camera_transform.translation.x += (target_x + offset_x - camera_transform.translation.x) * 0.1;
-        camera_transform.translation.y += (target_y + offset_y - camera_transform.translation.y) * 0.1;
+        // Time-based lerp for consistent speed regardless of framerate
+        let lerp_speed = 10.0;
+        let lerp_factor = (lerp_speed * time.delta_secs()).min(1.0);
+
+        camera_transform.translation.x += (target_x + offset_x - camera_transform.translation.x) * lerp_factor;
+        camera_transform.translation.y += (target_y + offset_y - camera_transform.translation.y) * lerp_factor;
     }
 }
 

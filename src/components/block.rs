@@ -48,7 +48,7 @@ pub enum BlockType {
     Purpur,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum BiomeType {
     Plains,
     Forest,

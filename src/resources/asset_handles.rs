@@ -45,3 +45,15 @@ pub struct HeartTextures {
     pub half: Handle<Image>,
     pub full: Handle<Image>,
 }
+
+#[derive(Resource, Default)]
+pub struct DamageStageTextures {
+    pub stages: [Handle<Image>; 9],  // destroy_stage_0 through destroy_stage_8
+}
+
+/// Cache for damage overlay materials and mesh (prevents 7k+ material/mesh leak!)
+#[derive(Resource, Default)]
+pub struct DamageOverlayCache {
+    pub materials: Vec<Handle<StandardMaterial>>,  // One material per damage stage (0-8)
+    pub mesh: Option<Handle<Mesh>>,  // Single unit rectangle mesh shared by all overlays
+}

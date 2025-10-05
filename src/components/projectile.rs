@@ -1,11 +1,19 @@
 use bevy::prelude::*;
 use crate::utils::constants::ARROW_LIFETIME;
 
+/// Team affiliation for friendly fire prevention
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Team {
+    Friendly,  // Hero + Villagers
+    Enemy,     // Skeletons, Zombies, etc.
+}
+
 #[derive(Component)]
 pub struct Arrow {
     pub damage: u32,
     pub lifetime: Timer,
     pub stuck_to: Option<Entity>, // Entity this arrow is stuck to
+    pub team: Team,  // Which team shot this arrow
 }
 
 impl Arrow {
@@ -14,6 +22,25 @@ impl Arrow {
             damage,
             lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
             stuck_to: None,
+            team: Team::Enemy,  // Default to enemy (for backwards compatibility with skeletons)
+        }
+    }
+
+    pub fn new_friendly(damage: u32) -> Self {
+        Self {
+            damage,
+            lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
+            stuck_to: None,
+            team: Team::Friendly,  // Friendly arrow (from hero power)
+        }
+    }
+
+    pub fn new_with_team(damage: u32, team: Team) -> Self {
+        Self {
+            damage,
+            lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
+            stuck_to: None,
+            team,
         }
     }
 }

@@ -5,6 +5,15 @@ use crate::components::enemy::Enemy;
 use crate::components::background::Background;
 use crate::components::resource::Resource;
 use crate::components::health_ui::HealthBar;
+use crate::components::damage_overlay::BlockDamageOverlay;
+use crate::components::heart_ui::HeartUI;
+use crate::components::villager::Villager;
+use crate::components::hero::Hero;
+use crate::components::projectile::Arrow;
+use crate::components::explosive::Tnt;
+use crate::components::chunk::Chunk;
+use crate::components::buff::Buff;
+use crate::components::damage_visual::DamageVisual;
 
 #[derive(Resource)]
 pub struct PerformanceTracker {
@@ -27,17 +36,25 @@ pub fn log_performance_metrics(
     time: Res<Time>,
     mut tracker: ResMut<PerformanceTracker>,
     diagnostics: Res<DiagnosticsStore>,
+    // Main gameplay entities
     blocks: Query<&Block>,
     enemies: Query<&Enemy>,
+    villagers: Query<&Villager>,
+    heroes: Query<&Hero>,
+    // World entities (use ParamSet for arrows, tnt, chunks)
+    mut world_entities: ParamSet<(
+        Query<&Arrow>,
+        Query<&Tnt>,
+        Query<&Chunk>,
+    )>,
+    // UI entities
     backgrounds: Query<&Background>,
     resources: Query<&Resource>,
-    health_bars: Query<&HealthBar>,
+    overlays: Query<&BlockDamageOverlay>,
+    // All entities for total count
     all_entities: Query<Entity>,
-    all_transforms: Query<&Transform>,
-    all_mesh3d: Query<&Mesh3d>,
     materials: Res<Assets<StandardMaterial>>,
     meshes: Res<Assets<Mesh>>,
-    images: Res<Assets<Image>>,
 ) {
     let elapsed = time.elapsed_secs();
 
@@ -63,29 +80,40 @@ pub fn log_performance_metrics(
             .map(|ft| ft * 1000.0) // Convert to ms
             .unwrap_or(0.0);
 
-        // Count entities
+        // Count main entities
         let block_count = blocks.iter().count();
         let enemy_count = enemies.iter().count();
+        let villager_count = villagers.iter().count();
+        let hero_count = heroes.iter().count();
+
+        // Count world entities from ParamSet
+        let arrow_count = world_entities.p0().iter().count();
+        let tnt_count = world_entities.p1().iter().count();
+        let chunk_count = world_entities.p2().iter().count();
+
+        // Count UI entities
         let background_count = backgrounds.iter().count();
         let resource_count = resources.iter().count();
-        let healthbar_count = health_bars.iter().count();
-        let total_entities = all_entities.iter().count();
-        let _transform_count = all_transforms.iter().count();
-        let _mesh_entities = all_mesh3d.iter().count();
+        let overlay_count = overlays.iter().count();
 
-        let known_entities = block_count + enemy_count + background_count + resource_count + healthbar_count;
+        let total_entities = all_entities.iter().count();
+
+        let known_entities = block_count + enemy_count + villager_count + hero_count
+            + arrow_count + tnt_count + chunk_count + background_count + resource_count + overlay_count;
         let unknown_entities = total_entities.saturating_sub(known_entities);
 
         // Count assets
         let material_count = materials.iter().count();
         let mesh_count = meshes.iter().count();
-        let _image_count = images.iter().count();
 
         info!("========== PERFORMANCE METRICS (Runtime: {:.1}s) ==========", runtime);
         info!("  FPS: {:.1} | Frame Time: {:.2}ms", fps, frame_time);
-        info!("  Entities: {} blocks, {} enemies, {} resources, {} healthbars",
-              block_count, enemy_count, resource_count, healthbar_count);
-        info!("  ALL Entities: {} total ({} UNKNOWN/LEAK!)", total_entities, unknown_entities);
+        info!("  Entities: {} blocks, {} overlays, {} enemies, {} villagers, {} hero",
+              block_count, overlay_count, enemy_count, villager_count, hero_count);
+        info!("  World: {} chunks, {} arrows, {} tnt | {} resources, {} backgrounds",
+              chunk_count, arrow_count, tnt_count, resource_count, background_count);
+        info!("  ALL Entities: {} total ({} UNKNOWN - healthbars/hearts/buffs/etc)",
+              total_entities, unknown_entities);
         info!("  Assets: {} materials, {} mesh assets",
               material_count, mesh_count);
         info!("==========================================================");

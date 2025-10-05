@@ -13,7 +13,7 @@ cargo run
 
 **2. In another terminal, send TNT command:**
 ```bash
-curl -X POST http://localhost:3000/command -H "Content-Type: application/json" -d "{\"action\":\"TNT\"}"
+curl -X POST http://localhost:3029/command -H "Content-Type: application/json" -d "{\"action\":\"TNT\"}"
 ```
 
 **Expected Result:**

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy::window::WindowResolution;
+use bevy::window::{WindowResolution, PresentMode};
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 
 mod components;
@@ -26,9 +26,11 @@ use systems::projectile_system::ProjectilePlugin;
 use systems::enemy_ai_system::EnemyAIPlugin;
 use systems::heart_ui_system::HeartUIPlugin;
 use systems::damage_visual_system::DamageVisualPlugin;
-use resources::asset_handles::{GameTextures, BlockTextures, ResourceTextures, EnemyTextures, ProjectileTextures, HeartTextures};
+use systems::block_damage_overlay_system::BlockDamageOverlayPlugin;
+use resources::asset_handles::{GameTextures, BlockTextures, ResourceTextures, EnemyTextures, ProjectileTextures, HeartTextures, DamageStageTextures};
 use resources::material_cache::MaterialCache;
 use resources::mesh_cache::MeshCache;
+use resources::settings::GameSettings;
 use states::GameState;
 use systems::performance_diagnostics::{PerformanceTracker, log_performance_metrics};
 
@@ -38,6 +40,7 @@ fn main() {
             primary_window: Some(Window {
                 title: "Falling Heads - Minecraft Block Breaker".to_string(),
                 resolution: WindowResolution::new(1280, 720),
+                present_mode: PresentMode::AutoVsync, // Enable VSync for smooth rendering
                 ..default()
             }),
             ..default()
@@ -57,11 +60,15 @@ fn main() {
             EnemyAIPlugin,
             HeartUIPlugin,
             DamageVisualPlugin,
+            BlockDamageOverlayPlugin,
         ))
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()
+        .insert_resource(GameSettings::new())
         .add_systems(Startup, setup)
-        .add_systems(Update, (initialize_mesh_cache, initialize_material_cache, log_performance_metrics))
+        .add_systems(Update, initialize_mesh_cache)
+        .add_systems(Update, initialize_material_cache)
+        .add_systems(Update, log_performance_metrics)
         .run();
 }
 
@@ -162,6 +169,23 @@ fn setup(
     };
 
     commands.insert_resource(heart_textures);
+
+    // Load damage stage textures (destroy_stage_0.png through destroy_stage_8.png)
+    let damage_stages = DamageStageTextures {
+        stages: [
+            asset_server.load("textures/effects/destroy/destroy_stage_0.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_1.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_2.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_3.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_4.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_5.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_6.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_7.png"),
+            asset_server.load("textures/effects/destroy/destroy_stage_8.png"),
+        ],
+    };
+
+    commands.insert_resource(damage_stages);
 
     info!("Falling Heads initialized with mixed 2D/3D isometric view!");
 }

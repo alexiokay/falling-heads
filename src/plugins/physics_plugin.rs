@@ -10,7 +10,7 @@ use crate::components::buff::{Buff, BuffType};
 use crate::components::chunk::ChunkMember;
 use crate::events::block_events::BlockDamaged;
 use crate::events::damage_events::EntityDamaged;
-use crate::resources::damage_cooldown::DamageCooldown;
+use crate::resources::damage_cooldown::{DamageCooldown, MeleeAttackCooldown};
 use crate::resources::spatial_hash::SpatialHash;
 use crate::systems::buff_system::apply_block_buff;
 use crate::states::GameState;
@@ -30,6 +30,7 @@ impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<DamageCooldown>()
+            .init_resource::<MeleeAttackCooldown>()
             .insert_resource(SpatialHash::new(256.0)) // 256 units per spatial chunk (4 blocks)
             .configure_sets(Update, (
                 PhysicsSet::Forces,
@@ -57,6 +58,7 @@ impl Plugin for PhysicsPlugin {
                 check_resource_collisions,
                 check_hero_tnt_push,
                 check_hero_enemy_collision,
+                check_hero_melee_damage,  // Hero damages enemies on collision
                 check_entity_collisions,
             ).in_set(PhysicsSet::Collision).after(rebuild_spatial_hash));
 
@@ -82,12 +84,6 @@ fn apply_velocity(
         let dx = velocity.x * delta;
         let dy = velocity.y * delta;
 
-        // Debug log arrows only - show actual velocity values
-        if arrow.is_some() {
-            info!("ARROW PHYSICS: vel=({:.1},{:.1}), delta={:.4}, move=({:.2},{:.2}), speed={:.1}",
-                velocity.x, velocity.y, delta, dx, dy, (velocity.x * velocity.x + velocity.y * velocity.y).sqrt());
-        }
-
         transform.translation.x += dx;
         transform.translation.y += dy;
     }
@@ -97,12 +93,20 @@ fn apply_velocity(
 fn rebuild_spatial_hash(
     mut spatial_hash: ResMut<SpatialHash>,
     block_query: Query<(Entity, &Transform), With<Block>>,
+    time: Res<Time>,
 ) {
     spatial_hash.clear();
 
+    let mut block_count = 0;
     for (entity, transform) in block_query.iter() {
         let pos = transform.translation;
         spatial_hash.insert(entity, pos.x, pos.y);
+        block_count += 1;
+    }
+
+    // Log every 5 seconds to monitor performance
+    if time.elapsed_secs() % 5.0 < time.delta_secs() {
+        info!("Spatial hash rebuilt with {} blocks", block_count);
     }
 }
 
@@ -114,13 +118,19 @@ fn check_all_entity_block_collisions(
     block_query: Query<(Entity, &Transform, &BlockType, &ChunkMember), With<Block>>,
     chunk_query: Query<&crate::components::chunk::Chunk>,
     mut damage_events: MessageWriter<BlockDamaged>,
+    mut block_cooldown: ResMut<DamageCooldown>,
+    time: Res<Time>,
 ) {
+    let current_time = time.elapsed_secs();
     for (entity, mut transform, mut velocity, bouncy, is_enemy) in entity_query.iter_mut() {
         let pos = transform.translation;
         let entity_size = HERO_SIZE;
         let block_size = BLOCK_SIZE;
 
         let nearby_blocks = spatial_hash.query_nearby(pos.x, pos.y);
+
+        // Find the CLOSEST colliding block to prevent multi-block damage bug
+        let mut closest_collision: Option<(Entity, f32, Vec3, BlockType, ChunkMember)> = None;
 
         for block_entity in nearby_blocks {
             let Ok((_, block_transform, block_type, chunk_member)) = block_query.get(block_entity) else {
@@ -138,43 +148,68 @@ fn check_all_entity_block_collisions(
             let overlap_y = entity_half + block_half - dy.abs();
 
             if overlap_x > 0.0 && overlap_y > 0.0 {
-                // Only friendlies damage blocks and get buffs
-                if is_enemy.is_none() {
+                // Calculate distance to find closest block
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if closest_collision.is_none() || distance < closest_collision.as_ref().unwrap().1 {
+                    closest_collision = Some((block_entity, distance, block_pos, *block_type, *chunk_member));
+                }
+            }
+        }
+
+        // Only process collision with the CLOSEST block
+        if let Some((block_entity, _, block_pos, block_type, chunk_member)) = closest_collision {
+            let entity_half = entity_size / 2.0;
+            let block_half = block_size / 2.0;
+
+            let dx = pos.x - block_pos.x;
+            let dy = pos.y - block_pos.y;
+
+            let overlap_x = entity_half + block_half - dx.abs();
+            let overlap_y = entity_half + block_half - dy.abs();
+
+            // Only friendlies damage blocks and get buffs
+            if is_enemy.is_none() {
+                // Check BOTH per-block AND per-attacker cooldown (prevents rapid multi-block damage)
+                if block_cooldown.can_damage(block_entity, current_time, BLOCK_DAMAGE_COOLDOWN)
+                    && block_cooldown.can_attacker_damage(entity, current_time, BLOCK_DAMAGE_COOLDOWN) {
                     damage_events.write(BlockDamaged {
                         entity: block_entity,
                         damage: 1,
                         remaining_health: 0,
                     });
-
-                    if let Some(chunk) = chunk_query.iter().find(|c| c.chunk_x == chunk_member.chunk_x && c.chunk_y == chunk_member.chunk_y) {
-                        apply_block_buff(&mut commands, entity, *block_type, chunk.biome);
-                    }
+                    block_cooldown.record_damage(block_entity, current_time);
+                    block_cooldown.record_attacker_damage(entity, current_time); // Track attacker cooldown
                 }
 
-                // Collision resolution (SAME for all entities)
-                if overlap_x < overlap_y {
-                    // Horizontal - strong bounce
-                    let separation = overlap_x + 1.0;
-                    if dx > 0.0 {
-                        transform.translation.x += separation;
-                    } else {
-                        transform.translation.x -= separation;
-                    }
-                    velocity.x = -velocity.x * 0.8;
+                if let Some(chunk) = chunk_query.iter().find(|c| c.chunk_x == chunk_member.chunk_x && c.chunk_y == chunk_member.chunk_y) {
+                    apply_block_buff(&mut commands, entity, block_type, chunk.biome);
+                }
+            }
+
+            // Collision resolution (SAME for all entities)
+            if overlap_x < overlap_y {
+                // Horizontal - strong bounce
+                let separation = overlap_x + 1.0;
+                if dx > 0.0 {
+                    transform.translation.x += separation;
                 } else {
-                    // Vertical
-                    let separation = overlap_y + 1.0;
-                    if dy > 0.0 {
-                        transform.translation.y += separation;
-                        if velocity.y < 0.0 {
-                            velocity.y = -velocity.y * bouncy.restitution;
-                            velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
-                        }
-                    } else {
-                        transform.translation.y -= separation;
-                        if velocity.y > 0.0 {
-                            velocity.y = 0.0;
-                        }
+                    transform.translation.x -= separation;
+                }
+                velocity.x = -velocity.x * 0.8;
+            } else {
+                // Vertical
+                let separation = overlap_y + 1.0;
+                if dy > 0.0 {
+                    transform.translation.y += separation;
+                    if velocity.y < 0.0 {
+                        velocity.y = -velocity.y * bouncy.restitution;
+                        velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
+                    }
+                } else {
+                    transform.translation.y -= separation;
+                    if velocity.y > 0.0 {
+                        velocity.y = 0.0;
                     }
                 }
             }
@@ -627,7 +662,57 @@ fn enemy_ai_movement(
     }
 }
 
-/// Hero vs Enemy collision - damage hero and apply burning buff
+/// Hero damages enemies on collision (melee attack)
+/// Uses per-enemy cooldown: each enemy has separate attack cooldown (industry standard)
+fn check_hero_melee_damage(
+    hero_query: Query<(Entity, &Transform), With<Hero>>,
+    enemy_query: Query<(Entity, &Transform), With<crate::components::enemy::Enemy>>,
+    mut damage_events: MessageWriter<EntityDamaged>,
+    mut melee_cooldown: ResMut<MeleeAttackCooldown>,
+    time: Res<Time>,
+) {
+    let hero_size = HERO_SIZE;
+    let current_time = time.elapsed_secs();
+
+    if let Some((_hero_entity, hero_transform)) = hero_query.iter().next() {
+        let hero_pos = hero_transform.translation;
+        let hero_half = hero_size / 2.0;
+
+        // Check all enemies for collision - USE SAME COLLISION AS BOUNCE SYSTEM (AABB)
+        for (enemy_entity, enemy_transform) in enemy_query.iter() {
+            let enemy_pos = enemy_transform.translation;
+            let enemy_size = ENEMY_SIZE;
+            let enemy_half = enemy_size / 2.0;
+
+            // AABB collision (same as bounce system) - more generous than circle collision
+            let dx = (hero_pos.x - enemy_pos.x).abs();
+            let dy = (hero_pos.y - enemy_pos.y).abs();
+
+            let overlap_x = hero_half + enemy_half - dx;
+            let overlap_y = hero_half + enemy_half - dy;
+
+            if overlap_x > 0.0 && overlap_y > 0.0 {
+                // Colliding with this enemy (AABB) - check per-enemy cooldown
+                if melee_cooldown.can_attack(enemy_entity, current_time, HERO_MELEE_COOLDOWN) {
+                    info!("✅ HERO MELEE! Damaged enemy {:?}, overlap: ({:.1}, {:.1})", enemy_entity, overlap_x, overlap_y);
+
+                    damage_events.write(EntityDamaged {
+                        entity: enemy_entity,
+                        damage: HERO_MELEE_DAMAGE,
+                    });
+
+                    melee_cooldown.record_hit(enemy_entity, current_time);
+                } else {
+                    // On cooldown - log for debugging
+                    let time_left = HERO_MELEE_COOLDOWN - (current_time - melee_cooldown.last_hit_time.get(&enemy_entity).unwrap_or(&0.0));
+                    info!("❌ Enemy {:?} on cooldown, {:.2}s remaining", enemy_entity, time_left.max(0.0));
+                }
+            }
+        }
+    }
+}
+
+/// Enemy vs Hero/Villager collision - damage hero/villager and apply buffs
 fn check_hero_enemy_collision(
     mut commands: Commands,
     mut entity_query: Query<(Entity, &Transform), Or<(With<Hero>, With<Villager>)>>,

@@ -10,7 +10,7 @@ pub struct Chunk {
 }
 
 /// Marker component for blocks that belong to a specific chunk
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct ChunkMember {
     pub chunk_x: i32,
     pub chunk_y: i32,

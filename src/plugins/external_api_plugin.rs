@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use crate::resources::command_queue::PowerCommand;
-use crate::resources::asset_handles::GameTextures;
+use crate::resources::asset_handles::{GameTextures, ProjectileTextures};
 use crate::events::power_events::PowerActivated;
 use crate::components::hero::Hero;
 use crate::components::power_effect::SpeedModifier;
 use crate::plugins::powers_plugin::{spawn_tnt, spawn_laser, spawn_arrows};
+use crate::systems::entity_spawn::spawn_villagers_around_position;
 
 pub struct ExternalApiPlugin;
 
@@ -66,6 +67,7 @@ fn start_api_server() {
             "GHAST" => Some(PowerCommand::Ghast),
             "BOX" => Some(PowerCommand::Box),
             "MAGNET" => Some(PowerCommand::Magnet),
+            "VILLAGERS" => Some(PowerCommand::Villagers),
             _ => None,
         };
 
@@ -93,7 +95,7 @@ fn start_api_server() {
                 StatusCode::BAD_REQUEST,
                 Json(CommandResponse {
                     success: false,
-                    message: format!("Unknown command: {}. Available: TNT, FAST, SLOW, LASER, ARROW, BOLT, GHAST, BOX, MAGNET, FUSS", cmd.action),
+                    message: format!("Unknown command: {}. Available: TNT, FAST, SLOW, LASER, ARROW, BOLT, GHAST, BOX, MAGNET, FUSS, VILLAGERS", cmd.action),
                 }),
             )
         }
@@ -121,6 +123,7 @@ fn process_commands(
     mut commands: Commands,
     hero_query: Query<(Entity, &Transform), With<Hero>>,
     textures: Res<GameTextures>,
+    projectile_textures: Option<Res<ProjectileTextures>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut power_events: MessageWriter<PowerActivated>,
@@ -170,9 +173,28 @@ fn process_commands(
                 }
             }
             PowerCommand::Arrow => {
+                if let Ok((hero_entity, _)) = hero_query.single() {
+                    if let Some(ref projectile_textures) = projectile_textures {
+                        spawn_arrows(&mut commands, hero_entity, &mut meshes, &mut materials, projectile_textures);
+                        info!("🏹 ARROW barrage activated!");
+                    } else {
+                        info!("⚠️ ARROW power waiting for textures to load...");
+                    }
+                }
+            }
+            PowerCommand::Villagers => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
-                    spawn_arrows(&mut commands, hero_transform.translation, &mut meshes, &mut materials);
-                    info!("🏹 ARROW barrage activated!");
+                    spawn_villagers_around_position(
+                        &mut commands,
+                        hero_transform.translation,
+                        5,
+                        (-200.0, 200.0),
+                        (-50.0, 50.0),
+                        &textures,
+                        &mut meshes,
+                        &mut materials,
+                    );
+                    info!("👥 VILLAGERS spawned around hero!");
                 }
             }
             _ => {
@@ -181,3 +203,4 @@ fn process_commands(
         }
     }
 }
+
