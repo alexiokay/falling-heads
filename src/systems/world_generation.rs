@@ -3,8 +3,8 @@ use rand::Rng;
 use crate::components::block::{Block, BlockType, BiomeType};
 use crate::components::chunk::{Chunk, ChunkMember, LoadedChunks, CHUNK_SIZE, world_to_chunk_coords};
 use crate::components::hero::Hero;
-use crate::components::enemy::{Enemy, EnemyType, Health};
-use crate::components::physics::{Velocity, Gravity, Bouncy};
+use crate::components::enemy::{Enemy, Health};
+use crate::components::bundles::{SpriteBundle3d, PhysicsBundle};
 use crate::resources::asset_handles::BlockTextures;
 use crate::resources::material_cache::MaterialCache;
 use crate::resources::mesh_cache::MeshCache;
@@ -143,7 +143,7 @@ fn generate_chunk(
 
             let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE * 64.0;  // Scale to 2D coordinates
             let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE * 64.0;  // Scale to 2D coordinates
-            let world_z = 0.0;
+            let world_z = -10.0;  // Behind entities so they render in front of blocks
 
             // Render as 3D cubes scaled to match 2D
             let mut transform = Transform::from_xyz(world_x, world_y, world_z);
@@ -169,7 +169,7 @@ fn generate_chunk(
 }
 
 /// Determine biome based on chunk coordinates
-fn determine_biome(chunk_x: i32, chunk_y: i32, rng: &mut impl Rng) -> BiomeType {
+fn determine_biome(chunk_x: i32, chunk_y: i32, _rng: &mut impl Rng) -> BiomeType {
     // Use simple noise-like pattern based on coordinates
     let biome_seed = (chunk_x * 73 + chunk_y * 179) % 100;
 
@@ -244,7 +244,7 @@ fn should_generate_cave(block_x: i32, block_y: i32, biome: BiomeType) -> bool {
 }
 
 /// Determine block type based on biome and position
-fn determine_block_type(biome: BiomeType, block_x: i32, block_y: i32, rng: &mut impl Rng) -> BlockType {
+fn determine_block_type(biome: BiomeType, _block_x: i32, block_y: i32, rng: &mut impl Rng) -> BlockType {
     // Chance for decorative blocks
     if rng.gen_bool(0.05) {
         let decorative = biome.decorative_blocks();
@@ -254,7 +254,7 @@ fn determine_block_type(biome: BiomeType, block_x: i32, block_y: i32, rng: &mut 
     }
 
     // Ore generation (more common in deeper areas)
-    let depth_factor = (-block_y).max(0) as u32;
+    let _depth_factor = (-block_y).max(0) as u32;
     let ore_chance = rng.gen_range(0..1000);
 
     // Use biome-specific ores
@@ -375,22 +375,31 @@ fn spawn_chunk_enemies(
                     _ => enemy_textures.skeleton.clone(), // Fallback for other types
                 };
 
+                let material = materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(texture),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                });
+
+                // Give enemies initial velocity to bounce around - upward boost to escape caves
+                let initial_velocity = Vec2::new(
+                    rng.gen_range(-100.0..100.0),  // Random horizontal velocity
+                    rng.gen_range(100.0..200.0)    // Upward velocity to pop out of spawn area
+                );
+
                 commands.spawn((
                     Enemy::new(enemy_type),
                     Health::new(max_health),
+                    crate::components::buff::Buffable,  // Add Buffable to test if this fixes bouncing
                     ChunkMember { chunk_x, chunk_y },
-                    Velocity { x: 0.0, y: 0.0 },
-                    Gravity { force: -500.0 },
-                    Bouncy { restitution: 0.6 },
-                    Mesh3d(mesh_cache.enemy_mesh.clone()),  // Use shared mesh - PERFORMANCE FIX
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::WHITE,
-                        base_color_texture: Some(texture),
-                        unlit: true,
-                        alpha_mode: AlphaMode::Blend,
-                        ..default()
-                    })),
-                    Transform::from_xyz(world_x, world_y, 10.0),  // Z=10 same as other entities
+                    PhysicsBundle::new(initial_velocity, crate::utils::constants::STANDARD_GRAVITY, crate::utils::constants::ENEMY_BOUNCE),
+                    SpriteBundle3d::new(
+                        mesh_cache.enemy_mesh.clone(),
+                        material,
+                        Vec3::new(world_x, world_y, 10.0),
+                    ),
                 ));
 
                 info!("Spawned {:?} at world({}, {}) chunk({}, {}) in {:?} biome", enemy_type, world_x, world_y, chunk_x, chunk_y, biome);

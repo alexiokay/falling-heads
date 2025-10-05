@@ -61,7 +61,7 @@ pub fn update_background(
     let viewport_height: f32 = window_height * 6.0;
     let grid_width = (viewport_width / block_size).ceil() as i32;
     let grid_height = (viewport_height / block_size).ceil() as i32;
-    let total_blocks_needed = (grid_width * grid_height) as usize;
+    let _total_blocks_needed = (grid_width * grid_height) as usize;
 
     // Only recreate if background doesn't exist, biome changed, or grid size changed
     let needs_recreate = if let Some((_, background, _)) = background_query.iter().next() {

@@ -3,9 +3,10 @@ use crate::components::enemy::{Enemy, EnemyType};
 use crate::components::hero::Hero;
 use crate::components::villager::Villager;
 use crate::components::projectile::Arrow;
-use crate::components::physics::{Velocity, Gravity};
+use crate::components::bundles::{SpriteBundle3d, PhysicsBundle};
 use crate::resources::asset_handles::ProjectileTextures;
 use crate::states::GameState;
+use crate::utils::constants::*;
 
 pub struct EnemyAIPlugin;
 
@@ -15,7 +16,7 @@ impl Plugin for EnemyAIPlugin {
             skeleton_shoot_arrows,
         ).run_if(in_state(GameState::Playing)));
 
-        info!("EnemyAIPlugin loaded");
+        info!("EnemyAIPlugin loaded - ARROW_SPEED constant = {}", ARROW_SPEED);
     }
 }
 
@@ -57,7 +58,7 @@ fn skeleton_shoot_arrows(
                 let target_pos = target_transform.translation;
                 let distance = enemy_pos.distance(target_pos);
 
-                if distance < nearest_distance && distance <= 800.0 {
+                if distance < nearest_distance && distance <= SKELETON_SHOOT_RANGE {
                     nearest_distance = distance;
                     nearest_pos = Some(target_pos);
                 }
@@ -65,33 +66,53 @@ fn skeleton_shoot_arrows(
 
             // Only shoot if we have a target within range
             let Some(target_pos) = nearest_pos else {
+                info!("Skeleton ready to shoot but no target in range (range={})", SKELETON_SHOOT_RANGE);
                 continue;
             };
 
-            // Calculate direction to target
-            let direction = (target_pos - enemy_pos).normalize_or_zero();
+            // Simple velocity - point at target
+            let dx = target_pos.x - enemy_pos.x;
+            let dy = target_pos.y - enemy_pos.y;
+            let distance = (dx * dx + dy * dy).sqrt();
 
-            // Arrow speed and initial velocity
-            let arrow_speed = 400.0;
-            let velocity = direction * arrow_speed;
+            // Calculate normalized direction (unit vector)
+            let direction = Vec2::new(dx / distance, dy / distance);
 
-            // Spawn arrow
-            commands.spawn((
-                Arrow::new(1), // 1 damage
-                Velocity { x: velocity.x, y: velocity.y },
-                Gravity { force: -300.0 }, // Arrows have gravity
-                Mesh3d(meshes.add(Rectangle::new(32.0, 8.0))), // Arrow is 32x8
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(projectile_textures.arrow.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Blend,
-                    ..default()
-                })),
-                Transform::from_xyz(enemy_pos.x, enemy_pos.y, 15.0), // Z=15 to render above entities
-            ));
+            // Apply ARROW_SPEED directly to the direction
+            let velocity = direction * ARROW_SPEED;
 
-            info!("Skeleton shot arrow at target from distance {}", nearest_distance);
+            // Spawn arrow OFFSET from skeleton to avoid instant block collision
+            let spawn_offset = 80.0; // Spawn arrow 80 units away from skeleton
+            let spawn_pos = Vec3::new(
+                enemy_pos.x + direction.x * spawn_offset,
+                enemy_pos.y + direction.y * spawn_offset,
+                0.0 // Z=0 same as gameplay plane for proper collision detection
+            );
+
+            info!("Arrow shot: speed={}, distance={:.1}, vx={:.1}, vy={:.1}, actual_speed={:.1}",
+                ARROW_SPEED, distance, velocity.x, velocity.y, velocity.length());
+
+            let material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(projectile_textures.arrow.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                cull_mode: None,  // Double-sided rendering so arrow is visible from all angles
+                ..default()
+            });
+
+            let arrow_entity = commands.spawn((
+                Arrow::new(1),
+                PhysicsBundle::projectile(velocity, ARROW_GRAVITY),
+                SpriteBundle3d::new(
+                    meshes.add(Rectangle::new(ARROW_WIDTH, ARROW_HEIGHT)),
+                    material,
+                    spawn_pos, // Use offset spawn position
+                ),
+            )).id();
+
+            info!("ARROW SPAWNED: entity={:?}, pos=({:.0},{:.0},{:.0}), vel=({:.1},{:.1}), speed={}",
+                arrow_entity, spawn_pos.x, spawn_pos.y, spawn_pos.z, velocity.x, velocity.y, ARROW_SPEED);
         }
     }
 }

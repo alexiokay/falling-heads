@@ -25,6 +25,7 @@ use systems::buff_system::BuffPlugin;
 use systems::projectile_system::ProjectilePlugin;
 use systems::enemy_ai_system::EnemyAIPlugin;
 use systems::heart_ui_system::HeartUIPlugin;
+use systems::damage_visual_system::DamageVisualPlugin;
 use resources::asset_handles::{GameTextures, BlockTextures, ResourceTextures, EnemyTextures, ProjectileTextures, HeartTextures};
 use resources::material_cache::MaterialCache;
 use resources::mesh_cache::MeshCache;
@@ -55,6 +56,7 @@ fn main() {
             ProjectilePlugin,
             EnemyAIPlugin,
             HeartUIPlugin,
+            DamageVisualPlugin,
         ))
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()

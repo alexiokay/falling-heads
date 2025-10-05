@@ -4,7 +4,9 @@
       "Bash(rustc --version)",
       "Bash(cargo check:*)",
       "Bash(cargo run:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(Select-String -Pattern \"damage|health|died|villager\" -CaseSensitive:$false)"
     ],
     "deny": [],
     "ask": []

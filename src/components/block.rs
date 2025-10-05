@@ -120,12 +120,12 @@ impl BiomeType {
     pub fn enemy_types(&self) -> &[crate::components::enemy::EnemyType] {
         use crate::components::enemy::EnemyType;
         match self {
-            BiomeType::Nether => &[EnemyType::Pigman, EnemyType::Skeleton], // Add Skeleton to Nether
-            BiomeType::End => &[EnemyType::Enderman],
+            BiomeType::Nether => &[EnemyType::Skeleton], // Only Skeleton (has texture)
+            BiomeType::End => &[], // No enemies (Enderman has no texture yet)
             BiomeType::Plains | BiomeType::Forest | BiomeType::Desert | BiomeType::Mountains => {
-                &[EnemyType::Zombie, EnemyType::Skeleton]
+                &[EnemyType::Skeleton] // Only Skeleton (Zombie has no texture yet)
             },
-            BiomeType::Underground => &[EnemyType::Zombie, EnemyType::Skeleton],
+            BiomeType::Underground => &[EnemyType::Skeleton], // Only Skeleton
         }
     }
 

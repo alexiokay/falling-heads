@@ -2,25 +2,26 @@ use bevy::prelude::*;
 use crate::components::{
     hero::Hero,
     block::{Block, BlockType},
-    physics::{Velocity, Gravity, Bouncy},
+    physics::Velocity,
     resource::{Resource, ResourceType, RotatingResource},
     power_effect::SpeedModifier,
     villager::Villager,
     chunk::LoadedChunks,
     enemy::Health,
     buff::Buffable,
+    bundles::{SpriteBundle3d, PhysicsBundle},
 };
 use crate::events::block_events::{BlockDamaged, BlockDestroyed};
 use crate::events::resource_events::ResourceCollected;
 use crate::events::damage_events::{EntityDamaged, EntityDied};
 use crate::resources::inventory::Inventory;
-use crate::resources::material_cache::MaterialCache;
 use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
 use crate::systems::world_generation::{generate_chunks_around_hero, despawn_distant_chunks};
-use crate::systems::health_system::{handle_entity_damage, handle_entity_death};
+use crate::systems::health_system::{handle_entity_damage, handle_entity_death, update_death_animations};
 use crate::systems::health_ui_system::{spawn_health_bars, update_health_bars};
 use crate::systems::background_system::update_background;
+use crate::utils::constants::*;
 
 pub struct GameplayPlugin;
 
@@ -55,6 +56,7 @@ impl Plugin for GameplayPlugin {
                 update_speed_modifiers,
                 handle_entity_damage,
                 handle_entity_death,
+                update_death_animations,
                 spawn_health_bars,
                 update_health_bars,
                 // Background only updates when biome changes (already has internal check)
@@ -75,23 +77,26 @@ fn spawn_hero(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Use a 3D sprite (textured quad) instead of 2D sprite for consistent coordinate space
+    let material = materials.add(StandardMaterial {
+        base_color_texture: Some(textures.hero.clone()),
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+
     commands.spawn((
-        Hero,
-        Health::new(3),  // Hero has 3 hearts
-        Buffable,  // Hero can receive buffs
-        Velocity { x: 0.0, y: 0.0 },
-        Gravity { force: -500.0 },
-        Bouncy { restitution: 0.85 },
-        Mesh3d(meshes.add(Rectangle::new(64.0, 64.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(textures.hero.clone()),
-            unlit: true,  // No lighting for sprite-like appearance
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        // Spawn in Nether: Y < -20 chunks = Y < -20 * 16 * 64 = -20,480
-        Transform::from_xyz(0.0, -25000.0, 10.0),  // Deep underground in Nether
+        Hero {
+            move_direction: 1.0,  // Start moving right
+            direction_change_timer: Timer::from_seconds(VILLAGER_DIRECTION_CHANGE_INTERVAL, TimerMode::Repeating),
+        },
+        Health::new(3),
+        Buffable,
+        PhysicsBundle::new(Vec2::ZERO, STANDARD_GRAVITY, HERO_BOUNCE),
+        SpriteBundle3d::new(
+            meshes.add(Rectangle::new(HERO_SIZE, HERO_SIZE)),
+            material,
+            Vec3::new(0.0, -25000.0, 10.0),
+        ),
     ));
 
     info!("Hero spawned in Nether biome at Y=-25000");
@@ -119,24 +124,31 @@ fn spawn_villagers(
         let offset_x = rng.gen_range(-128.0..128.0);
         let offset_y = rng.gen_range(-64.0..64.0);
 
+        let material = materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            base_color_texture: Some(textures.villager.clone()),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+
+        // Random initial direction for variety
+        let initial_direction = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+
         commands.spawn((
             Villager {
                 ai_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+                move_direction: initial_direction,
+                direction_change_timer: Timer::from_seconds(VILLAGER_DIRECTION_CHANGE_INTERVAL, TimerMode::Repeating),
             },
-            Health::new(6),  // Villagers have 6 health (3 hearts)
-            Buffable,  // Villagers can receive buffs
-            Velocity { x: 0.0, y: 0.0 },
-            Gravity { force: -500.0 },
-            Bouncy { restitution: 0.8 },
-            Mesh3d(meshes.add(Rectangle::new(56.0, 56.0))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                base_color_texture: Some(textures.villager.clone()),
-                unlit: true,
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            })),
-            Transform::from_xyz(offset_x, hero_y + offset_y, 10.0),  // Spawn near hero
+            Health::new(6),
+            Buffable,
+            PhysicsBundle::new(Vec2::ZERO, STANDARD_GRAVITY, VILLAGER_BOUNCE),
+            SpriteBundle3d::new(
+                meshes.add(Rectangle::new(VILLAGER_SIZE, VILLAGER_SIZE)),
+                material,
+                Vec3::new(offset_x, hero_y + offset_y, 10.0),
+            ),
         ));
     }
 
@@ -144,28 +156,33 @@ fn spawn_villagers(
 }
 
 
+/// Optional player control - ADDS to automatic AI movement
+/// Hero moves automatically like villagers, but player can override/boost with A/D keys
 fn hero_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut query: Query<(&mut Velocity, Option<&SpeedModifier>), With<Hero>>,
+    time: Res<Time>,
 ) {
     let Ok((mut velocity, speed_mod)) = query.single_mut() else {
         return;
     };
 
-    let mut speed = 3.0;  // 3D scale
+    let mut acceleration = 500.0;  // Player override acceleration
 
     // Apply speed modifier if present
     if let Some(modifier) = speed_mod {
-        speed *= modifier.multiplier;
+        acceleration *= modifier.multiplier;
     }
 
+    // ADD to velocity (preserves automatic AI movement + physics)
     if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
-        velocity.x = -speed;
+        velocity.x += -acceleration * time.delta_secs();
     } else if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
-        velocity.x = speed;
-    } else {
-        velocity.x = 0.0;
+        velocity.x += acceleration * time.delta_secs();
     }
+
+    // Cap max horizontal velocity
+    velocity.x = velocity.x.clamp(-500.0, 500.0);
 }
 
 fn handle_block_damage(
@@ -227,27 +244,24 @@ fn spawn_resources_from_destroyed_blocks(
             _ => continue,
         };
 
-        // Use 2D rectangle with double-sided rendering (no culling) to avoid UV mapping issues
+        let material = materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            base_color_texture: Some(texture),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            cull_mode: None,
+            ..default()
+        });
+
         commands.spawn((
             Resource { resource_type },
-            RotatingResource::default(), // Add rotation component for visual effect (Y-axis spin)
-            Velocity { x: 0.0, y: 50.0 }, // Small upward velocity when dropped
-            Gravity { force: -500.0 },  // Physics gravity
-            // NO BOUNCY COMPONENT - resources settle on ground without bouncing
-            Mesh3d(meshes.add(Rectangle::new(32.0, 32.0))),  // 2D rectangle for clean rendering
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                base_color_texture: Some(texture),
-                unlit: true,
-                alpha_mode: AlphaMode::Blend,
-                cull_mode: None,  // Render both sides so visible during rotation
-                ..default()
-            })),
-            Transform::from_translation(event.position).with_translation(Vec3::new(
-                event.position.x,
-                event.position.y,
-                5.0,  // Z=5 to render above blocks but below UI
-            )),
+            RotatingResource::default(),
+            PhysicsBundle::settling(Vec2::new(0.0, RESOURCE_DROP_VELOCITY_Y)),
+            SpriteBundle3d::new(
+                meshes.add(Rectangle::new(RESOURCE_SIZE, RESOURCE_SIZE)),
+                material,
+                Vec3::new(event.position.x, event.position.y, 5.0),
+            ),
         ));
     }
 }
@@ -274,10 +288,14 @@ fn collect_resources(
         return;
     };
 
-    let collection_range = 1.0;  // Adjusted for 3D scale
+    // Collection range = (hero_half + resource_half) for overlap detection
+    let collection_range = (HERO_SIZE / 2.0) + (RESOURCE_SIZE / 2.0);  // 32.0 + 16.0 = 48.0
 
     for (entity, resource_transform, resource) in resource_query.iter() {
-        let distance = hero_transform.translation.distance(resource_transform.translation);
+        // Use 2D distance (ignore Z-depth) since hero is at Z=10 and resources at Z=5
+        let hero_pos = hero_transform.translation.xy();
+        let resource_pos = resource_transform.translation.xy();
+        let distance = hero_pos.distance(resource_pos);
 
         if distance < collection_range {
             // Collect resource
@@ -309,11 +327,15 @@ fn camera_follow_hero(
         return;
     };
 
+    let target_x = hero_transform.translation.x;
     let target_y = hero_transform.translation.y;
 
-    // Follow with 3D camera (keep isometric angle)
+    // Follow with 3D camera (keep isometric angle) - follow both X and Y
     if let Ok(mut camera_transform) = camera_query.single_mut() {
+        let offset_x = 30.0;  // Keep camera slightly offset from hero
         let offset_y = 80.0;  // Keep camera above hero
+
+        camera_transform.translation.x += (target_x + offset_x - camera_transform.translation.x) * 0.1;
         camera_transform.translation.y += (target_y + offset_y - camera_transform.translation.y) * 0.1;
     }
 }

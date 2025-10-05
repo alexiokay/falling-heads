@@ -70,8 +70,8 @@ pub fn log_performance_metrics(
         let resource_count = resources.iter().count();
         let healthbar_count = health_bars.iter().count();
         let total_entities = all_entities.iter().count();
-        let transform_count = all_transforms.iter().count();
-        let mesh_entities = all_mesh3d.iter().count();
+        let _transform_count = all_transforms.iter().count();
+        let _mesh_entities = all_mesh3d.iter().count();
 
         let known_entities = block_count + enemy_count + background_count + resource_count + healthbar_count;
         let unknown_entities = total_entities.saturating_sub(known_entities);
@@ -79,7 +79,7 @@ pub fn log_performance_metrics(
         // Count assets
         let material_count = materials.iter().count();
         let mesh_count = meshes.iter().count();
-        let image_count = images.iter().count();
+        let _image_count = images.iter().count();
 
         info!("========== PERFORMANCE METRICS (Runtime: {:.1}s) ==========", runtime);
         info!("  FPS: {:.1} | Frame Time: {:.2}ms", fps, frame_time);

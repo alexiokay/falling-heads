@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use crate::components::buff::{Buff, BuffType, Buffable};
+use crate::components::block::{BlockType, BiomeType};
 use crate::components::enemy::Health;
 use crate::components::physics::Velocity;
 use crate::events::damage_events::EntityDamaged;
@@ -36,11 +37,11 @@ fn update_buffs(
 
 /// Apply buff effects (damage/healing, velocity changes)
 fn apply_buff_effects(
-    mut query: Query<(&mut Buff, Option<&mut Health>, Option<&mut Velocity>), With<Buffable>>,
+    mut query: Query<(Entity, &mut Buff, Option<&Health>, Option<&mut Velocity>), With<Buffable>>,
     mut damage_events: MessageWriter<EntityDamaged>,
     time: Res<Time>,
 ) {
-    for (mut buff, health_opt, velocity_opt) in query.iter_mut() {
+    for (entity, mut buff, health_opt, velocity_opt) in query.iter_mut() {
         buff.tick_timer.tick(time.delta());
 
         // Apply damage/healing on tick
@@ -48,13 +49,16 @@ fn apply_buff_effects(
             let damage = buff.buff_type.damage_per_tick();
 
             if damage != 0 {
-                if let Some(mut health) = health_opt {
+                if let Some(_health) = health_opt {
                     if damage > 0 {
-                        // Apply damage
-                        health.current = health.current.saturating_sub(damage as u32);
+                        // Emit damage event - let health system handle death
+                        damage_events.write(EntityDamaged {
+                            entity,
+                            damage: damage as u32,
+                        });
                     } else {
-                        // Apply healing
-                        health.current = (health.current as i32 - damage).min(health.max as i32) as u32;
+                        // Healing not implemented yet - would need EntityHealed event
+                        // For now, skip healing
                     }
                 }
             }
@@ -91,4 +95,56 @@ pub fn apply_buff(
     duration: f32,
 ) {
     commands.entity(entity).insert(Buff::new(buff_type, duration));
+}
+
+/// Apply block-specific buffs based on biome and block type
+pub fn apply_block_buff(
+    commands: &mut Commands,
+    entity: Entity,
+    block_type: BlockType,
+    biome: BiomeType,
+) {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    // 20% chance to apply buff on collision
+    if !rng.gen_bool(0.2) {
+        return;
+    }
+
+    let buff = match biome {
+        BiomeType::Nether => {
+            // Nether: only special blocks give debuffs
+            match block_type {
+                BlockType::SoulSand => Some((BuffType::Slowness, 3.0)),
+                _ => None,
+            }
+        },
+        BiomeType::End => {
+            // End: slowness from chorus
+            match block_type {
+                BlockType::ChorusFruit => Some((BuffType::Speed, 5.0)),
+                _ => None,
+            }
+        },
+        BiomeType::Mountains => {
+            // Mountains: freezing from snow
+            match block_type {
+                BlockType::Snow => Some((BuffType::Freezing, 3.0)),
+                _ => None,
+            }
+        },
+        BiomeType::Underground => {
+            // Underground: poisoned from mushrooms
+            match block_type {
+                BlockType::Mushroom => Some((BuffType::Poisoned, 4.0)),
+                _ => None,
+            }
+        },
+        _ => None,
+    };
+
+    if let Some((buff_type, duration)) = buff {
+        commands.entity(entity).insert(Buff::new(buff_type, duration));
+    }
 }

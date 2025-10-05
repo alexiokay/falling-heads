@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use crate::components::physics::{Velocity, Gravity, Bouncy};
 use crate::components::hero::Hero;
 use crate::components::villager::Villager;
-use crate::components::block::{Block, BlockType, BiomeType};
+use crate::components::block::{Block, BlockType};
 use crate::components::explosive::Tnt;
 use crate::components::enemy::Enemy;
 use crate::components::resource::Resource;
@@ -11,7 +11,18 @@ use crate::components::chunk::ChunkMember;
 use crate::events::block_events::BlockDamaged;
 use crate::events::damage_events::EntityDamaged;
 use crate::resources::damage_cooldown::DamageCooldown;
+use crate::resources::spatial_hash::SpatialHash;
+use crate::systems::buff_system::apply_block_buff;
 use crate::states::GameState;
+use crate::utils::constants::*;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PhysicsSet {
+    Forces,      // Apply gravity and forces
+    AI,          // Enemy AI movement
+    Movement,    // Update positions
+    Collision,   // Detect and resolve collisions
+}
 
 pub struct PhysicsPlugin;
 
@@ -19,19 +30,35 @@ impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<DamageCooldown>()
+            .insert_resource(SpatialHash::new(256.0)) // 256 units per spatial chunk (4 blocks)
+            .configure_sets(Update, (
+                PhysicsSet::Forces,
+                PhysicsSet::AI,
+                PhysicsSet::Movement,
+                PhysicsSet::Collision,
+            ).chain().run_if(in_state(GameState::Playing)))
+            .add_systems(Update,
+                apply_gravity.in_set(PhysicsSet::Forces)
+            )
             .add_systems(Update, (
-                apply_gravity,
-                apply_velocity,
+                hero_ai_movement,
+                villager_ai_movement,
                 enemy_ai_movement,
-                check_collisions,
-                check_villager_collisions,
+            ).in_set(PhysicsSet::AI))
+            .add_systems(Update,
+                apply_velocity.in_set(PhysicsSet::Movement)
+            )
+            .add_systems(Update,
+                rebuild_spatial_hash.in_set(PhysicsSet::Collision)
+            )
+            .add_systems(Update, (
+                check_all_entity_block_collisions,  // Hero + Villagers + Enemies (unified)
                 check_tnt_collisions,
                 check_resource_collisions,
                 check_hero_tnt_push,
-                check_enemy_collisions,
                 check_hero_enemy_collision,
                 check_entity_collisions,
-            ).run_if(in_state(GameState::Playing)));
+            ).in_set(PhysicsSet::Collision).after(rebuild_spatial_hash));
 
         info!("PhysicsPlugin loaded");
     }
@@ -48,87 +75,106 @@ fn apply_gravity(
 
 fn apply_velocity(
     time: Res<Time>,
-    mut query: Query<(&Velocity, &mut Transform)>,
+    mut query: Query<(&Velocity, &mut Transform, Option<&crate::components::projectile::Arrow>), Without<crate::components::damage_visual::DeathAnimation>>,
 ) {
-    for (velocity, mut transform) in query.iter_mut() {
-        transform.translation.x += velocity.x * time.delta_secs();
-        transform.translation.y += velocity.y * time.delta_secs();
+    for (velocity, mut transform, arrow) in query.iter_mut() {
+        let delta = time.delta_secs();
+        let dx = velocity.x * delta;
+        let dy = velocity.y * delta;
+
+        // Debug log arrows only - show actual velocity values
+        if arrow.is_some() {
+            info!("ARROW PHYSICS: vel=({:.1},{:.1}), delta={:.4}, move=({:.2},{:.2}), speed={:.1}",
+                velocity.x, velocity.y, delta, dx, dy, (velocity.x * velocity.x + velocity.y * velocity.y).sqrt());
+        }
+
+        transform.translation.x += dx;
+        transform.translation.y += dy;
     }
 }
 
-fn check_collisions(
+/// Rebuild spatial hash every frame for fast collision queries
+fn rebuild_spatial_hash(
+    mut spatial_hash: ResMut<SpatialHash>,
+    block_query: Query<(Entity, &Transform), With<Block>>,
+) {
+    spatial_hash.clear();
+
+    for (entity, transform) in block_query.iter() {
+        let pos = transform.translation;
+        spatial_hash.insert(entity, pos.x, pos.y);
+    }
+}
+
+/// ALL entities (Hero + Villagers + Enemies) collision - unified physics
+fn check_all_entity_block_collisions(
     mut commands: Commands,
-    mut hero_query: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy), (With<Hero>, Without<Block>)>,
-    block_query: Query<(Entity, &Transform, &BlockType, &ChunkMember), (With<Block>, Without<Hero>)>,
+    spatial_hash: Res<SpatialHash>,
+    mut entity_query: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy, Option<&Enemy>), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Block>)>,
+    block_query: Query<(Entity, &Transform, &BlockType, &ChunkMember), With<Block>>,
     chunk_query: Query<&crate::components::chunk::Chunk>,
     mut damage_events: MessageWriter<BlockDamaged>,
 ) {
-    let Ok((hero_entity, mut hero_transform, mut hero_velocity, bouncy)) = hero_query.single_mut() else {
-        return;
-    };
+    for (entity, mut transform, mut velocity, bouncy, is_enemy) in entity_query.iter_mut() {
+        let pos = transform.translation;
+        let entity_size = HERO_SIZE;
+        let block_size = BLOCK_SIZE;
 
-    let hero_pos = hero_transform.translation;
-    let hero_size = 64.0;  // 2D sprite size (64x64)
-    let block_size = 64.0;  // 3D blocks are 1.0 unit cubes scaled by 64.0, so total size is 64.0
+        let nearby_blocks = spatial_hash.query_nearby(pos.x, pos.y);
 
-    for (block_entity, block_transform, block_type, chunk_member) in block_query.iter() {
-        let block_pos = block_transform.translation;
+        for block_entity in nearby_blocks {
+            let Ok((_, block_transform, block_type, chunk_member)) = block_query.get(block_entity) else {
+                continue;
+            };
+            let block_pos = block_transform.translation;
 
-        let hero_half = hero_size / 2.0;
-        let block_half = block_size / 2.0;
+            let entity_half = entity_size / 2.0;
+            let block_half = block_size / 2.0;
 
-        let dx = hero_pos.x - block_pos.x;
-        let dy = hero_pos.y - block_pos.y;
+            let dx = pos.x - block_pos.x;
+            let dy = pos.y - block_pos.y;
 
-        let overlap_x = hero_half + block_half - dx.abs();
-        let overlap_y = hero_half + block_half - dy.abs();
+            let overlap_x = entity_half + block_half - dx.abs();
+            let overlap_y = entity_half + block_half - dy.abs();
 
-        if overlap_x > 0.0 && overlap_y > 0.0 {
-            // Collision detected! Damage block on ANY collision
-            damage_events.write(BlockDamaged {
-                entity: block_entity,
-                damage: 1,
-                remaining_health: 0, // Will be updated in damage system
-            });
+            if overlap_x > 0.0 && overlap_y > 0.0 {
+                // Only friendlies damage blocks and get buffs
+                if is_enemy.is_none() {
+                    damage_events.write(BlockDamaged {
+                        entity: block_entity,
+                        damage: 1,
+                        remaining_health: 0,
+                    });
 
-            // Apply buff based on block type and biome
-            if let Some(chunk) = chunk_query.iter().find(|c| c.chunk_x == chunk_member.chunk_x && c.chunk_y == chunk_member.chunk_y) {
-                apply_block_buff(&mut commands, hero_entity, *block_type, chunk.biome);
-            }
-
-            // Resolve based on smallest overlap - push entity out completely
-            if overlap_x < overlap_y {
-                // Resolve horizontally - add buffer to prevent re-collision
-                let separation = overlap_x + 1.0;
-                if dx > 0.0 {
-                    hero_transform.translation.x += separation;
-                } else {
-                    hero_transform.translation.x -= separation;
-                }
-                hero_velocity.x = -hero_velocity.x * 0.5;
-            } else {
-                // Resolve vertically - larger buffer to prevent penetration
-                let separation = overlap_y + 1.0;
-                if dy > 0.0 {
-                    // Hero is above block - push upward
-                    hero_transform.translation.y += separation;
-                    if hero_velocity.y < 0.0 {
-                        // Cap bounce velocity to prevent crazy high bounces from long falls
-                        let max_bounce_velocity = 400.0; // Maximum upward velocity after bounce
-                        hero_velocity.y = -hero_velocity.y * bouncy.restitution;
-                        hero_velocity.y = hero_velocity.y.min(max_bounce_velocity);
-
-                        // Add horizontal randomness on bounce
-                        use rand::Rng;
-                        let mut rng = rand::thread_rng();
-                        let horizontal_bounce = rng.gen_range(-50.0..50.0);
-                        hero_velocity.x += horizontal_bounce;
+                    if let Some(chunk) = chunk_query.iter().find(|c| c.chunk_x == chunk_member.chunk_x && c.chunk_y == chunk_member.chunk_y) {
+                        apply_block_buff(&mut commands, entity, *block_type, chunk.biome);
                     }
+                }
+
+                // Collision resolution (SAME for all entities)
+                if overlap_x < overlap_y {
+                    // Horizontal - strong bounce
+                    let separation = overlap_x + 1.0;
+                    if dx > 0.0 {
+                        transform.translation.x += separation;
+                    } else {
+                        transform.translation.x -= separation;
+                    }
+                    velocity.x = -velocity.x * 0.8;
                 } else {
-                    // Hero is below block - push downward
-                    hero_transform.translation.y -= separation;
-                    if hero_velocity.y > 0.0 {
-                        hero_velocity.y = 0.0;
+                    // Vertical
+                    let separation = overlap_y + 1.0;
+                    if dy > 0.0 {
+                        transform.translation.y += separation;
+                        if velocity.y < 0.0 {
+                            velocity.y = -velocity.y * bouncy.restitution;
+                            velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
+                        }
+                    } else {
+                        transform.translation.y -= separation;
+                        if velocity.y > 0.0 {
+                            velocity.y = 0.0;
+                        }
                     }
                 }
             }
@@ -136,70 +182,58 @@ fn check_collisions(
     }
 }
 
-// Villagers vs Blocks collision
-fn check_villager_collisions(
-    mut villager_query: Query<(&mut Transform, &mut Velocity, &Bouncy), (With<Villager>, Without<Block>)>,
-    block_query: Query<(Entity, &Transform), (With<Block>, Without<Villager>)>,
-    mut damage_events: MessageWriter<BlockDamaged>,
+/// Enemy collision - NO block damage, NO buffs, uses Bouncy component like friendlies
+fn check_enemy_block_collisions(
+    spatial_hash: Res<SpatialHash>,
+    mut enemy_query: Query<(&mut Transform, &mut Velocity, &Bouncy), (With<Enemy>, Without<Block>)>,
+    block_query: Query<&Transform, With<Block>>,
 ) {
-    for (mut villager_transform, mut villager_velocity, bouncy) in villager_query.iter_mut() {
-        let villager_pos = villager_transform.translation;
-        let villager_size = 56.0;  // 2D scale: matches sprite size (56x56)
-        let block_size = 64.0;  // 2D scale
+    for (mut transform, mut velocity, bouncy) in enemy_query.iter_mut() {
+        let pos = transform.translation;
+        let entity_size = ENEMY_SIZE;
+        let block_size = BLOCK_SIZE;
 
-        for (block_entity, block_transform) in block_query.iter() {
+        let nearby_blocks = spatial_hash.query_nearby(pos.x, pos.y);
+
+        for block_entity in nearby_blocks {
+            let Ok(block_transform) = block_query.get(block_entity) else {
+                continue;
+            };
             let block_pos = block_transform.translation;
 
-            let villager_half = villager_size / 2.0;
+            let entity_half = entity_size / 2.0;
             let block_half = block_size / 2.0;
 
-            let dx = villager_pos.x - block_pos.x;
-            let dy = villager_pos.y - block_pos.y;
+            let dx = pos.x - block_pos.x;
+            let dy = pos.y - block_pos.y;
 
-            let overlap_x = villager_half + block_half - dx.abs();
-            let overlap_y = villager_half + block_half - dy.abs();
+            let overlap_x = entity_half + block_half - dx.abs();
+            let overlap_y = entity_half + block_half - dy.abs();
 
             if overlap_x > 0.0 && overlap_y > 0.0 {
-                // Collision detected! Damage block on ANY collision
-                damage_events.write(BlockDamaged {
-                    entity: block_entity,
-                    damage: 1,
-                    remaining_health: 0,
-                });
-
-                // Resolve based on smallest overlap - push entity out completely
+                // Collision resolution - uses Bouncy component (same as friendlies)
                 if overlap_x < overlap_y {
-                    // Resolve horizontally - add buffer to prevent re-collision
+                    // Horizontal
                     let separation = overlap_x + 1.0;
                     if dx > 0.0 {
-                        villager_transform.translation.x += separation;
+                        transform.translation.x += separation;
                     } else {
-                        villager_transform.translation.x -= separation;
+                        transform.translation.x -= separation;
                     }
-                    villager_velocity.x = -villager_velocity.x * 0.5;
+                    velocity.x = -velocity.x * 0.8;
                 } else {
-                    // Resolve vertically - larger buffer to prevent penetration
+                    // Vertical
                     let separation = overlap_y + 1.0;
                     if dy > 0.0 {
-                        // Villager is above block - push upward
-                        villager_transform.translation.y += separation;
-                        if villager_velocity.y < 0.0 {
-                            // Cap bounce velocity to prevent crazy high bounces from long falls
-                            let max_bounce_velocity = 350.0; // Villagers bounce slightly less than hero
-                            villager_velocity.y = -villager_velocity.y * bouncy.restitution;
-                            villager_velocity.y = villager_velocity.y.min(max_bounce_velocity);
-
-                            // Add horizontal randomness on bounce
-                            use rand::Rng;
-                            let mut rng = rand::thread_rng();
-                            let horizontal_bounce = rng.gen_range(-50.0..50.0);
-                            villager_velocity.x += horizontal_bounce;
+                        transform.translation.y += separation;
+                        if velocity.y < 0.0 {
+                            velocity.y = -velocity.y * bouncy.restitution;
+                            velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
                         }
                     } else {
-                        // Villager is below block - push downward
-                        villager_transform.translation.y -= separation;
-                        if villager_velocity.y > 0.0 {
-                            villager_velocity.y = 0.0;
+                        transform.translation.y -= separation;
+                        if velocity.y > 0.0 {
+                            velocity.y = 0.0;
                         }
                     }
                 }
@@ -222,8 +256,8 @@ fn check_tnt_collisions(
         }
 
         let tnt_pos = tnt_transform.translation;
-        let tnt_size = 64.0;  // 3D cube scaled to 64x64x64
-        let block_size = 64.0;  // 3D blocks also 64x64x64
+        let tnt_size = BLOCK_SIZE;  // TNT is same size as blocks
+        let block_size = BLOCK_SIZE;
 
         let mut is_grounded = false;
 
@@ -291,8 +325,8 @@ fn check_resource_collisions(
 ) {
     for (mut resource_transform, mut resource_velocity) in resource_query.iter_mut() {
         let resource_pos = resource_transform.translation;
-        let resource_size = 32.0;  // 2D sprite 32x32
-        let block_size = 64.0;  // 3D blocks 64x64x64
+        let resource_size = RESOURCE_SIZE;
+        let block_size = BLOCK_SIZE;
 
         for block_transform in block_query.iter() {
             let block_pos = block_transform.translation;
@@ -348,11 +382,11 @@ fn check_hero_tnt_push(
 ) {
     for (entity_transform, mut entity_velocity) in entity_query.iter_mut() {
         let entity_pos = entity_transform.translation;
-        let entity_size = 64.0;
+        let entity_size = HERO_SIZE;  // Hero/villager size
 
         for (mut tnt_transform, mut tnt_velocity, mut gravity) in tnt_query.iter_mut() {
             let tnt_pos = tnt_transform.translation;
-            let tnt_size = 64.0;
+            let tnt_size = BLOCK_SIZE;
 
             let entity_half = entity_size / 2.0;
             let tnt_half = tnt_size / 2.0;
@@ -380,7 +414,7 @@ fn check_hero_tnt_push(
                 let tnt_push_ratio = entity_mass / total_mass;  // 1/7 = 0.14 (TNT moves less)
                 let entity_push_ratio = tnt_mass / total_mass;   // 6/7 = 0.86 (entity moves more)
 
-                let push_strength = 160.0; // Increased - strong collision force
+                let push_strength = 80.0; // Reduced - gentler collision force
 
                 if overlap_x < overlap_y {
                     // Horizontal collision
@@ -389,19 +423,19 @@ fn check_hero_tnt_push(
                     // TNT gets small push (heavy)
                     tnt_velocity.x += push_direction * push_strength * tnt_push_ratio * 0.3;
 
-                    // Entity gets big push (lighter)
-                    entity_velocity.x -= push_direction * push_strength * entity_push_ratio * 1.2;
+                    // Entity gets moderate push (lighter)
+                    entity_velocity.x -= push_direction * push_strength * entity_push_ratio * 0.5;
                 } else {
                     // Vertical collision
                     if dy > 0.0 {
                         // TNT above entity - heroes CAN hold/stop TNT with strong upward push
                         tnt_velocity.y += push_strength * tnt_push_ratio * 0.6; // STRONG upward push - heroes can hold TNT
-                        entity_velocity.y -= push_strength * entity_push_ratio * 0.8;
+                        entity_velocity.y -= push_strength * entity_push_ratio * 0.4;
                     }
                     // Also horizontal component
                     let push_direction_x = dx.signum();
                     tnt_velocity.x += push_direction_x * push_strength * tnt_push_ratio * 0.25;
-                    entity_velocity.x -= push_direction_x * push_strength * entity_push_ratio * 1.1;
+                    entity_velocity.x -= push_direction_x * push_strength * entity_push_ratio * 0.5;
                 }
             }
         }
@@ -410,17 +444,39 @@ fn check_hero_tnt_push(
 
 // Entity-to-entity collision (Hero, Villagers, and Enemies bounce off each other)
 fn check_entity_collisions(
-    mut entities: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
+    mut entities: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy, Option<&Hero>, Option<&Villager>, Option<&Enemy>), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
 ) {
-    let mut combinations = entities.iter_combinations_mut();
+    // Run multiple passes to handle complex multi-entity clusters
+    for _pass in 0..5 {  // Increased from 3 to 5 passes
+        let mut combinations = entities.iter_combinations_mut();
 
-    while let Some([(_entity_a, mut transform_a, mut velocity_a, bouncy_a), (_entity_b, mut transform_b, mut velocity_b, bouncy_b)]) = combinations.fetch_next() {
+        while let Some([
+            (_entity_a, mut transform_a, mut velocity_a, bouncy_a, hero_a, villager_a, enemy_a),
+            (_entity_b, mut transform_b, mut velocity_b, bouncy_b, hero_b, villager_b, enemy_b)
+        ]) = combinations.fetch_next() {
         let pos_a = transform_a.translation;
         let pos_b = transform_b.translation;
 
-        // Use actual sprite sizes for tighter collision
-        let size_a = 64.0; // Hero sprite size (64x64)
-        let size_b = 56.0; // Villager sprite size (56x56)
+        // Determine actual size based on entity type
+        let size_a = if hero_a.is_some() {
+            HERO_SIZE
+        } else if villager_a.is_some() {
+            VILLAGER_SIZE
+        } else if enemy_a.is_some() {
+            ENEMY_SIZE
+        } else {
+            HERO_SIZE // fallback
+        };
+
+        let size_b = if hero_b.is_some() {
+            HERO_SIZE
+        } else if villager_b.is_some() {
+            VILLAGER_SIZE
+        } else if enemy_b.is_some() {
+            ENEMY_SIZE
+        } else {
+            HERO_SIZE // fallback
+        };
 
         let half_a = size_a / 2.0;
         let half_b = size_b / 2.0;
@@ -432,10 +488,11 @@ fn check_entity_collisions(
         let overlap_y = half_a + half_b - dy.abs();
 
         if overlap_x > 0.0 && overlap_y > 0.0 {
-            // Collision detected! Fully separate entities with buffer
+            // SUPER AGGRESSIVE separation - the deeper the overlap, the stronger the explosion
+            // Scale separation force based on overlap depth (deeper = stronger push)
             if overlap_x < overlap_y {
-                // Separate horizontally - split the overlap evenly
-                let separation = (overlap_x / 2.0) + 0.5;
+                // Separate horizontally - EXPLOSIVE force proportional to overlap
+                let separation = overlap_x * 0.8 + 5.0;  // MUCH stronger: 80% of overlap + bigger buffer
                 if dx > 0.0 {
                     transform_a.translation.x += separation;
                     transform_b.translation.x -= separation;
@@ -444,13 +501,14 @@ fn check_entity_collisions(
                     transform_b.translation.x += separation;
                 }
 
-                // Bounce velocities with damping
+                // MASSIVE horizontal push force to blow clusters apart
                 let avg_vx = (velocity_a.x + velocity_b.x) * 0.5;
-                velocity_a.x = (velocity_a.x - avg_vx) * -0.8 + avg_vx;
-                velocity_b.x = (velocity_b.x - avg_vx) * -0.8 + avg_vx;
+                let push_strength = 500.0 * (overlap_x / (half_a + half_b)); // MUCH stronger push
+                velocity_a.x = (velocity_a.x - avg_vx) * -0.8 + avg_vx + (if dx > 0.0 { push_strength } else { -push_strength });
+                velocity_b.x = (velocity_b.x - avg_vx) * -0.8 + avg_vx + (if dx > 0.0 { -push_strength } else { push_strength });
             } else {
-                // Separate vertically - split the overlap evenly
-                let separation = (overlap_y / 2.0) + 0.5;
+                // Separate vertically - EXPLOSIVE force proportional to overlap
+                let separation = overlap_y * 0.8 + 5.0;  // MUCH stronger: 80% of overlap + bigger buffer
                 if dy > 0.0 {
                     transform_a.translation.y += separation;
                     transform_b.translation.y -= separation;
@@ -459,26 +517,80 @@ fn check_entity_collisions(
                     transform_b.translation.y += separation;
                 }
 
-                // Bounce velocities with restitution
+                // MASSIVE vertical bounce to blast entities apart when stacked
                 let avg_vy = (velocity_a.y + velocity_b.y) * 0.5;
                 velocity_a.y = (velocity_a.y - avg_vy) * -bouncy_a.restitution + avg_vy;
                 velocity_b.y = (velocity_b.y - avg_vy) * -bouncy_b.restitution + avg_vy;
+
+                // SUPER STRONG upward explosion force when stuck
+                if dy > 0.0 {
+                    velocity_a.y = velocity_a.y.max(300.0);  // EXPLOSIVE upward force (doubled)
+                } else {
+                    velocity_b.y = velocity_b.y.max(300.0);  // EXPLOSIVE upward force (doubled)
+                }
+
+                // Also add horizontal spreading force when vertically stacked
+                let horizontal_spread = 300.0 * (overlap_y / (half_a + half_b));
+                velocity_a.x += if dx > 0.0 { horizontal_spread } else { -horizontal_spread };
+                velocity_b.x += if dx > 0.0 { -horizontal_spread } else { horizontal_spread };
             }
+        }
         }
     }
 }
 
-/// Simple AI for enemies - move toward nearest entity (hero or villager)
-fn enemy_ai_movement(
-    target_query: Query<&Transform, Or<(With<Hero>, With<Villager>)>>,
-    mut enemy_query: Query<(&Transform, &mut Velocity), With<Enemy>>,
+/// Hero AI - automatic movement (same as villagers), can be overridden by player input
+fn hero_ai_movement(
+    time: Res<Time>,
+    mut hero_query: Query<(&mut Hero, &mut Velocity)>,
 ) {
-    for (enemy_transform, mut velocity) in enemy_query.iter_mut() {
+    for (mut hero, mut velocity) in hero_query.iter_mut() {
+        // Tick direction change timer
+        hero.direction_change_timer.tick(time.delta());
+
+        // Change direction when timer finishes
+        if hero.direction_change_timer.just_finished() {
+            hero.move_direction = -hero.move_direction;  // Flip direction
+        }
+
+        // Apply automatic horizontal movement (same speed as villagers)
+        velocity.x += hero.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
+        velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+    }
+}
+
+/// Villager AI - walk back and forth with periodic direction changes
+fn villager_ai_movement(
+    time: Res<Time>,
+    mut villager_query: Query<(&mut Villager, &mut Velocity)>,
+) {
+    for (mut villager, mut velocity) in villager_query.iter_mut() {
+        // Tick direction change timer
+        villager.direction_change_timer.tick(time.delta());
+
+        // Change direction when timer finishes
+        if villager.direction_change_timer.just_finished() {
+            villager.move_direction = -villager.move_direction;  // Flip direction
+        }
+
+        // Apply horizontal movement
+        velocity.x += villager.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
+        velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+    }
+}
+
+/// Enemy AI - chase nearest hero or villager (melee enemies) OR keep distance (ranged skeletons)
+fn enemy_ai_movement(
+    time: Res<Time>,
+    mut enemy_query: Query<(&Transform, &mut Velocity, &Enemy)>,
+    target_query: Query<&Transform, Or<(With<Hero>, With<Villager>)>>,
+) {
+    for (enemy_transform, mut velocity, enemy) in enemy_query.iter_mut() {
         let enemy_pos = enemy_transform.translation;
 
         // Find nearest target (hero or villager)
-        let mut nearest_pos: Option<Vec3> = None;
         let mut nearest_distance = f32::MAX;
+        let mut nearest_target_x = None;
 
         for target_transform in target_query.iter() {
             let target_pos = target_transform.translation;
@@ -486,75 +598,34 @@ fn enemy_ai_movement(
 
             if distance < nearest_distance {
                 nearest_distance = distance;
-                nearest_pos = Some(target_pos);
+                nearest_target_x = Some(target_pos.x);
             }
         }
 
-        // Move toward nearest target horizontally
-        if let Some(target_pos) = nearest_pos {
-            let dx = target_pos.x - enemy_pos.x;
-
-            let speed = 100.0;
-            if dx.abs() > 50.0 {  // Only move if not too close
-                velocity.x = dx.signum() * speed;
-            } else {
-                velocity.x *= 0.9;  // Slow down when close
-            }
-        }
-    }
-}
-
-/// Enemy vs Blocks collision
-fn check_enemy_collisions(
-    mut enemy_query: Query<(&mut Transform, &mut Velocity, &Bouncy), (With<Enemy>, Without<Block>)>,
-    block_query: Query<&Transform, (With<Block>, Without<Enemy>)>,
-) {
-    for (mut enemy_transform, mut enemy_velocity, bouncy) in enemy_query.iter_mut() {
-        let enemy_pos = enemy_transform.translation;
-        let enemy_size = 64.0;  // Enemy sprite size (64x64 mesh)
-        let block_size = 64.0;  // Block size
-
-        for block_transform in block_query.iter() {
-            let block_pos = block_transform.translation;
-
-            let enemy_half = enemy_size / 2.0;
-            let block_half = block_size / 2.0;
-
-            let dx = enemy_pos.x - block_pos.x;
-            let dy = enemy_pos.y - block_pos.y;
-
-            let overlap_x = enemy_half + block_half - dx.abs();
-            let overlap_y = enemy_half + block_half - dy.abs();
-
-            if overlap_x > 0.0 && overlap_y > 0.0 {
-                // Collision detected!
-                if overlap_x < overlap_y {
-                    // Resolve horizontally
-                    if dx > 0.0 {
-                        enemy_transform.translation.x += overlap_x;
-                    } else {
-                        enemy_transform.translation.x -= overlap_x;
-                    }
-                    enemy_velocity.x = -enemy_velocity.x * 0.5;
-                } else {
-                    // Resolve vertically
-                    if dy > 0.0 {
-                        enemy_transform.translation.y += overlap_y;
-                        if enemy_velocity.y < 0.0 {
-                            enemy_velocity.y = -enemy_velocity.y * bouncy.restitution;
-                        }
-                    } else {
-                        enemy_transform.translation.y -= overlap_y;
-                        if enemy_velocity.y > 0.0 {
-                            enemy_velocity.y = 0.0;
-                        }
-                    }
+        if let Some(target_x) = nearest_target_x {
+            // SKELETON AI: Keep distance, never melee
+            if enemy.enemy_type == crate::components::enemy::EnemyType::Skeleton {
+                if nearest_distance < SKELETON_MIN_RANGE {
+                    // Too close - back away!
+                    let direction = if target_x > enemy_pos.x { -1.0 } else { 1.0 }; // Move AWAY
+                    velocity.x += direction * VILLAGER_MOVE_SPEED * 1.5 * time.delta_secs(); // Faster retreat
+                    velocity.x = velocity.x.clamp(-400.0, 400.0);
+                } else if nearest_distance > SKELETON_MAX_RANGE {
+                    // Too far - move closer (but not too much)
+                    let direction = if target_x > enemy_pos.x { 1.0 } else { -1.0 }; // Move TOWARDS
+                    velocity.x += direction * VILLAGER_MOVE_SPEED * 0.5 * time.delta_secs(); // Slow approach
+                    velocity.x = velocity.x.clamp(-400.0, 400.0);
                 }
+                // If in ideal range (300-600), don't move horizontally - just shoot
+            } else {
+                // MELEE ENEMIES (Pigman, etc.): Chase normally
+                let direction = if target_x > enemy_pos.x { 1.0 } else { -1.0 };
+                velocity.x += direction * VILLAGER_MOVE_SPEED * time.delta_secs();
+                velocity.x = velocity.x.clamp(-400.0, 400.0);
             }
         }
     }
 }
-
 
 /// Hero vs Enemy collision - damage hero and apply burning buff
 fn check_hero_enemy_collision(
@@ -565,26 +636,33 @@ fn check_hero_enemy_collision(
     time: Res<Time>,
     mut cooldown: ResMut<DamageCooldown>,
 ) {
-    // Check cooldown (half heart damage per second max)
-    if !cooldown.can_damage(time.elapsed_secs(), 1.0) {
-        return;
-    }
-
-    let entity_size = 64.0 * 64.0;
+    let current_time = time.elapsed_secs();
+    let entity_size = HERO_SIZE;
 
     for (entity, entity_transform) in entity_query.iter() {
+        // Check cooldown PER ENTITY (not global)
+        if !cooldown.can_damage(entity, current_time, 1.0) {
+            continue; // This entity is on cooldown, skip to next
+        }
+
         let entity_pos = entity_transform.translation;
 
         for (enemy_transform, enemy) in enemy_query.iter() {
             let enemy_pos = enemy_transform.translation;
-            let enemy_size = 64.0;  // Enemy sprite size
+            let enemy_size = ENEMY_SIZE;
 
             let distance = entity_pos.distance(enemy_pos);
             let collision_distance = (entity_size + enemy_size) / 2.0;
 
             if distance < collision_distance {
-                // Damage entity with half heart (0.5 damage = 1 health since 2 health = 1 heart)
-                // But damage is u32 so we use 1 damage which represents half heart
+                // SKELETONS DON'T MELEE - only damage from arrows!
+                if enemy.enemy_type == crate::components::enemy::EnemyType::Skeleton {
+                    continue; // Skip skeleton melee damage - they're ranged only
+                }
+
+                // Damage entity with half heart (melee enemies only)
+                info!("ENEMY COLLISION! Entity {:?} hit by {:?} enemy at distance {}", entity, enemy.enemy_type, distance);
+
                 damage_events.write(EntityDamaged {
                     entity,
                     damage: 1,  // 1 damage = half heart
@@ -595,62 +673,9 @@ fn check_hero_enemy_collision(
                     commands.entity(entity).insert(Buff::new(BuffType::Burning, 3.0));
                 }
 
-                cooldown.record_damage(time.elapsed_secs());
-                break;
+                cooldown.record_damage(entity, current_time);
+                break; // Only damage once per entity per frame
             }
         }
-    }
-}
-
-/// Apply buffs based on block type and biome
-fn apply_block_buff(
-    commands: &mut Commands,
-    entity: Entity,
-    block_type: BlockType,
-    biome: BiomeType,
-) {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-
-    // 20% chance to apply buff on collision
-    if !rng.gen_bool(0.2) {
-        return;
-    }
-
-    let buff = match biome {
-        BiomeType::Nether => {
-            // Nether: burning from lava blocks
-            match block_type {
-                BlockType::Netherrack | BlockType::Glowstone => Some((BuffType::Burning, 4.0)),
-                BlockType::SoulSand => Some((BuffType::Slowness, 3.0)),
-                _ => None,
-            }
-        },
-        BiomeType::End => {
-            // End: slowness from chorus
-            match block_type {
-                BlockType::ChorusFruit => Some((BuffType::Speed, 5.0)),
-                _ => None,
-            }
-        },
-        BiomeType::Mountains => {
-            // Mountains: freezing from snow
-            match block_type {
-                BlockType::Snow => Some((BuffType::Freezing, 3.0)),
-                _ => None,
-            }
-        },
-        BiomeType::Underground => {
-            // Underground: poisoned from mushrooms
-            match block_type {
-                BlockType::Mushroom => Some((BuffType::Poisoned, 4.0)),
-                _ => None,
-            }
-        },
-        _ => None,
-    };
-
-    if let Some((buff_type, duration)) = buff {
-        commands.entity(entity).insert(Buff::new(buff_type, duration));
     }
 }

@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 use crate::components::enemy::Health;
 use crate::components::hero::Hero;
+use crate::components::damage_visual::{DamageVisual, DeathAnimation};
+use crate::components::physics::Velocity;
 use crate::events::damage_events::{EntityDamaged, EntityDied};
 
 pub fn handle_entity_damage(
-    mut commands: Commands,
+    _commands: Commands,
     mut damage_events: MessageReader<EntityDamaged>,
     mut death_events: MessageWriter<EntityDied>,
     mut health_query: Query<&mut Health>,
@@ -52,8 +54,28 @@ pub fn handle_entity_death(
             }
         }
 
-        // Despawn the dead entity
-        commands.entity(event.entity).despawn();
-        info!("Entity {:?} died and was removed", event.entity);
+        // Freeze entity and add death animation (1 second)
+        commands.entity(event.entity)
+            .remove::<Velocity>()  // Stop movement
+            .insert(DeathAnimation::new())
+            .insert(DamageVisual::new(1.0));  // Show damage visual for full 1 second
+
+        info!("Entity {:?} died - frozen for death animation", event.entity);
+    }
+}
+
+/// Update death animations and despawn when finished
+pub fn update_death_animations(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut DeathAnimation)>,
+    time: Res<Time>,
+) {
+    for (entity, mut death_anim) in query.iter_mut() {
+        death_anim.timer.tick(time.delta());
+
+        if death_anim.timer.is_finished() {
+            commands.entity(entity).despawn();
+            info!("Death animation complete - despawned entity {:?}", entity);
+        }
     }
 }

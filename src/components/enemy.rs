@@ -24,18 +24,24 @@ pub enum EnemyType {
 pub struct Enemy {
     pub enemy_type: EnemyType,
     pub shoot_timer: Option<Timer>,  // Some enemy types shoot projectiles
+    pub move_direction: f32,  // -1.0 = left, 1.0 = right
+    pub direction_change_timer: Timer,
 }
 
 impl Enemy {
     pub fn new(enemy_type: EnemyType) -> Self {
+        use crate::utils::constants::{SKELETON_SHOOT_INTERVAL, ENEMY_DIRECTION_CHANGE_INTERVAL};
+
         let shoot_timer = match enemy_type {
-            EnemyType::Skeleton => Some(Timer::from_seconds(2.0, TimerMode::Repeating)), // Shoot every 2 seconds
+            EnemyType::Skeleton => Some(Timer::from_seconds(SKELETON_SHOOT_INTERVAL, TimerMode::Repeating)),
             _ => None,
         };
 
         Self {
             enemy_type,
             shoot_timer,
+            move_direction: 1.0,  // Start moving right
+            direction_change_timer: Timer::from_seconds(ENEMY_DIRECTION_CHANGE_INTERVAL, TimerMode::Repeating),
         }
     }
 }
