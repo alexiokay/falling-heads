@@ -13,4 +13,7 @@ pub struct VsyncToggleButton;
 pub struct FpsToggleButton;
 
 #[derive(Component)]
+pub struct DevModeToggleButton;
+
+#[derive(Component)]
 pub struct ToggleButtonText;

@@ -12,12 +12,42 @@ impl Health {
     }
 }
 
+/// Trait for enemy behavior - allows polymorphic enemy types
+pub trait EnemyBehavior {
+    /// Get maximum health for this enemy type
+    fn max_health(&self) -> u32;
+
+    /// Get movement speed multiplier
+    fn movement_speed(&self) -> f32 {
+        1.0  // Default speed
+    }
+
+    /// Get attack interval (if this enemy shoots projectiles)
+    fn shoot_interval(&self) -> Option<f32> {
+        None  // Default: doesn't shoot
+    }
+
+    /// Get the visual color for this enemy
+    fn color(&self) -> Color;
+
+    /// Check if this enemy can shoot projectiles
+    fn can_shoot(&self) -> bool {
+        self.shoot_interval().is_some()
+    }
+
+    /// Get damage dealt by this enemy's attacks
+    fn attack_damage(&self) -> u32 {
+        1  // Default damage
+    }
+}
+
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EnemyType {
     Zombie,    // Spawns in overworld biomes
     Skeleton,  // Spawns in overworld biomes
     Pigman,    // Spawns in Nether
     Enderman,  // Spawns in End
+    Yeti,      // Spawns in Iceland - throws snowballs
 }
 
 #[derive(Component)]
@@ -34,6 +64,7 @@ impl Enemy {
 
         let shoot_timer = match enemy_type {
             EnemyType::Skeleton => Some(Timer::from_seconds(SKELETON_SHOOT_INTERVAL, TimerMode::Repeating)),
+            EnemyType::Yeti => Some(Timer::from_seconds(2.0, TimerMode::Repeating)), // Yeti throws snowballs every 2s
             _ => None,
         };
 
@@ -46,22 +77,50 @@ impl Enemy {
     }
 }
 
-impl EnemyType {
-    pub fn max_health(&self) -> u32 {
+impl EnemyBehavior for EnemyType {
+    fn max_health(&self) -> u32 {
         match self {
             EnemyType::Zombie => 3,
             EnemyType::Skeleton => 2,
             EnemyType::Pigman => 3,
             EnemyType::Enderman => 3,
+            EnemyType::Yeti => 5,
         }
     }
 
-    pub fn color(&self) -> Color {
+    fn movement_speed(&self) -> f32 {
         match self {
-            EnemyType::Zombie => Color::srgb(0.2, 0.6, 0.2),  // Green
-            EnemyType::Skeleton => Color::srgb(0.9, 0.9, 0.9), // White/bone
-            EnemyType::Pigman => Color::srgb(0.9, 0.6, 0.6),   // Pink
-            EnemyType::Enderman => Color::srgb(0.1, 0.0, 0.1), // Dark purple/black
+            EnemyType::Zombie => 0.6,     // Slow
+            EnemyType::Skeleton => 0.8,   // Medium
+            EnemyType::Pigman => 0.9,     // Fast
+            EnemyType::Enderman => 1.2,   // Very fast
+            EnemyType::Yeti => 1.0,       // Normal speed
+        }
+    }
+
+    fn shoot_interval(&self) -> Option<f32> {
+        match self {
+            EnemyType::Skeleton => Some(3.0),  // Shoots arrows every 3s
+            EnemyType::Yeti => Some(2.0),      // Throws snowballs every 2s
+            _ => None,
+        }
+    }
+
+    fn color(&self) -> Color {
+        match self {
+            EnemyType::Zombie => Color::srgb(0.2, 0.6, 0.2),
+            EnemyType::Skeleton => Color::srgb(0.9, 0.9, 0.9),
+            EnemyType::Pigman => Color::srgb(0.9, 0.6, 0.6),
+            EnemyType::Enderman => Color::srgb(0.1, 0.0, 0.1),
+            EnemyType::Yeti => Color::srgb(0.9, 0.95, 1.0),
+        }
+    }
+
+    fn attack_damage(&self) -> u32 {
+        match self {
+            EnemyType::Skeleton => 1,  // Arrow damage
+            EnemyType::Yeti => 0,      // Snowballs do no damage (freeze effect instead)
+            _ => 1,                    // Default melee damage
         }
     }
 }

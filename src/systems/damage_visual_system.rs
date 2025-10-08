@@ -41,6 +41,9 @@ fn apply_damage_visuals(
         commands.entity(event.entity).try_insert(DamageVisual::new(1.0));
 
         // Spawn red border as child entity
+        // Store entity ID for the closure
+        let entity_id = event.entity;
+
         let border = commands.spawn((
             DamageBorder,
             Mesh3d(meshes.add(Rectangle::new(72.0, 72.0))), // Slightly larger than entity (64x64)
@@ -53,14 +56,20 @@ fn apply_damage_visuals(
             Transform::from_xyz(0.0, 0.0, -1.0), // Behind the entity
         )).id();
 
-        // Use get_entity to gracefully handle if parent was despawned mid-frame
-        if let Ok(mut parent_commands) = commands.get_entity(event.entity) {
-            parent_commands.add_child(border);
-            info!("Applied damage visual with border to entity {:?}", event.entity);
-        } else {
-            // Parent already despawned - clean up the orphan border we just created
-            commands.entity(border).despawn();
-        }
+        // Add border as child using a custom command that won't panic
+        commands.queue(move |world: &mut World| {
+            // Only add child if parent still exists at command flush time
+            if let Ok(mut parent_entity) = world.get_entity_mut(entity_id) {
+                parent_entity.add_child(border);
+            } else {
+                // Parent was despawned - clean up orphan border
+                if let Ok(border_entity) = world.get_entity_mut(border) {
+                    border_entity.despawn();
+                }
+            }
+        });
+
+        info!("Applied damage visual with border to entity {:?}", event.entity);
     }
 }
 

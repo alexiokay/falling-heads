@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::buff::{Buff, BuffType, Buffable};
+use crate::components::buff::{Buff, BuffType, Buffable, BuffBehavior};
 use crate::components::block::{BlockType, BiomeType};
 use crate::components::enemy::Health;
 use crate::components::physics::Velocity;

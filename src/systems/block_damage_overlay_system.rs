@@ -64,14 +64,19 @@ fn spawn_damage_overlays(
                 Visibility::Hidden, // Initially hidden (no damage)
             )).id();
 
-            // Attach overlay as child of block (inherits transform/scale)
-            // Use get_entity to gracefully handle if block was despawned
-            if let Ok(mut block_cmd) = commands.get_entity(block_entity) {
-                block_cmd.add_child(overlay);
-            } else {
-                // Block was despawned - clean up the orphan overlay we just created
-                commands.entity(overlay).despawn();
-            }
+            // Use queue closure to safely handle parent-child relationship
+            // This prevents crashes when blocks are despawned by chunk unloading mid-frame
+            commands.queue(move |world: &mut World| {
+                // Only add child if parent still exists at command flush time
+                if let Ok(mut parent_entity) = world.get_entity_mut(block_entity) {
+                    parent_entity.add_child(overlay);
+                } else {
+                    // Block was despawned - clean up orphan overlay
+                    if let Ok(overlay_entity) = world.get_entity_mut(overlay) {
+                        overlay_entity.despawn();
+                    }
+                }
+            });
         }
     }
 }

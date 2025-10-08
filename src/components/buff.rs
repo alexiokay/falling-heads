@@ -1,5 +1,25 @@
 use bevy::prelude::*;
 
+/// Trait for buff/debuff behavior - defines how status effects work
+pub trait BuffBehavior {
+    /// Get the display name
+    fn name(&self) -> &str;
+
+    /// Get the visual overlay color
+    fn overlay_color(&self) -> Color;
+
+    /// Get damage dealt per tick (negative = healing)
+    fn damage_per_tick(&self) -> i32;
+
+    /// Get movement speed multiplier
+    fn velocity_multiplier(&self) -> f32;
+
+    /// Check if this is a positive buff (true) or debuff (false)
+    fn is_beneficial(&self) -> bool {
+        self.damage_per_tick() <= 0 && self.velocity_multiplier() >= 1.0
+    }
+}
+
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BuffType {
     Burning,
@@ -27,45 +47,8 @@ impl Buff {
     }
 }
 
-impl BuffType {
-    /// Returns the color overlay for visual effect
-    pub fn overlay_color(&self) -> Color {
-        match self {
-            BuffType::Burning => Color::srgba(1.0, 0.3, 0.0, 0.4),      // Orange/red overlay
-            BuffType::Freezing => Color::srgba(0.3, 0.7, 1.0, 0.4),     // Light blue overlay
-            BuffType::Poisoned => Color::srgba(0.3, 0.8, 0.0, 0.4),     // Green overlay
-            BuffType::Regeneration => Color::srgba(1.0, 0.4, 0.8, 0.3), // Pink overlay
-            BuffType::Speed => Color::srgba(1.0, 1.0, 0.3, 0.3),        // Yellow overlay
-            BuffType::Slowness => Color::srgba(0.4, 0.4, 0.4, 0.4),     // Gray overlay
-        }
-    }
-
-    /// Returns damage dealt per tick (negative = healing)
-    pub fn damage_per_tick(&self) -> i32 {
-        match self {
-            BuffType::Burning => 1,      // 1 damage every 0.5s
-            BuffType::Freezing => 0,     // No damage, just slows
-            BuffType::Poisoned => 1,     // 1 damage every 0.5s
-            BuffType::Regeneration => -1, // Heals 1 every 0.5s
-            BuffType::Speed => 0,
-            BuffType::Slowness => 0,
-        }
-    }
-
-    /// Returns velocity multiplier
-    pub fn velocity_multiplier(&self) -> f32 {
-        match self {
-            BuffType::Burning => 1.0,
-            BuffType::Freezing => 0.5,    // 50% slower
-            BuffType::Poisoned => 1.0,
-            BuffType::Regeneration => 1.0,
-            BuffType::Speed => 1.5,       // 50% faster
-            BuffType::Slowness => 0.6,    // 40% slower
-        }
-    }
-
-    /// Returns the name for UI display
-    pub fn name(&self) -> &str {
+impl BuffBehavior for BuffType {
+    fn name(&self) -> &str {
         match self {
             BuffType::Burning => "Burning",
             BuffType::Freezing => "Freezing",
@@ -73,6 +56,39 @@ impl BuffType {
             BuffType::Regeneration => "Regeneration",
             BuffType::Speed => "Speed",
             BuffType::Slowness => "Slowness",
+        }
+    }
+
+    fn overlay_color(&self) -> Color {
+        match self {
+            BuffType::Burning => Color::srgba(1.0, 0.3, 0.0, 0.4),
+            BuffType::Freezing => Color::srgba(0.3, 0.7, 1.0, 0.4),
+            BuffType::Poisoned => Color::srgba(0.3, 0.8, 0.0, 0.4),
+            BuffType::Regeneration => Color::srgba(1.0, 0.4, 0.8, 0.3),
+            BuffType::Speed => Color::srgba(1.0, 1.0, 0.3, 0.3),
+            BuffType::Slowness => Color::srgba(0.4, 0.4, 0.4, 0.4),
+        }
+    }
+
+    fn damage_per_tick(&self) -> i32 {
+        match self {
+            BuffType::Burning => 1,
+            BuffType::Freezing => 0,
+            BuffType::Poisoned => 1,
+            BuffType::Regeneration => -1,
+            BuffType::Speed => 0,
+            BuffType::Slowness => 0,
+        }
+    }
+
+    fn velocity_multiplier(&self) -> f32 {
+        match self {
+            BuffType::Burning => 1.0,
+            BuffType::Freezing => 0.5,
+            BuffType::Poisoned => 1.0,
+            BuffType::Regeneration => 1.0,
+            BuffType::Speed => 1.5,
+            BuffType::Slowness => 0.6,
         }
     }
 }

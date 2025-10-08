@@ -1,0 +1,35 @@
+// Enemy configuration - data-driven enemy stats
+(
+    enemies: {
+        "Zombie": (
+            max_health: 3,
+            movement_speed: 0.8,
+            shoot_interval: None,
+            damage: 1,
+        ),
+        "Skeleton": (
+            max_health: 2,
+            movement_speed: 0.8,
+            shoot_interval: Some(3.0),
+            damage: 1,
+        ),
+        "Yeti": (
+            max_health: 5,
+            movement_speed: 1.0,
+            shoot_interval: Some(2.0),
+            damage: 0, // Snowballs don't deal damage
+        ),
+        "Pigman": (
+            max_health: 3,
+            movement_speed: 1.0,
+            shoot_interval: None,
+            damage: 2,
+        ),
+        "Enderman": (
+            max_health: 3,
+            movement_speed: 1.2,
+            shoot_interval: None,
+            damage: 2,
+        ),
+    }
+)

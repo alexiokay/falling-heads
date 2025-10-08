@@ -32,3 +32,8 @@ impl DeathAnimation {
         }
     }
 }
+
+/// Marker for entities that should be despawned after all systems finish processing
+/// This prevents crashes when systems try to access entities that were despawned mid-frame
+#[derive(Component)]
+pub struct MarkedForDeath;

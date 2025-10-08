@@ -1,0 +1,29 @@
+// Projectile configuration - data-driven projectile behavior
+(
+    projectiles: {
+        "Arrow": (
+            speed: 800.0,
+            damage: 1,
+            gravity: -500.0,
+            lifetime: 5.0,
+            size: (width: 32.0, height: 64.0),
+            push_force: 0.0,
+        ),
+        "Snowball": (
+            speed: 300.0,
+            damage: 0,
+            gravity: 0.0,
+            lifetime: 5.0,
+            size: (width: 24.0, height: 24.0),
+            push_force: 50.0,
+        ),
+        "Fireball": (
+            speed: 400.0,
+            damage: 3,
+            gravity: 0.0,
+            lifetime: 8.0,
+            size: (width: 48.0, height: 48.0),
+            push_force: 100.0,
+        ),
+    }
+)

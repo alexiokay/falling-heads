@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::block::{Block, BlockType, BiomeType};
+use crate::components::block::{Block, BlockType, BiomeType, BiomeBehavior};
 use crate::components::chunk::{Chunk, ChunkMember, LoadedChunks, CHUNK_SIZE, world_to_chunk_coords};
 use crate::components::hero::Hero;
-use crate::components::enemy::{Enemy, Health};
+use crate::components::enemy::{Enemy, Health, EnemyBehavior};
 use crate::components::bundles::{SpriteBundle3d, PhysicsBundle};
 use crate::resources::asset_handles::BlockTextures;
 use crate::resources::material_cache::MaterialCache;
 use crate::resources::mesh_cache::MeshCache;
+use crate::utils::biome_utils::determine_biome_at_chunk;
 
 const BLOCK_SIZE: f32 = 1.0;  // 3D cube size
 const BLOCK_SPACING: f32 = 0.0;  // No spacing - blocks touch
@@ -27,6 +28,7 @@ pub fn generate_chunks_around_hero(
     spawn_area: Res<crate::plugins::gameplay_plugin::SpawnArea>,
 ) {
     // Wait for caches to be initialized before spawning blocks
+    // MaterialCache now includes atlas generation, so when materials are ready, atlases are too
     if material_cache.materials.is_empty() || mesh_cache.is_none() || enemy_textures.is_none() {
         return; // Caches not ready yet, wait for next frame
     }
@@ -124,7 +126,7 @@ pub fn generate_chunk(
     let mut rng = rand::thread_rng();
 
     // Determine biome based on chunk position
-    let biome = determine_biome(chunk_x, chunk_y, &mut rng);
+    let biome = determine_biome_at_chunk(chunk_x, chunk_y);
 
     // Spawn chunk entity marker
     commands.spawn(Chunk {
@@ -138,6 +140,10 @@ pub fn generate_chunk(
 
     // Use shared cube mesh from cache - CRITICAL PERFORMANCE FIX
     let cube_mesh = mesh_cache.block_mesh.clone();
+    let pumpkin_mesh = mesh_cache.pumpkin_mesh.clone();
+    let wood_mesh = mesh_cache.wood_mesh.clone();
+    let leaves_mesh = mesh_cache.leaves_mesh.clone();
+    let melon_mesh = mesh_cache.melon_mesh.clone();
 
     // Generate blocks in this chunk
     for local_x in 0..CHUNK_SIZE {
@@ -166,7 +172,35 @@ pub fn generate_chunk(
 
             // Render as 3D cubes scaled to match 2D
             let mut transform = Transform::from_xyz(world_x, world_y, world_z);
-            transform.scale = Vec3::splat(64.0);  // Scale cube to 64x64x64 to match 2D block size
+
+            // Choose mesh based on block type (directional blocks use UV-mapped mesh)
+            let block_mesh = match block_type {
+                BlockType::Pumpkin => {
+                    // Pumpkins use custom UV-mapped mesh (no scaling needed, already 64x64x64)
+                    pumpkin_mesh.clone()
+                }
+                BlockType::Wood => {
+                    // Wood/logs use custom UV-mapped mesh (no scaling needed, already 64x64x64)
+                    wood_mesh.clone()
+                }
+                BlockType::Leaves => {
+                    // Leaves use custom UV-mapped mesh (no scaling needed, already 64x64x64)
+                    leaves_mesh.clone()
+                }
+                BlockType::Melon => {
+                    // Melons use custom UV-mapped mesh (no scaling needed, already 64x64x64)
+                    melon_mesh.clone()
+                }
+                BlockType::Grass => {
+                    // Grass uses leaves mesh (reusing leaves texture for grass blocks)
+                    leaves_mesh.clone()
+                }
+                _ => {
+                    // Uniform blocks use standard cube (scaled to 64x64x64)
+                    transform.scale = Vec3::splat(64.0);
+                    cube_mesh.clone()
+                }
+            };
 
             // Get cached material for this block type
             let material = material_cache.get(block_type)
@@ -179,45 +213,11 @@ pub fn generate_chunk(
                 },
                 block_type,
                 ChunkMember { chunk_x, chunk_y },
-                Mesh3d(cube_mesh.clone()),
+                Mesh3d(block_mesh),
                 MeshMaterial3d(material),
                 transform,
             ));
         }
-    }
-}
-
-/// Determine biome based on chunk coordinates
-fn determine_biome(chunk_x: i32, chunk_y: i32, _rng: &mut impl Rng) -> BiomeType {
-    // Use simple noise-like pattern based on coordinates
-    let biome_seed = (chunk_x * 73 + chunk_y * 179) % 100;
-
-    // Nether - very deep chunks
-    if chunk_y < -20 {
-        return BiomeType::Nether;
-    }
-
-    // End - specific pattern deep underground
-    if chunk_y < -15 && biome_seed % 3 == 0 {
-        return BiomeType::End;
-    }
-
-    // Underground biome for deep chunks
-    if chunk_y < -10 {
-        return BiomeType::Underground;
-    }
-
-    // Mountains for high altitude
-    if chunk_y > 5 {
-        return BiomeType::Mountains;
-    }
-
-    // Surface biomes based on X coordinate patterns
-    match biome_seed.abs() {
-        0..=25 => BiomeType::Plains,
-        26..=45 => BiomeType::Forest,
-        46..=65 => BiomeType::Desert,
-        _ => BiomeType::Mountains,
     }
 }
 
@@ -391,6 +391,7 @@ fn spawn_chunk_enemies(
                             enemy_textures.skeleton2.clone()
                         }
                     },
+                    crate::components::enemy::EnemyType::Yeti => enemy_textures.yeti.clone(),
                     _ => enemy_textures.skeleton.clone(), // Fallback for other types
                 };
 

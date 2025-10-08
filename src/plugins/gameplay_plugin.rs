@@ -18,7 +18,7 @@ use crate::resources::inventory::Inventory;
 use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
 use crate::systems::world_generation::{generate_chunks_around_hero, despawn_distant_chunks};
-use crate::systems::health_system::{handle_entity_damage, handle_entity_death, update_death_animations};
+use crate::systems::health_system::{handle_entity_damage, handle_entity_death, update_death_animations, cleanup_marked_entities};
 use crate::systems::health_ui_system::{spawn_health_bars, update_health_bars};
 use crate::systems::background_system::update_background;
 use crate::systems::entity_spawn::spawn_villagers_around_position;
@@ -37,7 +37,7 @@ pub struct SpawnArea {
 impl Default for SpawnArea {
     fn default() -> Self {
         Self {
-            center: Vec3::new(0.0, -25000.0, 10.0),
+            center: Vec3::new(0.0, 130000.0, 10.0),  // Forest biome spawn
             radius: 200.0,  // 200 units radius = ~3 blocks
         }
     }
@@ -84,7 +84,9 @@ impl Plugin for GameplayPlugin {
                 update_health_bars,
                 // Background only updates when biome changes (already has internal check)
                 update_background,
-            ).run_if(in_state(GameState::Playing)));
+            ).run_if(in_state(GameState::Playing)))
+            // Cleanup dead entities in PostUpdate after all damage processing is done
+            .add_systems(PostUpdate, cleanup_marked_entities.run_if(in_state(GameState::Playing)));
 
         info!("GameplayPlugin loaded");
     }
@@ -120,11 +122,11 @@ fn spawn_hero(
         SpriteBundle3d::new(
             meshes.add(Rectangle::new(HERO_SIZE, HERO_SIZE)),
             material,
-            Vec3::new(0.0, -25000.0, 10.0),
+            Vec3::new(0.0, 130000.0, 10.0),  // Spawn in middle of Forest biome
         ),
     ));
 
-    info!("Hero spawned in Nether biome at Y=-25000");
+    info!("Hero spawned in Forest biome (Y=130000)");
 }
 
 fn spawn_villagers(
@@ -133,12 +135,13 @@ fn spawn_villagers(
     mut materials: ResMut<Assets<StandardMaterial>>,
     hero_query: Query<&Transform, With<Hero>>,
     textures: Res<GameTextures>,
+    asset_server: Res<AssetServer>,
 ) {
     // Get hero position to spawn villagers nearby
     let hero_pos = if let Ok(hero_transform) = hero_query.single() {
         hero_transform.translation
     } else {
-        Vec3::new(0.0, -25000.0, 10.0)  // Default to nether depth if hero not found
+        Vec3::new(0.0, 130000.0, 10.0)  // Default to Forest biome spawn
     };
 
     // Spawn 5 villagers around the hero using shared spawning logic
@@ -151,6 +154,8 @@ fn spawn_villagers(
         &textures,
         &mut meshes,
         &mut materials,
+        None,  // No username for initial spawned villagers
+        &asset_server,
     );
 
     info!("Spawned 5 villagers near hero at {:?}", hero_pos);

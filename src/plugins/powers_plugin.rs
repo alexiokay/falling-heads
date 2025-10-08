@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::scene::SceneRoot;
 use crate::components::{
     block::Block,
     explosive::{Tnt, Explosion},
@@ -33,6 +34,8 @@ impl Plugin for PowersPlugin {
                 tnt_explosion,
                 laser_update,
                 update_arrow_barrage,
+                barrier_update,
+                barrier_reflect_projectiles,
             ).run_if(in_state(GameState::Playing)));
             // arrow_update REMOVED - handled by projectile_system with spatial hash instead
 
@@ -47,11 +50,14 @@ pub fn spawn_tnt(
     textures: &GameTextures,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    username: Option<String>,
+    asset_server: Option<&AssetServer>,
 ) {
     use crate::components::physics::Gravity;
+    use crate::systems::username_label_system::spawn_username_label;
 
     // Spawn TNT as 3D cube with corrected texture orientation
-    commands.spawn((
+    let tnt_entity = commands.spawn((
         Tnt {
             timer: Timer::from_seconds(TNT_FUSE_TIME, TimerMode::Once),
         },
@@ -68,9 +74,24 @@ pub fn spawn_tnt(
         Velocity { x: 0.0, y: 0.0 },
         Gravity { force: -500.0 },
         // NO Bouncy component - TNT doesn't bounce
-    ));
+    )).id();
 
-    info!("TNT spawned at {:?}", position);
+    // Spawn username label if provided
+    if let (Some(username), Some(server)) = (username, asset_server) {
+        spawn_username_label(
+            commands,
+            tnt_entity,
+            position,
+            username.clone(),
+            50.0,
+            meshes,
+            materials,
+            server,
+        );
+        info!("TNT spawned at {:?} by {}", position, username);
+    } else {
+        info!("TNT spawned at {:?}", position);
+    }
 }
 
 fn tnt_countdown(
@@ -257,11 +278,9 @@ fn update_arrow_barrage(
     mut barrage_query: Query<(Entity, &mut ArrowBarrage)>,
     hero_query: Query<&Transform, With<Hero>>,
     time: Res<Time>,
-    projectile_textures: Option<Res<crate::resources::asset_handles::ProjectileTextures>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    projectile_models: Option<Res<crate::resources::asset_handles::ProjectileModels>>,
 ) {
-    let Some(projectile_textures) = projectile_textures else {
+    let Some(projectile_models) = projectile_models else {
         return;
     };
 
@@ -287,26 +306,16 @@ fn update_arrow_barrage(
             let spawn_pos = Vec3::new(
                 hero_pos.x + direction.x * spawn_offset,
                 hero_pos.y + direction.y * spawn_offset,
-                0.0  // Z=0 same as gameplay plane
+                10.0  // Z=10 same as entities
             );
 
-            let material = materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                base_color_texture: Some(projectile_textures.arrow.clone()),
-                unlit: true,
-                alpha_mode: AlphaMode::Blend,
-                cull_mode: None,  // Double-sided rendering
-                ..default()
-            });
-
+            // Spawn arrow using GLB model
             commands.spawn((
                 crate::components::projectile::Arrow::new_friendly(1),  // Friendly arrow - won't hit hero/villagers
                 crate::components::bundles::PhysicsBundle::projectile(velocity, ARROW_GRAVITY),
-                crate::components::bundles::SpriteBundle3d::new(
-                    meshes.add(Rectangle::new(ARROW_WIDTH, ARROW_HEIGHT)),
-                    material,
-                    spawn_pos,
-                ),
+                SceneRoot(projectile_models.arrow.clone()),
+                Transform::from_translation(spawn_pos).with_scale(Vec3::new(15.0, 15.0, 15.0)),
+                Visibility::Visible,
             ));
 
             // Update for next arrow
@@ -345,6 +354,102 @@ fn arrow_update(
         if arrow_pos.y < -2000.0 || arrow_pos.y > 2000.0
             || arrow_pos.x < -2000.0 || arrow_pos.x > 2000.0 {
             commands.entity(arrow_entity).despawn();
+        }
+    }
+}
+
+/// Spawn a magic barrier around an entity that reflects projectiles
+pub fn spawn_magic_barrier(
+    commands: &mut Commands,
+    owner_entity: Entity,
+    owner_position: Vec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    use crate::components::projectile::MagicBarrier;
+
+    // Create a smooth circular ring using Circle mesh
+    let barrier_radius = 150.0;
+
+    commands.spawn((
+        MagicBarrier {
+            lifetime: Timer::from_seconds(10.0, TimerMode::Once),
+            radius: barrier_radius,
+            owner_entity,
+        },
+        Mesh3d(meshes.add(Circle::new(barrier_radius))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.5, 0.2, 1.0, 0.4),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            cull_mode: None,
+            ..default()
+        })),
+        Transform::from_translation(owner_position),
+    ));
+
+    info!("🪞 Magic barrier spawned around entity {:?}", owner_entity);
+}
+
+/// Update barrier positions to follow the owner entity (hero)
+fn barrier_update(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut barrier_query: Query<(Entity, &mut crate::components::projectile::MagicBarrier, &mut Transform)>,
+    owner_query: Query<&Transform, (With<Hero>, Without<crate::components::projectile::MagicBarrier>)>,
+) {
+    for (barrier_entity, mut barrier, mut barrier_transform) in barrier_query.iter_mut() {
+        barrier.lifetime.tick(time.delta());
+
+        if barrier.lifetime.is_finished() {
+            commands.entity(barrier_entity).despawn();
+            info!("🪞 Magic barrier expired");
+            continue;
+        }
+
+        // Follow owner - center on owner position
+        if let Ok(owner_transform) = owner_query.get(barrier.owner_entity) {
+            barrier_transform.translation.x = owner_transform.translation.x;
+            barrier_transform.translation.y = owner_transform.translation.y;
+            barrier_transform.translation.z = owner_transform.translation.z + 5.0;
+        } else {
+            commands.entity(barrier_entity).despawn();
+        }
+    }
+}
+
+/// Reflect projectiles that hit the magic barrier
+fn barrier_reflect_projectiles(
+    barrier_query: Query<(&Transform, &crate::components::projectile::MagicBarrier)>,
+    mut arrow_query: Query<(&Transform, &mut Velocity, &mut Arrow)>,
+) {
+    use crate::components::projectile::Team;
+
+    for (barrier_transform, barrier) in barrier_query.iter() {
+        for (arrow_transform, mut arrow_velocity, mut arrow) in arrow_query.iter_mut() {
+            let distance = barrier_transform.translation.distance(arrow_transform.translation);
+
+            if distance < barrier.radius + 20.0 && distance > barrier.radius - 20.0 {
+                // Calculate reflection angle (away from barrier center)
+                let dx = arrow_transform.translation.x - barrier_transform.translation.x;
+                let dy = arrow_transform.translation.y - barrier_transform.translation.y;
+                let bounce_angle = dy.atan2(dx);
+
+                // Preserve and amplify the arrow's speed for dramatic effect
+                let current_speed = (arrow_velocity.x.powi(2) + arrow_velocity.y.powi(2)).sqrt();
+                let bounce_speed = (current_speed * 1.5).max(500.0); // At least 500, or 1.5x current speed
+
+                arrow_velocity.x = bounce_angle.cos() * bounce_speed;
+                arrow_velocity.y = bounce_angle.sin() * bounce_speed;
+
+                // Switch team (enemy → friendly, friendly → enemy)
+                arrow.team = match arrow.team {
+                    Team::Enemy => Team::Friendly,
+                    Team::Friendly => Team::Enemy,
+                };
+
+                info!("🪞 Arrow reflected at {:.0} speed! New team: {:?}", bounce_speed, arrow.team);
+            }
         }
     }
 }

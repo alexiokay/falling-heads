@@ -62,11 +62,11 @@ fn update_arrow_lifetime(
 /// Update arrows that are stuck to entities - make them follow the entity
 fn update_stuck_arrows(
     mut commands: Commands,
-    mut stuck_query: Query<(Entity, &mut StuckArrow, &mut Transform), With<Arrow>>,
-    entity_transforms: Query<&Transform, (Without<Arrow>, Or<(With<Hero>, With<Villager>, With<Enemy>)>)>,
+    mut stuck_query: Query<(Entity, &mut StuckArrow), With<Arrow>>,
+    entity_query: Query<Entity, Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
     time: Res<Time>,
 ) {
-    for (arrow_entity, mut stuck, mut arrow_transform) in stuck_query.iter_mut() {
+    for (arrow_entity, mut stuck) in stuck_query.iter_mut() {
         stuck.despawn_timer.tick(time.delta());
 
         if stuck.despawn_timer.is_finished() {
@@ -75,15 +75,12 @@ fn update_stuck_arrows(
             continue;
         }
 
-        // Make arrow follow the entity it's stuck to
-        if let Ok(entity_transform) = entity_transforms.get(stuck.stuck_to_entity) {
-            // Update arrow position to match entity position + original offset
-            // The offset is calculated when the arrow first hits, so it stays in the same relative position
-            arrow_transform.translation = entity_transform.translation + stuck.offset;
-        } else {
+        // Check if the entity still exists
+        if entity_query.get(stuck.stuck_to_entity).is_err() {
             // Entity doesn't exist anymore (died/despawned) - despawn arrow
             commands.entity(arrow_entity).despawn();
         }
+        // Arrow position is now automatically updated by Bevy's transform hierarchy (it's a child)
     }
 }
 
@@ -91,7 +88,7 @@ fn update_stuck_arrows(
 fn check_arrow_collisions(
     mut commands: Commands,
     spatial_hash: Res<SpatialHash>,
-    arrow_query: Query<(Entity, &Transform, &Arrow, &Velocity), Without<StuckArrow>>, // Skip arrows that are already stuck
+    mut arrow_query: Query<(Entity, &mut Transform, &Arrow, &Velocity), (Without<StuckArrow>, Without<Block>)>, // Skip arrows that are already stuck
     block_query: Query<&Transform, With<Block>>,
     mut entities: ParamSet<(
         Query<(Entity, &Transform, &mut Velocity), (With<Hero>, Without<Arrow>)>,
@@ -100,30 +97,44 @@ fn check_arrow_collisions(
     )>,
     mut damage_events: MessageWriter<EntityDamaged>,
 ) {
-    let arrow_radius = 16.0; // 32x8 arrow, use half width
+    let arrow_tip_radius = 10.0; // Small radius for arrow tip (thin point)
     let entity_radius = 32.0; // 64x64 entities, use half size
     let block_radius = 32.0; // 64x64 blocks, use half size
+    let arrow_length = 40.0; // Length of arrow model for tip calculation
 
     // Collect all arrow hits first (can't mutate velocity while iterating arrows)
-    let mut hero_hits: Vec<(Entity, Vec3, Vec3, Vec3)> = Vec::new(); // (arrow_entity, arrow_pos, hero_pos, arrow_velocity)
-    let mut villager_hits: Vec<(Entity, Entity, Vec3, Vec3, Vec3)> = Vec::new(); // (arrow_entity, villager_entity, arrow_pos, villager_pos, arrow_velocity)
-    let mut enemy_hits: Vec<(Entity, Entity, Vec3, Vec3, Vec3)> = Vec::new(); // (arrow_entity, enemy_entity, arrow_pos, enemy_pos, arrow_velocity)
+    let mut hero_hits: Vec<(Entity, Vec3, Vec3, Vec3, Quat)> = Vec::new(); // (arrow_entity, arrow_pos, hero_pos, arrow_velocity, arrow_rotation)
+    let mut villager_hits: Vec<(Entity, Entity, Vec3, Vec3, Vec3, Quat)> = Vec::new(); // (arrow_entity, villager_entity, arrow_pos, villager_pos, arrow_velocity, arrow_rotation)
+    let mut enemy_hits: Vec<(Entity, Entity, Vec3, Vec3, Vec3, Quat)> = Vec::new(); // (arrow_entity, enemy_entity, arrow_pos, enemy_pos, arrow_velocity, arrow_rotation)
 
-    for (arrow_entity, arrow_transform, arrow, arrow_velocity) in arrow_query.iter() {
+    for (arrow_entity, arrow_transform, arrow, arrow_velocity) in arrow_query.iter_mut() {
         let arrow_pos = arrow_transform.translation;
         let mut arrow_hit_something = false;
 
+        // Calculate arrow tip position (arrow flies point-first along velocity direction)
+        let speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
+        let arrow_direction = if speed > 0.0 {
+            Vec2::new(arrow_velocity.x / speed, arrow_velocity.y / speed)
+        } else {
+            Vec2::ZERO
+        };
+        let arrow_tip = arrow_pos + Vec3::new(
+            arrow_direction.x * arrow_length,
+            arrow_direction.y * arrow_length,
+            0.0
+        );
+
         // Check collision with blocks using spatial hash (arrows STOP at walls)
-        let nearby_blocks = spatial_hash.query_nearby(arrow_pos.x, arrow_pos.y);
+        let nearby_blocks = spatial_hash.query_nearby(arrow_tip.x, arrow_tip.y);
         for block_entity in nearby_blocks {
             if let Ok(block_transform) = block_query.get(block_entity) {
                 let block_pos = block_transform.translation;
                 // Use 2D distance (ignore Z) for collision detection
-                let dx = arrow_pos.x - block_pos.x;
-                let dy = arrow_pos.y - block_pos.y;
+                let dx = arrow_tip.x - block_pos.x;
+                let dy = arrow_tip.y - block_pos.y;
                 let distance = (dx * dx + dy * dy).sqrt();
 
-                if distance < (arrow_radius + block_radius) {
+                if distance < (arrow_tip_radius + block_radius) {
                     // Arrow hit wall - despawn it
                     info!("ARROW HIT BLOCK: entity={:?}, distance={:.1}, arrow_pos=({:.0},{:.0}), block_pos=({:.0},{:.0})",
                         arrow_entity, distance, arrow_pos.x, arrow_pos.y, block_pos.x, block_pos.y);
@@ -145,11 +156,11 @@ fn check_arrow_collisions(
                 // Don't hit hero with friendly arrows - skip to villagers check
             } else {
                 let hero_pos = hero_transform.translation;
-                let dx = arrow_pos.x - hero_pos.x;
-                let dy = arrow_pos.y - hero_pos.y;
+                let dx = arrow_tip.x - hero_pos.x;
+                let dy = arrow_tip.y - hero_pos.y;
                 let distance = (dx * dx + dy * dy).sqrt();
 
-                if distance < (arrow_radius + entity_radius) {
+                if distance < (arrow_tip_radius + entity_radius) {
                     info!("Enemy arrow hit hero at distance {:.1}", distance);
                     damage_events.write(EntityDamaged {
                         entity: hero_entity,
@@ -157,7 +168,7 @@ fn check_arrow_collisions(
                     });
 
                     // Store hit data to apply push later (including hero position for offset calculation)
-                    hero_hits.push((arrow_entity, arrow_pos, hero_pos, Vec3::new(arrow_velocity.x, arrow_velocity.y, 0.0)));
+                    hero_hits.push((arrow_entity, arrow_pos, hero_pos, Vec3::new(arrow_velocity.x, arrow_velocity.y, 0.0), arrow_transform.rotation));
                     continue;
                 }
             }
@@ -171,11 +182,11 @@ fn check_arrow_collisions(
             }
 
             let villager_pos = villager_transform.translation;
-            let dx = arrow_pos.x - villager_pos.x;
-            let dy = arrow_pos.y - villager_pos.y;
+            let dx = arrow_tip.x - villager_pos.x;
+            let dy = arrow_tip.y - villager_pos.y;
             let distance = (dx * dx + dy * dy).sqrt();
 
-            if distance < (arrow_radius + entity_radius) {
+            if distance < (arrow_tip_radius + entity_radius) {
                 info!("Enemy arrow hit villager at distance {:.1}", distance);
                 damage_events.write(EntityDamaged {
                     entity: villager_entity,
@@ -183,7 +194,7 @@ fn check_arrow_collisions(
                 });
 
                 // Store hit data to apply push later (including villager position for offset calculation)
-                villager_hits.push((arrow_entity, villager_entity, arrow_pos, villager_pos, Vec3::new(arrow_velocity.x, arrow_velocity.y, 0.0)));
+                villager_hits.push((arrow_entity, villager_entity, arrow_pos, villager_pos, Vec3::new(arrow_velocity.x, arrow_velocity.y, 0.0), arrow_transform.rotation));
                 arrow_hit_something = true;
                 break;
             }
@@ -201,11 +212,11 @@ fn check_arrow_collisions(
             }
 
             let enemy_pos = enemy_transform.translation;
-            let dx = arrow_pos.x - enemy_pos.x;
-            let dy = arrow_pos.y - enemy_pos.y;
+            let dx = arrow_tip.x - enemy_pos.x;
+            let dy = arrow_tip.y - enemy_pos.y;
             let distance = (dx * dx + dy * dy).sqrt();
 
-            if distance < (arrow_radius + entity_radius) {
+            if distance < (arrow_tip_radius + entity_radius) {
                 info!("Friendly arrow hit enemy at distance {:.1}", distance);
                 damage_events.write(EntityDamaged {
                     entity: enemy_entity,
@@ -213,7 +224,7 @@ fn check_arrow_collisions(
                 });
 
                 // Store hit data to apply push later (including enemy position for offset calculation)
-                enemy_hits.push((arrow_entity, enemy_entity, arrow_pos, enemy_pos, Vec3::new(arrow_velocity.x, arrow_velocity.y, 0.0)));
+                enemy_hits.push((arrow_entity, enemy_entity, arrow_pos, enemy_pos, Vec3::new(arrow_velocity.x, arrow_velocity.y, 0.0), arrow_transform.rotation));
                 break;
             }
         }
@@ -221,7 +232,7 @@ fn check_arrow_collisions(
 
     // Now apply all hero hits (can mutate velocity now that arrow iteration is done)
     if let Some((hero_entity, _hero_transform, mut hero_velocity)) = entities.p0().iter_mut().next() {
-        for (arrow_entity, arrow_pos, hero_pos, arrow_velocity) in hero_hits {
+        for (arrow_entity, arrow_pos, hero_pos, arrow_velocity, arrow_rotation) in hero_hits {
             // Apply impact push force in the direction arrow is traveling
             let arrow_speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
             if arrow_speed > 0.0 {
@@ -232,8 +243,16 @@ fn check_arrow_collisions(
             }
 
             // Make arrow stick to hero (calculate offset from hero position)
-            // Use try_insert to gracefully handle if arrow was despawned
-            let offset = arrow_pos - hero_pos;
+            // Adjust offset so arrow tip penetrates entity (GLB model origin is at center/back)
+            let arrow_length_offset = 20.0; // Push arrow forward along velocity to account for model origin
+            let vel_speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
+            let direction = if vel_speed > 0.0 {
+                Vec2::new(arrow_velocity.x / vel_speed, arrow_velocity.y / vel_speed)
+            } else {
+                Vec2::ZERO
+            };
+            let adjusted_arrow_pos = arrow_pos + Vec3::new(direction.x * arrow_length_offset, direction.y * arrow_length_offset, 0.0);
+            let offset = adjusted_arrow_pos - hero_pos;
             if let Ok(mut arrow_cmd) = commands.get_entity(arrow_entity) {
                 arrow_cmd.insert(StuckArrow {
                     despawn_timer: Timer::from_seconds(2.0, TimerMode::Once),
@@ -242,12 +261,20 @@ fn check_arrow_collisions(
                 });
                 arrow_cmd.remove::<crate::components::physics::Velocity>();
                 arrow_cmd.remove::<crate::components::physics::Gravity>();
+                // Make arrow a child of hero - transform will update automatically
+                arrow_cmd.set_parent_in_place(hero_entity);
+                // Update transform to use local position (relative to parent) while preserving rotation
+                arrow_cmd.insert(Transform {
+                    translation: offset,
+                    rotation: arrow_rotation,
+                    scale: Vec3::splat(15.0), // Preserve scale
+                });
             }
         }
     }
 
     // Now apply all villager hits
-    for (arrow_entity, villager_entity, arrow_pos, villager_pos, arrow_velocity) in villager_hits {
+    for (arrow_entity, villager_entity, arrow_pos, villager_pos, arrow_velocity, arrow_rotation) in villager_hits {
         if let Ok((_ent, _transform, mut villager_velocity)) = entities.p1().get_mut(villager_entity) {
             // Apply impact push force
             let arrow_speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
@@ -259,8 +286,16 @@ fn check_arrow_collisions(
             }
 
             // Make arrow stick to villager (calculate offset from villager position)
-            // Use try_insert to gracefully handle if arrow was despawned
-            let offset = arrow_pos - villager_pos;
+            // Adjust offset so arrow tip penetrates entity (GLB model origin is at center/back)
+            let arrow_length_offset = 20.0; // Push arrow forward along velocity to account for model origin
+            let vel_speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
+            let direction = if vel_speed > 0.0 {
+                Vec2::new(arrow_velocity.x / vel_speed, arrow_velocity.y / vel_speed)
+            } else {
+                Vec2::ZERO
+            };
+            let adjusted_arrow_pos = arrow_pos + Vec3::new(direction.x * arrow_length_offset, direction.y * arrow_length_offset, 0.0);
+            let offset = adjusted_arrow_pos - villager_pos;
             if let Ok(mut arrow_cmd) = commands.get_entity(arrow_entity) {
                 arrow_cmd.insert(StuckArrow {
                     despawn_timer: Timer::from_seconds(2.0, TimerMode::Once),
@@ -269,12 +304,20 @@ fn check_arrow_collisions(
                 });
                 arrow_cmd.remove::<crate::components::physics::Velocity>();
                 arrow_cmd.remove::<crate::components::physics::Gravity>();
+                // Make arrow a child of villager - transform will update automatically
+                arrow_cmd.set_parent_in_place(villager_entity);
+                // Update transform to use local position (relative to parent) while preserving rotation
+                arrow_cmd.insert(Transform {
+                    translation: offset,
+                    rotation: arrow_rotation,
+                    scale: Vec3::splat(15.0), // Preserve scale
+                });
             }
         }
     }
 
     // Now apply all enemy hits
-    for (arrow_entity, enemy_entity, arrow_pos, enemy_pos, arrow_velocity) in enemy_hits {
+    for (arrow_entity, enemy_entity, arrow_pos, enemy_pos, arrow_velocity, arrow_rotation) in enemy_hits {
         if let Ok((_ent, _transform, mut enemy_velocity)) = entities.p2().get_mut(enemy_entity) {
             // Apply impact push force
             let arrow_speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
@@ -286,8 +329,16 @@ fn check_arrow_collisions(
             }
 
             // Make arrow stick to enemy (calculate offset from enemy position)
-            // Use try_insert to gracefully handle if arrow was despawned
-            let offset = arrow_pos - enemy_pos;
+            // Adjust offset so arrow tip penetrates entity (GLB model origin is at center/back)
+            let arrow_length_offset = 20.0; // Push arrow forward along velocity to account for model origin
+            let vel_speed = (arrow_velocity.x * arrow_velocity.x + arrow_velocity.y * arrow_velocity.y).sqrt();
+            let direction = if vel_speed > 0.0 {
+                Vec2::new(arrow_velocity.x / vel_speed, arrow_velocity.y / vel_speed)
+            } else {
+                Vec2::ZERO
+            };
+            let adjusted_arrow_pos = arrow_pos + Vec3::new(direction.x * arrow_length_offset, direction.y * arrow_length_offset, 0.0);
+            let offset = adjusted_arrow_pos - enemy_pos;
             if let Ok(mut arrow_cmd) = commands.get_entity(arrow_entity) {
                 arrow_cmd.insert(StuckArrow {
                     despawn_timer: Timer::from_seconds(2.0, TimerMode::Once),
@@ -296,6 +347,14 @@ fn check_arrow_collisions(
                 });
                 arrow_cmd.remove::<crate::components::physics::Velocity>();
                 arrow_cmd.remove::<crate::components::physics::Gravity>();
+                // Make arrow a child of enemy - transform will update automatically
+                arrow_cmd.set_parent_in_place(enemy_entity);
+                // Update transform to use local position (relative to parent) while preserving rotation
+                arrow_cmd.insert(Transform {
+                    translation: offset,
+                    rotation: arrow_rotation,
+                    scale: Vec3::splat(15.0), // Preserve scale
+                });
             }
         }
     }

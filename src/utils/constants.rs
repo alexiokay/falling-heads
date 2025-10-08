@@ -8,8 +8,8 @@ pub const HERO_SIZE: f32 = 64.0;
 pub const VILLAGER_SIZE: f32 = 56.0;
 pub const ENEMY_SIZE: f32 = 64.0;
 pub const RESOURCE_SIZE: f32 = 32.0;
-pub const ARROW_WIDTH: f32 = 128.0;  // MUCH bigger for testing
-pub const ARROW_HEIGHT: f32 = 32.0;  // MUCH bigger for testing
+pub const ARROW_WIDTH: f32 = 90.0;  // MUCH bigger for testing
+pub const ARROW_HEIGHT: f32 = 48.0;  // MUCH bigger for testing
 
 // Bounce/restitution values
 pub const HERO_BOUNCE: f32 = 1.0;
@@ -34,7 +34,7 @@ pub const ARROW_IMPACT_LIFT: f32 = 100.0;  // Upward push force when arrow hits
 // Combat
 pub const HERO_MELEE_DAMAGE: u32 = 1;          // Hero melee damage (1 heart)
 pub const HERO_MELEE_COOLDOWN: f32 = 0.3;      // Per-enemy attack cooldown (industry standard)
-pub const BLOCK_DAMAGE_COOLDOWN: f32 = 0.25;   // Block damage cooldown (prevents multi-frame hits)
+pub const BLOCK_DAMAGE_COOLDOWN: f32 = 0.0;   // Block damage cooldown (prevents multi-frame hits)
 
 // AI Movement
 pub const VILLAGER_MOVE_SPEED: f32 = 100.0;  // Horizontal movement speed

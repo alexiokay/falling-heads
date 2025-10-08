@@ -9,3 +9,5 @@ pub mod damage_cooldown;
 pub mod mesh_cache;
 pub mod spatial_hash;
 pub mod settings;
+pub mod weather_config;
+pub mod cube_mesh;

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::components::enemy::Health;
 use crate::components::hero::Hero;
-use crate::components::damage_visual::{DamageVisual, DeathAnimation};
+use crate::components::damage_visual::{DamageVisual, DeathAnimation, MarkedForDeath};
 use crate::components::physics::Velocity;
 use crate::events::damage_events::{EntityDamaged, EntityDied};
 
@@ -70,7 +70,7 @@ pub fn handle_entity_death(
     }
 }
 
-/// Update death animations and despawn when finished
+/// Update death animations and mark for despawn when finished
 pub fn update_death_animations(
     mut commands: Commands,
     mut query: Query<(Entity, &mut DeathAnimation)>,
@@ -80,8 +80,25 @@ pub fn update_death_animations(
         death_anim.timer.tick(time.delta());
 
         if death_anim.timer.is_finished() {
-            commands.entity(entity).despawn(); // Despawn children too (health bars, hearts)
-            info!("Death animation complete - despawned entity {:?}", entity);
+            // Mark for death instead of despawning immediately
+            // This allows other systems to finish processing this entity
+            commands.entity(entity).insert(MarkedForDeath);
+            info!("Death animation complete - marked entity {:?} for despawn", entity);
         }
+    }
+}
+
+/// Cleanup system - despawns entities marked for death
+/// Runs in PostUpdate to ensure all Update systems finish processing first
+pub fn cleanup_marked_entities(
+    mut commands: Commands,
+    query: Query<Entity, With<MarkedForDeath>>,
+) {
+    for entity in query.iter() {
+        // Despawn entity and all its children (health bars, hearts, borders)
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.despawn();
+        }
+        info!("Cleanup: despawned marked entity {:?}", entity);
     }
 }
