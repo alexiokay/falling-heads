@@ -67,6 +67,7 @@ pub enum PowerCommandType {
     Magnet,
     Villagers, // Spawn 5 villagers around hero
     Mirror,    // Magic barrier that reflects projectiles
+    Dragon,    // Spawn a dragon boss enemy
 }
 
 impl PowerBehavior for PowerCommandType {
@@ -84,6 +85,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Magnet => "MAGNET",
             PowerCommandType::Villagers => "VILLAGERS",
             PowerCommandType::Mirror => "MIRROR",
+            PowerCommandType::Dragon => "DRAGON",
         }
     }
 
@@ -101,6 +103,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Magnet => "Attract nearby items (not yet implemented)",
             PowerCommandType::Villagers => "Spawn 5 villagers around the hero",
             PowerCommandType::Mirror => "Create a magic barrier that reflects projectiles",
+            PowerCommandType::Dragon => "Spawn a powerful dragon boss enemy",
         }
     }
 
@@ -113,6 +116,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Laser => 8.0,
             PowerCommandType::Villagers => 20.0,
             PowerCommandType::Mirror => 15.0,
+            PowerCommandType::Dragon => 30.0,  // Long cooldown for boss spawn
             _ => 0.0,
         }
     }
@@ -124,7 +128,7 @@ impl PowerBehavior for PowerCommandType {
             }
             PowerCommandType::Fast | PowerCommandType::Slow => PowerCategory::Movement,
             PowerCommandType::Mirror | PowerCommandType::Box => PowerCategory::Defensive,
-            PowerCommandType::Villagers | PowerCommandType::Ghast => PowerCategory::Summoning,
+            PowerCommandType::Villagers | PowerCommandType::Ghast | PowerCommandType::Dragon => PowerCategory::Summoning,
             PowerCommandType::Magnet | PowerCommandType::Fuss => PowerCategory::Utility,
         }
     }

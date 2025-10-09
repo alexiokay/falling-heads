@@ -93,7 +93,7 @@ fn check_arrow_collisions(
     mut entities: ParamSet<(
         Query<(Entity, &Transform, &mut Velocity), (With<Hero>, Without<Arrow>)>,
         Query<(Entity, &Transform, &mut Velocity), (With<Villager>, Without<Arrow>)>,
-        Query<(Entity, &Transform, &mut Velocity), (With<Enemy>, Without<Arrow>)>,
+        Query<(Entity, &Transform, &mut Velocity), (With<Enemy>, Without<Arrow>, Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
     )>,
     mut damage_events: MessageWriter<EntityDamaged>,
 ) {

@@ -24,3 +24,4 @@ pub mod weather_particle;
 pub mod frozen;
 pub mod dev_panel;
 pub mod username_label;
+pub mod death_particle;

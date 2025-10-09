@@ -2,7 +2,7 @@
 ; Download Inno Setup: https://jrsoftware.org/isdl.php
 
 #define MyAppName "MineHeads"
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.2.5"
 #define MyAppPublisher "Your Name"
 #define MyAppExeName "falling-heads.exe"
 

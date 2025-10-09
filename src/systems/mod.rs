@@ -23,3 +23,6 @@ pub mod weather_system;
 pub mod atlas_generator;
 pub mod frozen_system;
 pub mod dev_panel_system;
+pub mod dragon_ai_system;
+pub mod dragon_animation_system;
+pub mod death_particle_system;

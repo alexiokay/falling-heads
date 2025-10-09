@@ -42,10 +42,12 @@ impl SpatialHash {
         let (cx, cy) = self.world_to_chunk(x, y);
         let mut results = Vec::new();
 
-        // Check 3x3 grid of chunks
+        // Check 3x3 grid of chunks - use saturating math to prevent overflow
         for dx in -1..=1 {
             for dy in -1..=1 {
-                let chunk = (cx + dx, cy + dy);
+                let chunk_x = cx.saturating_add(dx);
+                let chunk_y = cy.saturating_add(dy);
+                let chunk = (chunk_x, chunk_y);
                 if let Some(entities) = self.chunks.get(&chunk) {
                     results.extend_from_slice(entities);
                 }

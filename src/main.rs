@@ -32,6 +32,7 @@ use systems::weather_system::WeatherSystemPlugin;
 use systems::frozen_system::FrozenPlugin;
 use systems::dev_panel_system::DevPanelPlugin;
 use systems::username_label_system::UsernameLabelPlugin;
+use systems::death_particle_system::DeathParticlePlugin;
 use resources::asset_handles::BlockTextures;
 use resources::material_cache::MaterialCache;
 use resources::mesh_cache::MeshCache;
@@ -75,9 +76,11 @@ fn main() {
             WeatherSystemPlugin,
             FrozenPlugin,
             DevPanelPlugin,
+            DeathParticlePlugin,
         ))
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()
+        .init_resource::<resources::command_queue::CommandQueue>()
         .insert_resource(GameSettings::new())
         .add_systems(Startup, setup)
         .add_systems(Update, initialize_mesh_cache)
@@ -182,10 +185,14 @@ fn initialize_material_cache(
     let oak_leaves = images.get(&block_textures.oak_leaves);
     let melon_top = images.get(&block_textures.melon_top);
     let melon_side = images.get(&block_textures.melon_side);
+    let tnt_top = images.get(&block_textures.tnt_top);
+    let tnt_bottom = images.get(&block_textures.tnt_bottom);
+    let tnt_side = images.get(&block_textures.tnt_side);
 
     if pumpkin_top.is_none() || pumpkin_side.is_none() || pumpkin_front.is_none()
         || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none()
-        || melon_top.is_none() || melon_side.is_none() {
+        || melon_top.is_none() || melon_side.is_none()
+        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none() {
         return; // Textures not loaded yet, wait for next frame
     }
 
@@ -218,12 +225,20 @@ fn initialize_material_cache(
         melon_side.unwrap(),
     );
 
+    let tnt_atlas = crate::systems::atlas_generator::create_atlas_4x1(
+        tnt_top.unwrap(),
+        tnt_bottom.unwrap(),
+        tnt_side.unwrap(),
+        tnt_side.unwrap(),
+    );
+
     let pumpkin_atlas_handle = images.add(pumpkin_atlas);
     let oak_log_atlas_handle = images.add(oak_log_atlas);
     let oak_leaves_atlas_handle = images.add(oak_leaves_atlas);
     let melon_atlas_handle = images.add(melon_atlas);
+    let tnt_atlas_handle = images.add(tnt_atlas);
 
-    info!("Generated block atlases: pumpkin, oak_log, oak_leaves, melon");
+    info!("Generated block atlases: pumpkin, oak_log, oak_leaves, melon, tnt");
 
     // Store atlases as a resource
     commands.insert_resource(crate::resources::asset_handles::BlockAtlases {
@@ -231,6 +246,7 @@ fn initialize_material_cache(
         oak_log: oak_log_atlas_handle.clone(),
         oak_leaves: oak_leaves_atlas_handle.clone(),
         melon: melon_atlas_handle.clone(),
+        tnt: tnt_atlas_handle,
     });
 
     use crate::components::block::BlockType;

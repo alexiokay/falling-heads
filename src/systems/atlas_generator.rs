@@ -24,9 +24,13 @@ pub fn generate_block_atlases(
     let oak_log = images.get(&block_textures.oak_log);
     let oak_log_top = images.get(&block_textures.oak_log_top);
     let oak_leaves = images.get(&block_textures.oak_leaves);
+    let tnt_top = images.get(&block_textures.tnt_top);
+    let tnt_bottom = images.get(&block_textures.tnt_bottom);
+    let tnt_side = images.get(&block_textures.tnt_side);
 
     if pumpkin_top.is_none() || pumpkin_side.is_none() || pumpkin_front.is_none()
-        || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none() {
+        || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none()
+        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none() {
         return; // Textures not loaded yet
     }
 
@@ -61,16 +65,26 @@ pub fn generate_block_atlases(
         oak_leaves_img,            // Front
     );
 
+    // Create TNT atlas: [tnt_top | tnt_bottom | tnt_side | tnt_side] in 4x1 layout
+    let tnt_atlas = create_atlas_4x1(
+        tnt_top.unwrap(),          // Top
+        tnt_bottom.unwrap(),       // Bottom
+        tnt_side.unwrap(),         // Sides
+        tnt_side.unwrap(),         // Front (reuse side texture)
+    );
+
     // Add atlases to assets after creating them
     let pumpkin_atlas_handle = images.add(pumpkin_atlas);
     let oak_log_atlas_handle = images.add(oak_log_atlas);
     let oak_leaves_atlas_handle = images.add(oak_leaves_atlas);
+    let tnt_atlas_handle = images.add(tnt_atlas);
 
     commands.insert_resource(BlockAtlases {
         pumpkin: pumpkin_atlas_handle.clone(),
         oak_log: oak_log_atlas_handle.clone(),
         oak_leaves: oak_leaves_atlas_handle.clone(),
         melon: oak_leaves_atlas_handle.clone(), // Placeholder (atlas generation moved to main.rs)
+        tnt: tnt_atlas_handle,
     });
 
     *atlases_generated = true;

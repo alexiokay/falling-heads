@@ -79,7 +79,7 @@ fn apply_velocity(
     time: Res<Time>,
     mut query: Query<(&Velocity, &mut Transform, Option<&crate::components::projectile::Arrow>), Without<crate::components::damage_visual::DeathAnimation>>,
 ) {
-    for (velocity, mut transform, arrow) in query.iter_mut() {
+    for (velocity, mut transform, _arrow) in query.iter_mut() {
         let delta = time.delta_secs();
         let dx = velocity.x * delta;
         let dy = velocity.y * delta;
@@ -114,7 +114,7 @@ fn rebuild_spatial_hash(
 fn check_all_entity_block_collisions(
     mut commands: Commands,
     spatial_hash: Res<SpatialHash>,
-    mut entity_query: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy, Option<&Enemy>), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Block>)>,
+    mut entity_query: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy, Option<&Enemy>), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Block>, Without<crate::components::enemy::Flying>)>,
     block_query: Query<(Entity, &Transform, &BlockType, &ChunkMember), With<Block>>,
     chunk_query: Query<&crate::components::chunk::Chunk>,
     mut damage_events: MessageWriter<BlockDamaged>,
@@ -189,14 +189,17 @@ fn check_all_entity_block_collisions(
 
             // Collision resolution (SAME for all entities)
             if overlap_x < overlap_y {
-                // Horizontal - strong bounce
+                // Horizontal - bounce with same physics as vertical
                 let separation = overlap_x + 1.0;
                 if dx > 0.0 {
                     transform.translation.x += separation;
                 } else {
                     transform.translation.x -= separation;
                 }
-                velocity.x = -velocity.x * 0.8;
+                // Apply restitution to horizontal bounces (same as vertical)
+                velocity.x = -velocity.x * bouncy.restitution;
+                // Clamp horizontal bounce to prevent infinite acceleration
+                velocity.x = velocity.x.clamp(-MAX_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
             } else {
                 // Vertical
                 let separation = overlap_y + 1.0;
@@ -279,20 +282,41 @@ fn check_enemy_block_collisions(
 
 // TNT vs Blocks collision
 fn check_tnt_collisions(
-    mut tnt_query: Query<(&mut Transform, &mut Velocity, &mut Gravity), (With<Tnt>, Without<Block>)>,
+    mut tnt_query: Query<(&mut Transform, &mut Velocity, &mut Gravity), With<Tnt>>,
     block_query: Query<&Transform, (With<Block>, Without<Tnt>)>,
+    mut entity_query: Query<(&Transform, &mut Velocity), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Tnt>, Without<Block>)>,
 ) {
     for (mut tnt_transform, mut tnt_velocity, mut gravity) in tnt_query.iter_mut() {
-        // If TNT is settled (no velocity and gravity disabled), skip collision resolution entirely
-        let is_settled = gravity.force == 0.0 && tnt_velocity.x.abs() < 1.0 && tnt_velocity.y.abs() < 1.0;
-
-        if is_settled {
-            continue; // Skip completely - TNT is locked in place
-        }
-
         let tnt_pos = tnt_transform.translation;
         let tnt_size = BLOCK_SIZE;  // TNT is same size as blocks
         let block_size = BLOCK_SIZE;
+
+        // If TNT is settled, check if there's still a block underneath
+        // If not, wake it up (block was destroyed)
+        if gravity.force == 0.0 {
+            let mut still_grounded = false;
+
+            // Check if there's a block directly below
+            for block_transform in block_query.iter() {
+                let block_pos = block_transform.translation;
+                let dx = (tnt_pos.x - block_pos.x).abs();
+                let dy = tnt_pos.y - block_pos.y;
+
+                // Block is below TNT and close enough horizontally
+                if dy > 0.0 && dy < 70.0 && dx < 35.0 {
+                    still_grounded = true;
+                    break;
+                }
+            }
+
+            if !still_grounded {
+                // Wake up TNT - block was destroyed!
+                gravity.force = -500.0;
+                // Don't skip - let it fall
+            } else {
+                continue; // TNT is still locked in place
+            }
+        }
 
         let mut is_grounded = false;
 
@@ -342,13 +366,90 @@ fn check_tnt_collisions(
             }
         }
 
+        // Check collision with characters (Hero, Villagers, Enemies)
+        // TNT is HEAVY - it pushes characters based on its velocity
+        let entity_size = 64.0; // Characters are 64x64
+        let mut touched_character = false; // Track if TNT touched any character
+        for (entity_transform, mut entity_velocity) in entity_query.iter_mut() {
+            let entity_pos = entity_transform.translation;
+
+            let tnt_half = tnt_size / 2.0;
+            let entity_half = entity_size / 2.0;
+
+            let dx = tnt_pos.x - entity_pos.x;
+            let dy = tnt_pos.y - entity_pos.y;
+
+            let overlap_x = tnt_half + entity_half - dx.abs();
+            let overlap_y = tnt_half + entity_half - dy.abs();
+
+            if overlap_x > 0.0 && overlap_y > 0.0 {
+                touched_character = true; // TNT is touching a character - can't be grounded
+
+                // Collision with character - TNT bounces and pushes based on velocity
+                if overlap_x < overlap_y {
+                    // Horizontal collision
+                    let separation = overlap_x + 0.5;
+                    if dx > 0.0 {
+                        tnt_transform.translation.x += separation;
+                    } else {
+                        tnt_transform.translation.x -= separation;
+                    }
+
+                    // Push character horizontally based on TNT velocity
+                    let push_force = tnt_velocity.x.abs() * 0.4;
+                    if dx > 0.0 {
+                        entity_velocity.x += push_force;
+                    } else {
+                        entity_velocity.x -= push_force;
+                    }
+
+                    // TNT bounces back horizontally
+                    tnt_velocity.x *= -0.5; // Bounce in opposite direction
+                } else {
+                    // Vertical collision
+                    let separation = overlap_y + 0.5;
+                    if dy > 0.0 {
+                        // TNT is above character - lands on character's head
+                        tnt_transform.translation.y += separation;
+
+                        // Push character DOWN based on TNT's falling velocity
+                        let push_force = tnt_velocity.y.abs() * 0.3; // Light push - keep player mobile
+                        entity_velocity.y -= push_force;
+
+                        // TNT bounces UP off character's head based on impact velocity
+                        let bounce_strength = tnt_velocity.y.abs() * 0.4; // 40% bounce
+                        tnt_velocity.y = bounce_strength; // Bounce upward
+                    } else {
+                        // Character is above TNT (character landing on TNT from above)
+                        // DON'T push TNT down - it might be resting on a block
+                        // Instead, push character back up and make them bounce
+                        let bounce_force = entity_velocity.y.abs() * 0.3; // Character bounces off TNT
+                        entity_velocity.y = bounce_force; // Bounce character upward
+
+                        // TNT is HEAVY - character can't push it down much
+                        // Only allow slight compression if TNT is not grounded
+                        if gravity.force != 0.0 {
+                            tnt_velocity.y -= 50.0; // Slight downward push
+                        }
+                    }
+                }
+            }
+        }
+
+        // If TNT touched a character, it can't be grounded (prevents floating)
+        if touched_character {
+            is_grounded = false;
+        }
+
         // Lock TNT in place when truly settled - feels HEAVY
+        // STRICT: Only lock if grounded THIS frame AND nearly stopped
         if is_grounded && tnt_velocity.y.abs() < 1.0 && tnt_velocity.x.abs() < 1.0 {
             gravity.force = 0.0; // Disable gravity - TNT is locked
             tnt_velocity.x = 0.0;
             tnt_velocity.y = 0.0;
-        } else if !is_grounded {
-            gravity.force = -500.0; // Re-enable gravity only when airborne
+        } else {
+            // Always re-enable gravity if not grounded or moving
+            gravity.force = -500.0;
         }
     }
 }
@@ -523,11 +624,10 @@ fn check_entity_collisions(
         let overlap_y = half_a + half_b - dy.abs();
 
         if overlap_x > 0.0 && overlap_y > 0.0 {
-            // SUPER AGGRESSIVE separation - the deeper the overlap, the stronger the explosion
-            // Scale separation force based on overlap depth (deeper = stronger push)
+            // Ball-like physics: simple elastic collisions
             if overlap_x < overlap_y {
-                // Separate horizontally - EXPLOSIVE force proportional to overlap
-                let separation = overlap_x * 0.8 + 5.0;  // MUCH stronger: 80% of overlap + bigger buffer
+                // Horizontal collision - separate and bounce
+                let separation = (overlap_x / 2.0 + 1.0).min(100.0);
                 if dx > 0.0 {
                     transform_a.translation.x += separation;
                     transform_b.translation.x -= separation;
@@ -536,14 +636,17 @@ fn check_entity_collisions(
                     transform_b.translation.x += separation;
                 }
 
-                // MASSIVE horizontal push force to blow clusters apart
-                let avg_vx = (velocity_a.x + velocity_b.x) * 0.5;
-                let push_strength = 500.0 * (overlap_x / (half_a + half_b)); // MUCH stronger push
-                velocity_a.x = (velocity_a.x - avg_vx) * -0.8 + avg_vx + (if dx > 0.0 { push_strength } else { -push_strength });
-                velocity_b.x = (velocity_b.x - avg_vx) * -0.8 + avg_vx + (if dx > 0.0 { -push_strength } else { push_strength });
+                // Simple velocity swap with restitution (billiard ball physics)
+                let temp_vx = velocity_a.x;
+                velocity_a.x = velocity_b.x * bouncy_a.restitution;
+                velocity_b.x = temp_vx * bouncy_b.restitution;
+
+                // Clamp to prevent infinite acceleration
+                velocity_a.x = velocity_a.x.clamp(-MAX_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
+                velocity_b.x = velocity_b.x.clamp(-MAX_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
             } else {
-                // Separate vertically - EXPLOSIVE force proportional to overlap
-                let separation = overlap_y * 0.8 + 5.0;  // MUCH stronger: 80% of overlap + bigger buffer
+                // Vertical collision - separate and bounce
+                let separation = (overlap_y / 2.0 + 1.0).min(100.0);
                 if dy > 0.0 {
                     transform_a.translation.y += separation;
                     transform_b.translation.y -= separation;
@@ -552,22 +655,14 @@ fn check_entity_collisions(
                     transform_b.translation.y += separation;
                 }
 
-                // MASSIVE vertical bounce to blast entities apart when stacked
-                let avg_vy = (velocity_a.y + velocity_b.y) * 0.5;
-                velocity_a.y = (velocity_a.y - avg_vy) * -bouncy_a.restitution + avg_vy;
-                velocity_b.y = (velocity_b.y - avg_vy) * -bouncy_b.restitution + avg_vy;
+                // Simple velocity swap with restitution (billiard ball physics)
+                let temp_vy = velocity_a.y;
+                velocity_a.y = velocity_b.y * bouncy_a.restitution;
+                velocity_b.y = temp_vy * bouncy_b.restitution;
 
-                // SUPER STRONG upward explosion force when stuck
-                if dy > 0.0 {
-                    velocity_a.y = velocity_a.y.max(300.0);  // EXPLOSIVE upward force (doubled)
-                } else {
-                    velocity_b.y = velocity_b.y.max(300.0);  // EXPLOSIVE upward force (doubled)
-                }
-
-                // Also add horizontal spreading force when vertically stacked
-                let horizontal_spread = 300.0 * (overlap_y / (half_a + half_b));
-                velocity_a.x += if dx > 0.0 { horizontal_spread } else { -horizontal_spread };
-                velocity_b.x += if dx > 0.0 { -horizontal_spread } else { horizontal_spread };
+                // Clamp vertical velocity
+                velocity_a.y = velocity_a.y.clamp(-MAX_BOUNCE_VELOCITY * 2.0, MAX_BOUNCE_VELOCITY * 2.0);
+                velocity_b.y = velocity_b.y.clamp(-MAX_BOUNCE_VELOCITY * 2.0, MAX_BOUNCE_VELOCITY * 2.0);
             }
         }
         }
@@ -577,20 +672,31 @@ fn check_entity_collisions(
 /// Hero AI - automatic movement (same as villagers), can be overridden by player input
 fn hero_ai_movement(
     time: Res<Time>,
-    mut hero_query: Query<(&mut Hero, &mut Velocity)>,
+    mut hero_query: Query<(&mut Hero, &mut Velocity, Option<&crate::components::power_effect::SpeedModifier>)>,
 ) {
-    for (mut hero, mut velocity) in hero_query.iter_mut() {
+    for (mut hero, mut velocity, speed_mod) in hero_query.iter_mut() {
         // Tick direction change timer
         hero.direction_change_timer.tick(time.delta());
 
-        // Change direction when timer finishes
-        if hero.direction_change_timer.just_finished() {
+        // Check if we have turbo/speed boost active
+        let has_turbo = speed_mod.is_some();
+
+        // Only change direction when velocity is VERY LOW (nearly stationary)
+        // Don't change direction when character has momentum from physics/player
+        if hero.direction_change_timer.just_finished() && velocity.x.abs() < 50.0 {
             hero.move_direction = -hero.move_direction;  // Flip direction
         }
 
-        // Apply automatic horizontal movement (same speed as villagers)
-        velocity.x += hero.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
-        velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+        // Only apply AI movement when:
+        // 1. Nearly stationary (velocity < 50), OR
+        // 2. Has turbo active (speed boost allows AI to help even when moving)
+        if velocity.x.abs() < 50.0 || has_turbo {
+            velocity.x += hero.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
+
+            // Clamp to AI max speed
+            velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+        }
+        // When velocity >= 50 and no turbo, AI doesn't touch it - full physics/player control
     }
 }
 
@@ -603,14 +709,19 @@ fn villager_ai_movement(
         // Tick direction change timer
         villager.direction_change_timer.tick(time.delta());
 
-        // Change direction when timer finishes
-        if villager.direction_change_timer.just_finished() {
+        // Only change direction when velocity is LOW (not bouncing from walls/collisions)
+        if villager.direction_change_timer.just_finished() && velocity.x.abs() < 250.0 {
             villager.move_direction = -villager.move_direction;  // Flip direction
         }
 
-        // Apply horizontal movement
-        velocity.x += villager.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
-        velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+        // Only apply AI movement when velocity is low - don't fight against bounces
+        if velocity.x.abs() < 300.0 {
+            velocity.x += villager.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
+
+            // Clamp to AI max speed
+            velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+        }
+        // When velocity > 300 (bouncing), AI doesn't touch it - full physics control
     }
 }
 
@@ -640,6 +751,7 @@ fn enemy_ai_movement(
         if let Some(target_x) = nearest_target_x {
             // SKELETON AI: Keep distance, never melee
             if enemy.enemy_type == crate::components::enemy::EnemyType::Skeleton {
+                // Skeletons override physics when maintaining range (tactical positioning)
                 if nearest_distance < SKELETON_MIN_RANGE {
                     // Too close - back away!
                     let direction = if target_x > enemy_pos.x { -1.0 } else { 1.0 }; // Move AWAY
@@ -653,10 +765,14 @@ fn enemy_ai_movement(
                 }
                 // If in ideal range (300-600), don't move horizontally - just shoot
             } else {
-                // MELEE ENEMIES (Pigman, etc.): Chase normally
+                // MELEE ENEMIES (Pigman, etc.): Chase normally - blend with collision physics
                 let direction = if target_x > enemy_pos.x { 1.0 } else { -1.0 };
                 velocity.x += direction * VILLAGER_MOVE_SPEED * time.delta_secs();
-                velocity.x = velocity.x.clamp(-400.0, 400.0);
+
+                // Only clamp if moving in chase direction (don't kill collision bounces)
+                if (direction > 0.0 && velocity.x > 0.0) || (direction < 0.0 && velocity.x < 0.0) {
+                    velocity.x = velocity.x.clamp(-400.0, 400.0);
+                }
             }
         }
     }
@@ -666,7 +782,7 @@ fn enemy_ai_movement(
 /// Uses per-enemy cooldown: each enemy has separate attack cooldown (industry standard)
 fn check_hero_melee_damage(
     hero_query: Query<(Entity, &Transform), With<Hero>>,
-    enemy_query: Query<(Entity, &Transform), With<crate::components::enemy::Enemy>>,
+    enemy_query: Query<(Entity, &Transform), (With<crate::components::enemy::Enemy>, Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
     mut damage_events: MessageWriter<EntityDamaged>,
     mut melee_cooldown: ResMut<MeleeAttackCooldown>,
     time: Res<Time>,
@@ -716,7 +832,7 @@ fn check_hero_melee_damage(
 fn check_hero_enemy_collision(
     mut commands: Commands,
     mut entity_query: Query<(Entity, &Transform), Or<(With<Hero>, With<Villager>)>>,
-    enemy_query: Query<(&Transform, &crate::components::enemy::Enemy)>,
+    enemy_query: Query<(&Transform, &crate::components::enemy::Enemy), (Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
     mut damage_events: MessageWriter<EntityDamaged>,
     time: Res<Time>,
     mut cooldown: ResMut<DamageCooldown>,

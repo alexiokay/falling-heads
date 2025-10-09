@@ -98,4 +98,13 @@ impl PhysicsBundle {
             bouncy: Bouncy { restitution: NO_BOUNCE },
         }
     }
+
+    /// Physics for flying dragon (minimal gravity, no bounce)
+    pub fn dragon() -> Self {
+        Self {
+            velocity: Velocity { x: 0.0, y: 0.0 },
+            gravity: Gravity { force: 0.1 },  // Very low gravity for hovering effect
+            bouncy: Bouncy { restitution: NO_BOUNCE },
+        }
+    }
 }

@@ -44,7 +44,10 @@ impl Plugin for UiPlugin {
             ).run_if(in_state(GameState::Paused)))
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
-            .add_systems(Update, handle_settings_buttons.run_if(in_state(GameState::Settings)))
+            .add_systems(Update, (
+                toggle_pause,
+                handle_settings_buttons,
+            ).run_if(in_state(GameState::Settings)))
             .add_systems(OnEnter(GameState::Settings), setup_settings_menu)
             .add_systems(OnExit(GameState::Settings), cleanup_settings_menu);
 

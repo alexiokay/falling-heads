@@ -48,6 +48,7 @@ pub enum EnemyType {
     Pigman,    // Spawns in Nether
     Enderman,  // Spawns in End
     Yeti,      // Spawns in Iceland - throws snowballs
+    Dragon,    // Flying boss enemy - shoots fireballs
 }
 
 #[derive(Component)]
@@ -65,6 +66,7 @@ impl Enemy {
         let shoot_timer = match enemy_type {
             EnemyType::Skeleton => Some(Timer::from_seconds(SKELETON_SHOOT_INTERVAL, TimerMode::Repeating)),
             EnemyType::Yeti => Some(Timer::from_seconds(2.0, TimerMode::Repeating)), // Yeti throws snowballs every 2s
+            EnemyType::Dragon => Some(Timer::from_seconds(4.0, TimerMode::Repeating)), // Dragon shoots fireballs every 4s
             _ => None,
         };
 
@@ -85,6 +87,7 @@ impl EnemyBehavior for EnemyType {
             EnemyType::Pigman => 3,
             EnemyType::Enderman => 3,
             EnemyType::Yeti => 5,
+            EnemyType::Dragon => 20, // Boss enemy with high HP
         }
     }
 
@@ -95,6 +98,7 @@ impl EnemyBehavior for EnemyType {
             EnemyType::Pigman => 0.9,     // Fast
             EnemyType::Enderman => 1.2,   // Very fast
             EnemyType::Yeti => 1.0,       // Normal speed
+            EnemyType::Dragon => 1.5,     // Fast flying movement
         }
     }
 
@@ -102,6 +106,7 @@ impl EnemyBehavior for EnemyType {
         match self {
             EnemyType::Skeleton => Some(3.0),  // Shoots arrows every 3s
             EnemyType::Yeti => Some(2.0),      // Throws snowballs every 2s
+            EnemyType::Dragon => Some(4.0),    // Shoots fireballs every 4s
             _ => None,
         }
     }
@@ -113,6 +118,7 @@ impl EnemyBehavior for EnemyType {
             EnemyType::Pigman => Color::srgb(0.9, 0.6, 0.6),
             EnemyType::Enderman => Color::srgb(0.1, 0.0, 0.1),
             EnemyType::Yeti => Color::srgb(0.9, 0.95, 1.0),
+            EnemyType::Dragon => Color::srgb(0.6, 0.1, 0.1), // Dark red
         }
     }
 
@@ -120,6 +126,7 @@ impl EnemyBehavior for EnemyType {
         match self {
             EnemyType::Skeleton => 1,  // Arrow damage
             EnemyType::Yeti => 0,      // Snowballs do no damage (freeze effect instead)
+            EnemyType::Dragon => 3,    // Powerful fireball damage
             _ => 1,                    // Default melee damage
         }
     }
@@ -128,4 +135,31 @@ impl EnemyBehavior for EnemyType {
 #[derive(Component)]
 pub struct Ghast {
     pub shoot_timer: Timer,
+}
+
+#[derive(Component, Clone, Copy, PartialEq)]
+pub enum DragonState {
+    Emerging,      // Flying out of blocks to free space
+    Flying,        // Moving through the air
+    Hovering,      // Floating in place
+    Landing,       // Descending back to blocks
+    Landed,        // Sitting on blocks
+}
+
+/// Marker component for flying entities that ignore block collisions
+#[derive(Component)]
+pub struct Flying;
+
+/// Component to store dragon's animation clip handle
+#[derive(Component)]
+pub struct DragonAnimationClip(pub Handle<AnimationClip>);
+
+#[derive(Component)]
+pub struct Dragon {
+    pub state: DragonState,
+    pub state_timer: f32,           // Time in current state
+    pub hover_offset: f32,          // Y offset for hovering effect
+    pub hover_timer: f32,           // Timer for sine wave hovering
+    pub target_position: Vec3,      // Where dragon is flying to
+    pub spawn_position: Vec3,       // Original spawn position (for landing)
 }

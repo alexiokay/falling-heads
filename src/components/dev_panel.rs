@@ -9,4 +9,14 @@ pub struct WeatherControlButton {
 }
 
 #[derive(Component)]
+pub struct PowerButton {
+    pub power_type: crate::resources::command_queue::PowerCommandType,
+}
+
+#[derive(Component)]
+pub struct BiomeTeleportButton {
+    pub biome_type: crate::components::block::BiomeType,
+}
+
+#[derive(Component)]
 pub struct ParameterLabel;

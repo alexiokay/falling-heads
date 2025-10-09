@@ -28,6 +28,11 @@ pub struct ProjectileModels {
 }
 
 #[derive(Resource, Default)]
+pub struct EnemyModels {
+    pub dragon: Handle<Scene>,  // GLB/GLTF dragon model
+}
+
+#[derive(Resource, Default)]
 pub struct ResourceTextures {
     pub coal: Handle<Image>,
     pub diamond: Handle<Image>,
@@ -65,6 +70,10 @@ pub struct BlockTextures {
     pub snow: Handle<Image>,
     pub ice: Handle<Image>,
     pub packed_ice: Handle<Image>,
+    // TNT textures for atlas
+    pub tnt_top: Handle<Image>,
+    pub tnt_bottom: Handle<Image>,
+    pub tnt_side: Handle<Image>,
 }
 
 /// Block texture atlases for directional blocks (4x1 layout: top|bottom|sides|front)
@@ -74,6 +83,13 @@ pub struct BlockAtlases {
     pub oak_log: Handle<Image>,     // Oak log atlas: oak_log_top | oak_log_top | oak_log | oak_log
     pub oak_leaves: Handle<Image>,  // Oak leaves atlas: oak_leaves | oak_leaves | oak_leaves | oak_leaves
     pub melon: Handle<Image>,       // Melon atlas: melon_top | melon_top | melon_side | melon_side
+    pub tnt: Handle<Image>,         // TNT atlas: tnt_top | tnt_bottom | tnt_side | tnt_side
+}
+
+/// Explosion animation frames (16 frames total)
+#[derive(Resource)]
+pub struct ExplosionTextures {
+    pub frames: Vec<Handle<Image>>,
 }
 
 #[derive(Resource, Default)]
@@ -93,4 +109,9 @@ pub struct DamageStageTextures {
 pub struct DamageOverlayCache {
     pub materials: Vec<Handle<StandardMaterial>>,  // One material per damage stage (0-8)
     pub mesh: Option<Handle<Mesh>>,  // Single unit rectangle mesh shared by all overlays
+}
+
+#[derive(Resource)]
+pub struct DragonAnimation {
+    pub fly: Handle<AnimationClip>,  // Built-in fly animation from GLB
 }

@@ -11,6 +11,7 @@ pub fn toggle_pause(
         match current_state.get() {
             GameState::Playing => next_state.set(GameState::Paused),
             GameState::Paused => next_state.set(GameState::Playing),
+            GameState::Settings => next_state.set(GameState::Paused), // Go back to pause menu
             _ => {}
         }
     }

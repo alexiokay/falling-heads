@@ -74,6 +74,12 @@ impl UVLayout {
     pub fn melon() -> Self {
         Self::standard_4x1(0, 0, 2, 2)  // top reused for bottom, sides reused for front
     }
+
+    /// TNT: [tnt_top | tnt_bottom | tnt_side | tnt_side]
+    /// Atlas slots: [0:top, 1:bottom, 2:sides, 3:front(=sides)]
+    pub fn tnt() -> Self {
+        Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
+    }
 }
 
 /// Helper function to generate UV coordinates for top/bottom faces
@@ -88,10 +94,22 @@ fn uv_top_bottom(region: (f32, f32, f32, f32)) -> [[f32; 2]; 4] {
     ]
 }
 
-/// Helper function to generate UV coordinates for front/right side faces
+/// Helper function to generate UV coordinates for front face
 /// Pattern: left-bottom, left-top, right-top, right-bottom
 #[inline]
-fn uv_front_right(region: (f32, f32, f32, f32)) -> [[f32; 2]; 4] {
+fn uv_front(region: (f32, f32, f32, f32)) -> [[f32; 2]; 4] {
+    [
+        [region.0, region.3], // left-bottom
+        [region.0, region.1], // left-top
+        [region.2, region.1], // right-top
+        [region.2, region.3], // right-bottom
+    ]
+}
+
+/// Helper function to generate UV coordinates for right side face
+/// Pattern: left-bottom, left-top, right-top, right-bottom (corrected for winding order)
+#[inline]
+fn uv_right(region: (f32, f32, f32, f32)) -> [[f32; 2]; 4] {
     [
         [region.0, region.3], // left-bottom
         [region.0, region.1], // left-top
@@ -101,14 +119,14 @@ fn uv_front_right(region: (f32, f32, f32, f32)) -> [[f32; 2]; 4] {
 }
 
 /// Helper function to generate UV coordinates for left side face
-/// Pattern: right-bottom, right-top, left-top, left-bottom (mirrored from right)
+/// Pattern: left-bottom, left-top, right-top, right-bottom (corrected for winding order)
 #[inline]
 fn uv_left(region: (f32, f32, f32, f32)) -> [[f32; 2]; 4] {
     [
-        [region.2, region.3], // right-bottom
-        [region.2, region.1], // right-top
-        [region.0, region.1], // left-top
         [region.0, region.3], // left-bottom
+        [region.0, region.1], // left-top
+        [region.2, region.1], // right-top
+        [region.2, region.3], // right-bottom
     ]
 }
 
@@ -129,35 +147,35 @@ pub fn create_uv_cube(size: f32, uv_layout: UVLayout) -> Mesh {
     // Back face (-Z) removed as it's never visible from camera at Z=+1500
     // Only render 5 faces - skip back face (-Z) as it's never visible from camera
     let positions = vec![
-        // Top face (+Y)
-        [-half, half, -half],
-        [half, half, -half],
-        [half, half, half],
+        // Top face (+Y) - Fixed winding order
         [-half, half, half],
-
-        // Bottom face (-Y)
-        [-half, -half, half],
-        [half, -half, half],
-        [half, -half, -half],
-        [-half, -half, -half],
-
-        // Front face (+Z) - VISIBLE from camera
-        [-half, -half, half],
-        [-half, half, half],
-        [half, half, half],
-        [half, -half, half],
-
-        // Right face (+X)
-        [half, -half, half],
         [half, half, half],
         [half, half, -half],
-        [half, -half, -half],
-
-        // Left face (-X)
-        [-half, -half, -half],
         [-half, half, -half],
+
+        // Bottom face (-Y) - Fixed winding order
+        [-half, -half, -half],
+        [half, -half, -half],
+        [half, -half, half],
+        [-half, -half, half],
+
+        // Front face (+Z) - VISIBLE from camera (fixed winding order)
+        [half, -half, half],
+        [half, half, half],
         [-half, half, half],
         [-half, -half, half],
+
+        // Right face (+X) - Fixed winding order for correct backface culling
+        [half, -half, -half],
+        [half, half, -half],
+        [half, half, half],
+        [half, -half, half],
+
+        // Left face (-X) - Fixed winding order for correct backface culling
+        [-half, -half, half],
+        [-half, half, half],
+        [-half, half, -half],
+        [-half, -half, -half],
     ];
 
     // Normals for each face (5 faces, no back face)
@@ -200,8 +218,8 @@ pub fn create_uv_cube(size: f32, uv_layout: UVLayout) -> Mesh {
             let mut uv_data = Vec::with_capacity(20);
             uv_data.extend_from_slice(&uv_top_bottom(full_texture));      // Top
             uv_data.extend_from_slice(&uv_top_bottom(full_texture));      // Bottom
-            uv_data.extend_from_slice(&uv_front_right(full_texture));     // Front
-            uv_data.extend_from_slice(&uv_front_right(full_texture));     // Right
+            uv_data.extend_from_slice(&uv_front(full_texture));           // Front
+            uv_data.extend_from_slice(&uv_right(full_texture));           // Right
             uv_data.extend_from_slice(&uv_left(full_texture));            // Left
             uv_data
         }
@@ -211,8 +229,8 @@ pub fn create_uv_cube(size: f32, uv_layout: UVLayout) -> Mesh {
             let mut uv_data = Vec::with_capacity(20);
             uv_data.extend_from_slice(&uv_top_bottom(top));          // Top
             uv_data.extend_from_slice(&uv_top_bottom(bottom));       // Bottom
-            uv_data.extend_from_slice(&uv_front_right(front));       // Front (visible from camera)
-            uv_data.extend_from_slice(&uv_front_right(sides));       // Right
+            uv_data.extend_from_slice(&uv_front(front));             // Front (visible from camera)
+            uv_data.extend_from_slice(&uv_right(sides));             // Right
             uv_data.extend_from_slice(&uv_left(sides));              // Left
             uv_data
         }

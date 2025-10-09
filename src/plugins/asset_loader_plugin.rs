@@ -53,6 +53,9 @@ fn load_all_assets(
         snow: asset_server.load("textures/blocks/iceland/snow.png"),
         ice: asset_server.load("textures/blocks/iceland/ice.png"),
         packed_ice: asset_server.load("textures/blocks/iceland/packed_ice.png"),
+        tnt_top: asset_server.load("textures/effects/tnt/tnt_top.png"),
+        tnt_bottom: asset_server.load("textures/effects/tnt/tnt_bottom.png"),
+        tnt_side: asset_server.load("textures/effects/tnt/tnt_side.png"),
     };
     commands.insert_resource(block_textures);
 
@@ -92,6 +95,20 @@ fn load_all_assets(
     };
     commands.insert_resource(projectile_models);
 
+    // Load enemy 3D models
+    let enemy_models = crate::resources::asset_handles::EnemyModels {
+        dragon: asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("models/minecraft_dragon_-_free_-_black_and_white.glb")
+        ),  // Load dragon GLB model with built-in animation - Scene 0
+    };
+    commands.insert_resource(enemy_models);
+
+    // Load dragon animation clip
+    let dragon_animation = asset_server.load(
+        GltfAssetLabel::Animation(0).from_asset("models/minecraft_dragon_-_free_-_black_and_white.glb")
+    );
+    commands.insert_resource(crate::resources::asset_handles::DragonAnimation { fly: dragon_animation });
+
     // Load heart textures (UI)
     let heart_textures = HeartTextures {
         container: asset_server.load("textures/effects/heart/container.png"),
@@ -115,6 +132,15 @@ fn load_all_assets(
         ],
     };
     commands.insert_resource(damage_textures);
+
+    // Load explosion animation frames (16 frames)
+    let explosion_frames: Vec<Handle<Image>> = (0..16)
+        .map(|i| asset_server.load(format!("textures/effects/explosion/explosion_{}.png", i)))
+        .collect();
+
+    commands.insert_resource(crate::resources::asset_handles::ExplosionTextures {
+        frames: explosion_frames,
+    });
 
     info!("✅ All assets loaded successfully!");
 }

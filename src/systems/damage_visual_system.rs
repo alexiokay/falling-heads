@@ -29,16 +29,31 @@ fn apply_damage_visuals(
     mut damage_events: MessageReader<EntityDamaged>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    all_entities: Query<Entity>,
+    entity_query: Query<(Entity, Option<&MeshMaterial3d<StandardMaterial>>, Option<&DamageVisual>)>,
 ) {
     for event in damage_events.read() {
         // Check if entity still exists (might have been despawned mid-frame)
-        if all_entities.get(event.entity).is_err() {
-            continue; // Entity already despawned, skip
-        }
+        let Ok((_, material_handle, existing_damage_visual)) = entity_query.get(event.entity) else {
+            continue; // Entity doesn't exist or already despawned, skip
+        };
 
-        // Add damage visual effect (1.0 second duration with fade out)
-        commands.entity(event.entity).try_insert(DamageVisual::new(1.0));
+        // Get original color before applying damage visual
+        // IMPORTANT: If entity already has DamageVisual, use its stored original color!
+        // Otherwise we'll capture the red-tinted color and make it progressively redder
+        let original_color = if let Some(existing_dmg) = existing_damage_visual {
+            existing_dmg.original_color // Reuse the already-stored original color
+        } else if let Some(mat_handle) = material_handle {
+            if let Some(material) = materials.get(&mat_handle.0) {
+                material.base_color
+            } else {
+                Color::WHITE
+            }
+        } else {
+            Color::WHITE
+        };
+
+        // Add/update damage visual effect with stored original color
+        commands.entity(event.entity).try_insert(DamageVisual::with_original_color(1.0, original_color));
 
         // Spawn red border as child entity
         // Store entity ID for the closure
@@ -85,9 +100,9 @@ fn update_damage_visuals(
         damage_visual.timer.tick(time.delta());
 
         if damage_visual.timer.is_finished() {
-            // Effect finished - remove component and reset material
+            // Effect finished - remove component and reset material to original color
             if let Some(material) = materials.get_mut(&material_handle.0) {
-                material.base_color = Color::WHITE; // Reset to white (shows original texture)
+                material.base_color = damage_visual.original_color; // Reset to original color
             }
 
             // Despawn damage border child entities (only if not already despawned by parent death)

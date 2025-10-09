@@ -22,6 +22,8 @@ use crate::systems::health_system::{handle_entity_damage, handle_entity_death, u
 use crate::systems::health_ui_system::{spawn_health_bars, update_health_bars};
 use crate::systems::background_system::update_background;
 use crate::systems::entity_spawn::spawn_villagers_around_position;
+use crate::systems::dragon_ai_system::dragon_ai_system;
+use crate::systems::dragon_animation_system::dragon_animation_system;
 use crate::utils::constants::*;
 
 #[derive(Resource, Default, PartialEq)]
@@ -82,6 +84,8 @@ impl Plugin for GameplayPlugin {
                 update_death_animations,
                 spawn_health_bars,
                 update_health_bars,
+                dragon_ai_system,
+                dragon_animation_system,
                 // Background only updates when biome changes (already has internal check)
                 update_background,
             ).run_if(in_state(GameState::Playing)))
@@ -166,14 +170,14 @@ fn spawn_villagers(
 /// Hero moves automatically like villagers, but player can override/boost with A/D keys
 fn hero_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Velocity, Option<&SpeedModifier>), With<Hero>>,
+    mut query: Query<(&mut Velocity, &mut Hero, Option<&SpeedModifier>), With<Hero>>,
     time: Res<Time>,
 ) {
-    let Ok((mut velocity, speed_mod)) = query.single_mut() else {
+    let Ok((mut velocity, mut hero, speed_mod)) = query.single_mut() else {
         return;
     };
 
-    let mut acceleration = 500.0;  // Player override acceleration
+    let mut acceleration = 800.0;  // Stronger player override acceleration (was 500)
 
     // Apply speed modifier if present
     if let Some(modifier) = speed_mod {
@@ -183,12 +187,14 @@ fn hero_movement(
     // ADD to velocity (preserves automatic AI movement + physics)
     if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
         velocity.x += -acceleration * time.delta_secs();
+        hero.move_direction = -1.0;  // Override AI direction when player presses key
     } else if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) {
         velocity.x += acceleration * time.delta_secs();
+        hero.move_direction = 1.0;  // Override AI direction when player presses key
     }
 
-    // Cap max horizontal velocity
-    velocity.x = velocity.x.clamp(-500.0, 500.0);
+    // Cap max horizontal velocity (higher than AI clamp so player can boost past it)
+    velocity.x = velocity.x.clamp(-600.0, 600.0);
 }
 
 fn handle_block_damage(

@@ -2,7 +2,7 @@
 REM MineHeads Release Script - Simple batch version
 setlocal
 
-set VERSION=0.2.0
+set VERSION=0.2.5
 set DIST_FOLDER=MineHeads-v%VERSION%-Windows
 
 echo.

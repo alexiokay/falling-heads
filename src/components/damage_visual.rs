@@ -4,12 +4,21 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct DamageVisual {
     pub timer: Timer,
+    pub original_color: Color, // Store original base_color before red tint
 }
 
 impl DamageVisual {
     pub fn new(duration: f32) -> Self {
         Self {
             timer: Timer::from_seconds(duration, TimerMode::Once),
+            original_color: Color::WHITE, // Default, will be overwritten
+        }
+    }
+
+    pub fn with_original_color(duration: f32, color: Color) -> Self {
+        Self {
+            timer: Timer::from_seconds(duration, TimerMode::Once),
+            original_color: color,
         }
     }
 

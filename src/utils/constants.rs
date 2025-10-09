@@ -17,8 +17,8 @@ pub const VILLAGER_BOUNCE: f32 = 1.0;
 pub const ENEMY_BOUNCE: f32 = 1.0;  // Same as villagers
 pub const STANDARD_BOUNCE: f32 = 1.0;
 pub const NO_BOUNCE: f32 = 0.0;
-pub const MIN_BOUNCE_VELOCITY: f32 = 150.0;  // Minimum upward bounce from blocks
-pub const MAX_BOUNCE_VELOCITY: f32 = 300.0;  // Maximum upward bounce from blocks
+pub const MIN_BOUNCE_VELOCITY: f32 = 400.0;  // Minimum upward bounce from blocks
+pub const MAX_BOUNCE_VELOCITY: f32 = 400.0;  // Maximum upward bounce from blocks
 
 // Enemy behavior
 pub const SKELETON_SHOOT_INTERVAL: f32 = 2.0;  // seconds between shots
@@ -62,6 +62,9 @@ pub const WORM_TUNNEL_CHANCE_NETHER: f32 = 0.6;
 pub const TNT_FUSE_TIME: f32 = 3.0;            // seconds
 pub const TNT_EXPLOSION_RADIUS: f32 = 342.0;   // world units
 pub const TNT_DAMAGE: u32 = 3;                 // damage to entities (1.5 hearts)
+
+// Audio volumes (0.0 to 1.0)
+pub const EXPLOSION_VOLUME: f32 = 0.3;         // TNT explosion sounds
 
 // Laser
 pub const LASER_DURATION: f32 = 0.5;           // seconds

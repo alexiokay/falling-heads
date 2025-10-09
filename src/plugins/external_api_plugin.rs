@@ -1,11 +1,15 @@
 use bevy::prelude::*;
+use bevy::scene::SceneRoot;
 use crate::resources::command_queue::{PowerCommand, PowerCommandType};
-use crate::resources::asset_handles::{GameTextures, ProjectileTextures};
+use crate::resources::asset_handles::{GameTextures, ProjectileTextures, DragonAnimation};
 use crate::events::power_events::PowerActivated;
 use crate::components::hero::Hero;
 use crate::components::power_effect::SpeedModifier;
 use crate::plugins::powers_plugin::{spawn_tnt, spawn_laser, spawn_arrows, spawn_magic_barrier};
 use crate::systems::entity_spawn::spawn_villagers_around_position;
+use crate::components::enemy::{Enemy, EnemyType, Health, Dragon, DragonState, Flying, EnemyBehavior, DragonAnimationClip};
+use crate::components::bundles::PhysicsBundle;
+use crate::resources::asset_handles::EnemyModels;
 
 pub struct ExternalApiPlugin;
 
@@ -14,6 +18,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::collections::VecDeque;
 
 static COMMAND_QUEUE: OnceLock<Arc<Mutex<VecDeque<PowerCommand>>>> = OnceLock::new();
+
+/// Get access to the global command queue (for dev panel and other systems)
+pub fn get_command_queue() -> Option<Arc<Mutex<VecDeque<PowerCommand>>>> {
+    COMMAND_QUEUE.get().cloned()
+}
 
 impl Plugin for ExternalApiPlugin {
     fn build(&self, app: &mut App) {
@@ -75,6 +84,7 @@ fn start_api_server() {
             "MAGNET" => Some(PowerCommandType::Magnet),
             "VILLAGERS" => Some(PowerCommandType::Villagers),
             "MIRROR" => Some(PowerCommandType::Mirror),
+            "DRAGON" => Some(PowerCommandType::Dragon),
             _ => None,
         };
 
@@ -132,7 +142,11 @@ fn process_commands(
     hero_query: Query<(Entity, &Transform), With<Hero>>,
     textures: Res<GameTextures>,
     projectile_textures: Option<Res<ProjectileTextures>>,
+    enemy_models: Res<EnemyModels>,
+    dragon_animation: Option<Res<DragonAnimation>>,
     asset_server: Res<AssetServer>,
+    block_atlases: Option<Res<crate::resources::asset_handles::BlockAtlases>>,
+    mesh_cache: Option<Res<crate::resources::mesh_cache::MeshCache>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut power_events: MessageWriter<PowerActivated>,
@@ -151,9 +165,10 @@ fn process_commands(
         // Execute power immediately
         match command.command_type {
             PowerCommandType::Tnt => {
-                if let Ok((_, hero_transform)) = hero_query.single() {
+                if let (Ok((_, hero_transform)), Some(atlases), Some(mesh_cache)) =
+                    (hero_query.single(), block_atlases.as_ref(), mesh_cache.as_ref()) {
                     let spawn_pos = hero_transform.translation + Vec3::new(0.0, 50.0, 0.0);  // 2D scale
-                    spawn_tnt(&mut commands, spawn_pos, &textures, &mut meshes, &mut materials, Some(command.username.clone()), Some(&asset_server));
+                    spawn_tnt(&mut commands, spawn_pos, &atlases, &mesh_cache, &mut meshes, &mut materials, Some(command.username.clone()), Some(&asset_server));
                     info!("🧨 TNT power activated by {}!", command.username);
                 }
             }
@@ -220,10 +235,64 @@ fn process_commands(
                     info!("🪞 MIRROR barrier activated by {}!", command.username);
                 }
             }
+            PowerCommandType::Dragon => {
+                if let Ok((_, hero_transform)) = hero_query.single() {
+                    if let Some(dragon_anim) = dragon_animation.as_ref() {
+                        spawn_dragon(
+                            &mut commands,
+                            hero_transform.translation + Vec3::new(300.0, 200.0, 0.0), // Spawn above and to the right
+                            &enemy_models,
+                            dragon_anim,
+                            &mut meshes,
+                            &mut materials,
+                        );
+                        info!("🐉 DRAGON spawned by {}!", command.username);
+                    }
+                }
+            }
             _ => {
                 info!("⚡ Power {:?} activated by {} (not yet implemented)", command.command_type, command.username);
             }
         }
     }
+}
+
+fn spawn_dragon(
+    commands: &mut Commands,
+    position: Vec3,
+    enemy_models: &Res<EnemyModels>,
+    dragon_animation: &DragonAnimation,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    // Spawn dragon in front of camera to avoid background clipping
+    // Keep hero's Y (height), but move forward in Z and offset in X
+    let spawn_pos = Vec3::new(position.x + 400.0, position.y, 200.0);
+
+    // First target: fly to the left side of the screen
+    let target_position = Vec3::new(position.x - 600.0, position.y + 300.0, 200.0);
+
+    // Spawn dragon boss enemy using GLB model with animation
+    commands.spawn((
+        Enemy::new(EnemyType::Dragon),
+        Dragon {
+            state: DragonState::Emerging,
+            state_timer: 0.0,
+            hover_offset: 0.0,
+            hover_timer: 0.0,
+            target_position,
+            spawn_position: position,
+        },
+        Flying,  // Dragons ignore block collisions
+        Health::new(EnemyType::Dragon.max_health()),
+        PhysicsBundle::dragon(),
+        SceneRoot(enemy_models.dragon.clone()),
+        AnimationPlayer::default(),
+        DragonAnimationClip(dragon_animation.fly.clone()),  // Store animation clip handle
+        Transform::from_translation(spawn_pos)
+            .with_scale(Vec3::new(80.0, 80.0, 80.0))  // Much bigger!
+            .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+        Visibility::Visible,
+    ));
 }
 

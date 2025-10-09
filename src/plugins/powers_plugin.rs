@@ -32,6 +32,7 @@ impl Plugin for PowersPlugin {
             .add_systems(Update, (
                 tnt_countdown,
                 tnt_explosion,
+                update_explosion_animation,
                 laser_update,
                 update_arrow_barrage,
                 barrier_update,
@@ -47,8 +48,9 @@ impl Plugin for PowersPlugin {
 pub fn spawn_tnt(
     commands: &mut Commands,
     position: Vec3,
-    textures: &GameTextures,
-    meshes: &mut Assets<Mesh>,
+    block_atlases: &crate::resources::asset_handles::BlockAtlases,
+    mesh_cache: &crate::resources::mesh_cache::MeshCache,
+    meshes: &mut Assets<Mesh>,  // Still needed for username label
     materials: &mut Assets<StandardMaterial>,
     username: Option<String>,
     asset_server: Option<&AssetServer>,
@@ -56,21 +58,21 @@ pub fn spawn_tnt(
     use crate::components::physics::Gravity;
     use crate::systems::username_label_system::spawn_username_label;
 
-    // Spawn TNT as 3D cube with corrected texture orientation
+    // Spawn TNT as 3D cube using same UV-mapped mesh system as blocks
     let tnt_entity = commands.spawn((
         Tnt {
             timer: Timer::from_seconds(TNT_FUSE_TIME, TimerMode::Once),
         },
-        Mesh3d(meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))),
+        Mesh3d(mesh_cache.tnt_mesh.clone()),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::WHITE,
-            base_color_texture: Some(textures.tnt.clone()),
+            base_color_texture: Some(block_atlases.tnt.clone()),
             unlit: true,
             alpha_mode: AlphaMode::Blend,
-            ..default()  // Use default cull_mode (back-face culling)
+            // Use default backface culling - only show front faces
+            ..default()
         })),
-        Transform::from_translation(position)
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::PI)),  // Rotate 180° on X to flip texture upright
+        Transform::from_translation(position),  // No rotation needed - UVs are correct
         Velocity { x: 0.0, y: 0.0 },
         Gravity { force: -500.0 },
         // NO Bouncy component - TNT doesn't bounce
@@ -142,9 +144,62 @@ fn tnt_explosion(
     block_query: Query<(Entity, &Transform), With<Block>>,
     mut entity_query: Query<(Entity, &Transform, &mut Velocity), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
     mut damage_events: MessageWriter<EntityDamaged>,
+    explosion_textures: Option<Res<crate::resources::asset_handles::ExplosionTextures>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (explosion_entity, explosion, explosion_transform) in explosion_query.iter() {
         let explosion_pos = explosion_transform.translation;
+
+        // Spawn multiple explosion animation sprites around the TNT (like Minecraft)
+        if let Some(textures) = explosion_textures.as_ref() {
+            if !textures.frames.is_empty() {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+
+                // Spawn 12-16 explosion particles with random positions and delays
+                let particle_count = rng.gen_range(12..=16);
+                for i in 0..particle_count {
+                    // Random offset from explosion center - match explosion radius
+                    let max_offset = TNT_EXPLOSION_RADIUS * 0.8; // 80% of explosion radius
+                    let offset_x = rng.gen_range(-max_offset..max_offset);
+                    let offset_y = rng.gen_range(-max_offset..max_offset);
+
+                    // Staggered delays - spread explosions over 0-1200ms (much longer)
+                    let delay_ms: f32 = rng.gen_range(0.0..0.6); // 0-1200ms delay
+
+                    // Smaller random size variation (2x smaller)
+                    let size = rng.gen_range(85.0..150.0);
+
+                    // Random Z position for depth
+                    let z_offset = rng.gen_range(15.0..25.0);
+
+                    commands.spawn((
+                        crate::components::explosive::ExplosionAnimation {
+                            timer: Timer::from_seconds(0.01, TimerMode::Repeating), // 20ms per frame (much faster)
+                            current_frame: 0,
+                            total_frames: 24,
+                            delay_timer: Timer::from_seconds(delay_ms, TimerMode::Once), // Delay before starting
+                            started: false,
+                        },
+                        Mesh3d(meshes.add(Rectangle::new(size, size))),
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::WHITE,
+                            base_color_texture: Some(textures.frames[0].clone()),
+                            unlit: true,
+                            alpha_mode: AlphaMode::Blend,
+                            ..default()
+                        })),
+                        Transform::from_translation(Vec3::new(
+                            explosion_pos.x + offset_x,
+                            explosion_pos.y + offset_y,
+                            z_offset,
+                        )),
+                        Visibility::Hidden, // Start hidden until delay finishes
+                    ));
+                }
+            }
+        }
 
         // Destroy all blocks in radius
         for (block_entity, block_transform) in block_query.iter() {
@@ -186,6 +241,61 @@ fn tnt_explosion(
 
         // Clean up explosion entity immediately
         commands.entity(explosion_entity).despawn();
+    }
+}
+
+/// Update explosion animation frames
+fn update_explosion_animation(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut explosion_query: Query<(Entity, &mut crate::components::explosive::ExplosionAnimation, &MeshMaterial3d<StandardMaterial>, &mut Visibility)>,
+    explosion_textures: Option<Res<crate::resources::asset_handles::ExplosionTextures>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
+) {
+    let Some(textures) = explosion_textures.as_ref() else {
+        return;
+    };
+
+    for (entity, mut animation, material_handle, mut visibility) in explosion_query.iter_mut() {
+        // If animation hasn't started yet, tick the delay timer
+        if !animation.started {
+            animation.delay_timer.tick(time.delta());
+            if animation.delay_timer.is_finished() {
+                animation.started = true; // Start the animation
+                *visibility = Visibility::Visible; // Make visible when animation starts
+
+                // Play random explosion sound when animation starts
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let sound_index = rng.gen_range(1..=4);
+                let sound_path = format!("audio/sfx/explode/explode{}.ogg", sound_index);
+                commands.spawn((
+                    AudioPlayer::new(asset_server.load(sound_path)),
+                    PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(EXPLOSION_VOLUME)),
+                ));
+            } else {
+                continue; // Keep waiting (particle stays hidden)
+            }
+        }
+
+        // Animation is running
+        animation.timer.tick(time.delta());
+
+        if animation.timer.just_finished() {
+            animation.current_frame += 1;
+
+            if animation.current_frame >= animation.total_frames {
+                // Animation finished - despawn explosion sprite
+                commands.entity(entity).despawn();
+            } else {
+                // Update to next frame (clamp to available frames)
+                let frame_index = animation.current_frame.min(15); // Max 15 (0-15 frames)
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    material.base_color_texture = Some(textures.frames[frame_index].clone());
+                }
+            }
+        }
     }
 }
 

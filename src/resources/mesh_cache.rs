@@ -11,6 +11,7 @@ pub struct MeshCache {
     pub enemy_mesh: Handle<Mesh>,   // Shared Rectangle mesh for enemies
     pub resource_mesh: Handle<Mesh>,  // Shared Sphere mesh for resources
     pub arrow_mesh: Handle<Mesh>,   // Shared 3D arrow mesh (thin rectangular prism)
+    pub tnt_mesh: Handle<Mesh>,     // Shared UV-mapped cube for TNT (same UV system as blocks)
 }
 
 impl MeshCache {
@@ -24,6 +25,7 @@ impl MeshCache {
             enemy_mesh: meshes.add(Rectangle::new(64.0, 64.0)),
             resource_mesh: meshes.add(Sphere::new(0.15)),
             arrow_mesh: meshes.add(create_arrow_mesh()),
+            tnt_mesh: meshes.add(create_uv_cube(64.0, UVLayout::tnt())),  // Directional TNT with 4x1 atlas
         }
     }
 }

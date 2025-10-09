@@ -1,8 +1,374 @@
 # MineHeads - Release Notes
 
+## Version 0.2.10 - Physics & AI Movement Fixes (October 9, 2025)
+
+### ⚙️ Character-to-Character Physics Improvements
+- **IMPROVED**: Character collisions now use unconditional velocity swapping
+  - Simple elastic collision physics (billiard ball style)
+  - Restitution applied to both horizontal and vertical bounces
+  - Separation clamped to 100 units to prevent teleportation
+  - Removed "approaching check" that caused sticking issues
+- **FIXED**: Characters now bounce naturally from all angles
+  - Bouncing from heads, sides, all directions feels consistent
+  - No more sticking together in clusters
+  - Ball-like physics behavior achieved
+
+### 🎮 AI Movement System Overhaul
+- **FIXED**: AI no longer interferes with player/physics velocity
+  - AI only applies movement when velocity < 50 (nearly stationary)
+  - Prevents AI from killing existing momentum from bounces/player input
+  - Character preserves velocity from physics interactions
+- **NEW**: Turbo-aware AI movement
+  - When SpeedModifier (turbo/speed boost) is active, AI continues to help
+  - Allows AI to provide extra momentum even when already moving
+  - Better feel when using speed power-ups
+- **IMPROVED**: Direction changes only when stationary
+  - AI direction timer only triggers when velocity < 50
+  - Prevents erratic direction flips during bouncing
+
+### 🏐 Horizontal vs Vertical Bounce Parity
+- **FIXED**: Horizontal wall bounces now match vertical bounce power
+  - Horizontal collisions now apply restitution coefficient
+  - Was: `velocity.x = -velocity.x * 1.0` (no energy loss)
+  - Now: `velocity.x = -velocity.x * bouncy.restitution` (consistent physics)
+  - Characters bounce off walls with same energy as bouncing off floor
+
+### 🛡️ Crash Prevention
+- **FIXED**: Integer overflow crash in spatial hash system
+  - Used `saturating_add()` instead of regular addition
+  - Prevents panic when extreme positions occur from velocity accumulation
+  - Game no longer crashes when many villagers cluster together
+
+### 🔧 Technical Details
+- **Files Modified**:
+  - `src/plugins/physics_plugin.rs` - Character collision physics, AI movement logic
+  - `src/resources/spatial_hash.rs` - Overflow protection with saturating math
+- **Physics Constants**:
+  - MAX_BOUNCE_VELOCITY: 400.0 (horizontal)
+  - MAX_BOUNCE_VELOCITY * 2.0: 800.0 (vertical)
+  - Separation clamp: 100.0 units
+  - AI activation threshold: 50.0 velocity
+- **AI Behavior**:
+  - Checks for `SpeedModifier` component (turbo power)
+  - Applies movement when `velocity.x.abs() < 50.0 || has_turbo`
+  - Maintains VILLAGER_MOVE_SPEED and VILLAGER_MAX_SPEED constants
+
+### 📊 Physics Comparison
+| Aspect | Before | After |
+|--------|--------|-------|
+| Horizontal bounce | No restitution (1.0x) | Restitution applied |
+| AI interference | Active at velocity < 300 | Only at < 50 or with turbo |
+| Character collisions | Complex formulas | Simple velocity swap |
+| Spatial hash | Panic on overflow | Saturating math |
+| Cluster behavior | Teleporting/sticking | Natural bouncing |
+
+---
+
+## Version 0.2.9 - Dragon Boss System & Dev Panel Hotkey (October 9, 2025)
+
+### ⌨️ Dev Panel Hotkey
+- **NEW**: Tab key toggle for dev panel
+  - Press `Tab` during gameplay to instantly open/close dev panel
+  - No need to navigate through Settings menu
+  - Quick access to weather controls, powers, and biome teleport
+  - Visual feedback in console when toggled
+- **IMPROVED**: Dev panel now has keyboard shortcut accessibility
+  - Settings menu toggle still available
+  - Both methods work simultaneously
+
+### 🐉 Dragon Boss Enemy (Work in Progress)
+- **NEW**: Ender Dragon boss mob spawnable via DRAGON command
+  - 3D animated dragon model (minecraft_dragon_-_free_-_black_and_white.glb)
+  - **SCALE**: 80x size - massive, impressive boss appearance
+  - **HIGH HP**: 20 health points (10x more than regular enemies)
+  - **FLYING AI**: Ignores block collisions, flies through the air
+
+- **NEW**: Dragon State Machine AI
+  - **Emerging**: Flies onto screen from right to left (400 units)
+  - **Flying**: Active flight with dynamic movement (200 units/s)
+  - **Hovering**: Floats in place with sine wave bobbing
+  - **Landing**: Smart descent to exposed surface blocks only
+  - **Landed**: Sits on blocks for 3 seconds before taking off again
+
+- **NEW**: Smart Landing System
+  - Dragons only land on exposed blocks (not buried blocks)
+  - Clearance checking: 6 blocks height + 3 blocks radius
+  - Avoids landing in cramped spaces
+  - Finds nearest valid landing spot within 800 unit radius
+
+- **NEW**: Dynamic Flight Behavior
+  - Rotation toward flight direction (yaw, pitch, roll)
+  - Hover bobbing effect (30 unit amplitude sine wave)
+  - Random flight patterns (70% land, 30% keep flying)
+  - 40% chance to fly offscreen after landing
+
+- **COMPONENTS**: Dragon-specific systems
+  - `Dragon` - State machine component with timer, hover offset, targets
+  - `DragonState` - Enum: Emerging, Flying, Hovering, Landing, Landed
+  - `Flying` - Marker component to bypass block collision
+  - `DragonAnimationClip` - Stores animation handle for future animation
+
+- **NOTE**: Animation system infrastructure added but playback disabled
+  - Bevy 0.17 AnimationGraph API requires complex setup
+  - Dragon flies and behaves correctly without wing animation
+  - Wing flapping animation TODO for future update
+
+### 📦 Dragon Asset System
+- **MODELS**: Three dragon GLB models available
+  - `realistic_dragon_minecraft.glb` - Original, no animations (unused)
+  - `minecraft_ender_hydra_3_headed_ender_dragon.glb` - 3-headed variant (unused)
+  - `minecraft_dragon_-_free_-_black_and_white.glb` - **Active model** with built-in "fly" animation
+
+- **ANIMATION LOADING**:
+  - Dragon animation clip loaded via `GltfAssetLabel::Animation(0)`
+  - Stored in `DragonAnimation` resource
+  - Animation system searches GLB hierarchy for AnimationPlayer component
+
+### 🔧 Technical Details
+- **Dev Panel Hotkey**:
+  - Added `toggle_dev_panel_with_tab()` system to dev_panel_system.rs
+  - Listens for `KeyCode::Tab` and toggles `GameSettings.dev_mode`
+  - Works alongside existing Settings menu toggle
+
+- **Dragon System Files Created**:
+  - `src/systems/dragon_ai_system.rs` - Complete dragon AI and movement
+  - `src/systems/dragon_animation_system.rs` - Animation infrastructure (WIP)
+  - `inspect_glb.py` - Python GLB model analyzer tool
+
+- **Dragon System Files Modified**:
+  - `src/plugins/asset_loader_plugin.rs` - Dragon model and animation loading
+  - `src/plugins/external_api_plugin.rs` - spawn_dragon() function, DRAGON command
+  - `src/plugins/gameplay_plugin.rs` - Added dragon_ai_system to game loop
+  - `src/plugins/physics_plugin.rs` - Exclude Flying entities from collisions
+  - `src/components/enemy.rs` - Dragon, DragonState, Flying, DragonAnimationClip
+  - `src/components/bundles.rs` - PhysicsBundle::dragon() with minimal gravity
+  - `src/resources/asset_handles.rs` - EnemyModels, DragonAnimation resources
+  - `src/resources/command_queue.rs` - PowerCommandType::Dragon
+  - `src/systems/mod.rs` - Export dragon systems
+
+- **Constants**:
+  - `DRAGON_FLIGHT_SPEED`: 200.0 - Fast flight speed
+  - `HOVER_AMPLITUDE`: 30.0 - Vertical bobbing range
+  - `HOVER_FREQUENCY`: 2.0 - Bobbing speed
+  - `FLYING_DURATION`: 4.0s - Time to fly across screen
+  - `HOVERING_DURATION`: 2.0s - Time to hover in place
+  - `LANDED_DURATION`: 3.0s - Time sitting on blocks
+
+### 🎮 Future Dragon Plans (NOT IMPLEMENTED)
+- Kill dragon to collect dragon eggs (drops)
+- Dragon egg collection unlocks friendly dragon summon power
+- Friendly dragon does flyby fire attack and leaves
+- Dragon boss battles and level completion mechanics
+- Dragon fireball attacks while flying
+- Full wing flapping animation with Bevy 0.17 AnimationGraph
+- Multiple dragon variants (3-headed hydra, different colors)
+
+---
+
+## Version 0.2.8 - Death Particle System & Collision Fixes (October 9, 2025)
+
+### 💀 Death Particle System
+- **NEW**: Textured death particles when characters die
+  - Particles use actual character textures (not solid colors)
+  - Characters fragment into 8-12 textured pieces
+  - Each particle shows piece of character's skin/material
+  - Example: Black skeleton spawns black bone texture particles, white skeleton spawns white bone particles
+- **NEW**: Dynamic particle physics with rotation
+  - Random velocities: explosive scatter effect
+  - Gravity applied: particles fall realistically
+  - **Random initial rotation**: Each particle spawns at random angle (0-360° all axes)
+  - **Spinning motion**: Particles rotate while falling (-5 to +5 rad/sec per axis)
+  - **Size variation**: 6-18 units base with non-uniform scaling (0.8-1.2x per axis)
+  - **Lifetime**: 1.5-2.5 seconds (longer for natural tumbling effect)
+  - Upward bias: particles fly up before falling (100-400 units/s vertical)
+
+### 🛡️ Dead Entity Collision Fix
+- **FIXED**: Dead characters no longer interact with game
+  - Dead entities excluded from hero melee damage system
+  - Dead entities excluded from enemy collision damage
+  - Dead entities excluded from arrow collision
+  - Prevents duplicate death particles from hitting corpses
+- **IMPROVED**: Death animation isolation
+  - Entities with `DeathAnimation` component ignored by collision systems
+  - Entities with `MarkedForDeath` component ignored by collision systems
+  - Clean death animation without interference
+
+### 🎨 Damage Visual Color Fix
+- **FIXED**: Death particles no longer affected by red damage overlay
+  - DamageVisual component now stores `original_color` before red tint
+  - Death particles use stored original color (not red-tinted material)
+  - Particles show true character appearance even when damaged
+- **FIXED**: Progressive red tinting bug
+  - When entity gets damaged multiple times, system now reuses stored original color
+  - Prevents entities from becoming progressively redder with each hit
+  - Hero no longer turns permanently red from repeated arrow hits
+- **IMPROVED**: Material color restoration
+  - Damage visual resets to original color (not just white)
+  - Preserves character color tints and variations
+  - Better visual consistency
+
+### 🔧 Technical Details
+- **Files Modified**:
+  - `src/systems/death_particle_system.rs` - Textured particles with rotation and size variation
+  - `src/components/death_particle.rs` - Added `rotation_velocity` field
+  - `src/components/damage_visual.rs` - Added `original_color` field to DamageVisual
+  - `src/systems/damage_visual_system.rs` - Store/restore original color, prevent red accumulation
+  - `src/plugins/physics_plugin.rs` - Exclude dead entities from collisions
+  - `src/systems/projectile_system.rs` - Arrows ignore dead enemies
+  - `src/main.rs` - Added DeathParticlePlugin
+- **New Components**:
+  - `DeathParticle { velocity: Vec3, rotation_velocity: Vec3, lifetime: Timer }` - Particle physics with rotation
+- **Death Particle Pipeline**:
+  1. Entity dies → EntityDied event
+  2. Get entity's material and DamageVisual
+  3. Clone material with original_color (pre-damage)
+  4. Spawn 8-12 particles with random rotation and size
+  5. Apply physics (velocity + gravity + rotation)
+  6. Despawn after lifetime
+- **Rotation System**:
+  - Initial rotation: Random quaternion on all axes (0-2π)
+  - Angular velocity: -5 to +5 rad/sec on each axis
+  - Update: `rotation = rotation * delta_rotation` each frame
+
+### 📊 Death Particle Specs
+| Property | Value | Notes |
+|----------|-------|-------|
+| Particle count | 8-12 | Random per death |
+| Particle size | 6-18 units base | Random variation |
+| Size scaling | 0.8-1.2x per axis | Non-uniform for realism |
+| Velocity X | -300 to 300 units/s | Horizontal scatter |
+| Velocity Y | 100 to 400 units/s | Upward explosion |
+| Velocity Z | -50 to 50 units/s | Depth variation |
+| Rotation velocity | -5 to +5 rad/s | Per axis (X, Y, Z) |
+| Initial rotation | 0-360° per axis | Random start angle |
+| Gravity | -800 units/s² | Realistic fall |
+| Lifetime | 1.5-2.5s | Random duration (increased) |
+| Material | Clone of character | With original color |
+| Texture | Character texture | Actual skin pieces |
+
+---
+
+## Version 0.2.7 - TNT Visual Overhaul & Physics Improvements (October 9, 2025)
+
+### 💥 TNT Visual & Audio Enhancements
+- **NEW**: TNT now uses directional 3D cube mesh with proper textures
+  - Custom UV-mapped 4x1 atlas: tnt_top | tnt_bottom | tnt_side | tnt_side
+  - Removed upside-down texture hack (180° rotation)
+  - Fixed backface culling - correct mesh winding order for all faces
+  - TNT appears correctly oriented from all angles
+- **NEW**: Minecraft-style explosion particle animation system
+  - 16-frame explosion animation (assets/textures/effects/explosion/explosion_0-15.png)
+  - 12-16 particles per explosion with random positioning
+  - Particles spawn across full explosion radius (±273 units, 80% of TNT_EXPLOSION_RADIUS)
+  - Staggered delays (0-1200ms) - particles appear gradually over 1.2 seconds
+  - Fast animation speed (20ms per frame, 320ms total per particle)
+  - Particles hidden until delay finishes (proper visibility control)
+  - Particle size variation: 75-125 units (2x smaller than initial)
+  - Total explosion effect duration: ~1.7 seconds
+- **NEW**: Dynamic explosion sound system
+  - 4 random explosion sounds (explode1-4.ogg) play as particles appear
+  - Volume controlled via constant: EXPLOSION_VOLUME = 0.3 (30%)
+  - Sounds spread over 1.2 seconds matching particle stagger
+  - Creates realistic cascading explosion audio
+
+### 🎯 TNT Physics Improvements
+- **IMPROVED**: TNT collision with characters now velocity-based
+  - Characters pushed based on TNT's velocity (not fixed force)
+  - Horizontal: 40% of TNT velocity transferred
+  - Vertical: 60% of TNT velocity pushes characters down
+  - TNT bounces off characters (40% bounce vertically, -50% horizontally)
+- **FIXED**: TNT no longer clips through characters
+  - Full separation on collision (no partial overlap)
+  - Characters can't "hold" falling TNT on their head
+  - TNT bounces dynamically instead of getting stuck
+- **FIXED**: TNT no longer gets stuck in mid-air
+  - Added ground check system - TNT "wakes up" if block underneath is destroyed
+  - Checks for supporting block every frame when settled (gravity = 0)
+  - Prevents floating TNT when blocks are destroyed beneath it
+- **FIXED**: TNT grounding logic improved
+  - TNT touching characters can't be marked as grounded
+  - Prevents TNT from freezing in air near characters
+  - Gravity re-enabled properly when not truly settled
+- **FIXED**: Character jumping on TNT no longer pushes TNT into ground
+  - Characters bounce off TNT instead
+  - TNT only gets slight downward velocity if not grounded
+  - Prevents TNT from clipping into blocks below
+
+### 🔧 Technical Details
+- **Files Modified**:
+  - `src/resources/cube_mesh.rs` - Fixed mesh winding order for proper backface culling
+  - `src/resources/asset_handles.rs` - Added TNT textures and ExplosionTextures resource
+  - `src/plugins/asset_loader_plugin.rs` - Load 16 explosion frames
+  - `src/plugins/powers_plugin.rs` - TNT material, explosion animation, sound system
+  - `src/components/explosive.rs` - Added ExplosionAnimation component
+  - `src/plugins/physics_plugin.rs` - Velocity-based TNT collision, ground check, character interaction
+  - `src/utils/constants.rs` - Added EXPLOSION_VOLUME constant
+- **New Components**:
+  - `ExplosionAnimation` - tracks frame timer, delay timer, current frame, visibility state
+- **Mesh Optimization**: TNT uses shared mesh from MeshCache (64x64 cube)
+- **Audio API**: Uses `PlaybackSettings::DESPAWN.with_volume(Volume::Linear(0.3))`
+
+### 📊 TNT Explosion Specs
+| Property | Value | Notes |
+|----------|-------|-------|
+| Particles per explosion | 12-16 | Random count |
+| Particle size | 75-125 units | 2x smaller, varied |
+| Particle delay | 0-1200ms | Staggered start |
+| Frame duration | 20ms | Fast animation |
+| Frames per particle | 16 | explosion_0 to explosion_15 |
+| Particle lifetime | ~320ms | After delay finishes |
+| Total effect duration | ~1.7s | Including delays |
+| Explosion radius | 342 units | TNT_EXPLOSION_RADIUS |
+| Particle spread | ±273 units | 80% of radius |
+| Sound volume | 30% | EXPLOSION_VOLUME constant |
+| Sound files | 4 variants | explode1-4.ogg |
+
+---
+
+## Version 0.2.6 - Dev Panel Power Buttons & Menu Navigation Fix (October 8, 2025)
+
+### =' Dev Panel Enhancements
+- **NEW**: Power buttons added to dev mode UI
+  - 8 instant-trigger power buttons: TNT, FAST, SLOW, ARROW, LASER, MIRROR, VILLAGERS, GHAST
+  - Click buttons to activate powers instantly (no API needed)
+  - Visual feedback: Green flash on activation, hover effects
+  - Powers use same system as API commands (global command queue)
+- **Location**: Dev panel appears on right side when dev mode enabled
+- **Toggle**: Enable/disable dev mode in Settings menu
+
+### <� Menu Navigation Fix
+- **FIXED**: ESC key now works in Settings menu
+  - Previously: ESC only worked in Playing � Paused states
+  - Now: ESC works in Settings � Paused (go back to pause menu)
+  - Navigation flow: Playing � Paused � Settings � Paused � Playing
+- **System**: Added `toggle_pause` to Settings state update loop
+
+### = Bug Fixes
+- **FIXED**: Power buttons now correctly trigger effects
+  - Dev panel now uses global `COMMAND_QUEUE` instead of separate resource
+  - Powers execute through same pipeline as API commands
+  - Added `get_command_queue()` accessor function
+
+### =' Technical Details
+- **Files Modified**:
+  - `src/systems/dev_panel_system.rs` - Power button handler uses global queue
+  - `src/plugins/external_api_plugin.rs` - Added `get_command_queue()` public function
+  - `src/plugins/ui_plugin.rs` - Added `toggle_pause` to Settings state
+  - `src/components/dev_panel.rs` - Added `PowerButton` component
+  - `src/systems/pause_menu_system.rs` - Added Settings � Paused ESC handling
+
+### =� Dev Panel Controls
+| Section | Controls | Description |
+|---------|----------|-------------|
+| Weather | 6 buttons | Clear, Rain, Snow, Sandstorm, Ash Storm, Fire Rain |
+| Powers | 8 buttons | TNT, FAST, SLOW, ARROW, LASER, MIRROR, VILLAGERS, GHAST |
+| Info | Live status | Current weather type and intensity |
+
+---
+
 ## Version 0.2.5 - Weather Particle Improvements (October 8, 2025)
 
-### 🌧️ Weather Particle Visual Enhancements
+### <' Weather Particle Visual Enhancements
 - **IMPROVED**: Weather particles are now 1.5x bigger (192x768 from 128x512)
   - Size variation: 0.9x to 1.3x for natural variety
   - Much more visible, especially snow particles
@@ -14,7 +380,7 @@
   - Other weather: 3.0 particles/0.1s
   - Prevents slow-moving particles from accumulating on screen
 
-### 🌨️ Weather Particle Lifetime System
+### <( Weather Particle Lifetime System
 - **NEW**: Weather-type-specific particle lifetimes
   - Rain: 3s (fast falling, reaches bottom quickly)
   - Snow: 12s (slow drift, needs time to cross screen)
@@ -27,7 +393,7 @@
   - Previous 5s lifetime was too short for slow-falling snow
   - Now properly crosses entire screen before despawning
 
-### 🎨 Weather Particle Movement & Distribution
+### <� Weather Particle Movement & Distribution
 - **IMPROVED**: Snow movement tuned for realistic drift
   - Horizontal drift: -60 to 60 units
   - Fall speed: -120 to -180 units (slower, more gentle)
@@ -43,14 +409,14 @@
   - Despawn when far below camera (500 units)
   - Creates seamless overlay effect
 
-### 🔧 Technical Details
+### =' Technical Details
 - **Files Modified**:
   - `src/systems/weather_system.rs` - Particle size, lifetime, spawning, distribution
   - `src/resources/weather_config.rs` - Updated PARTICLE_LIFETIME constant documentation
 - **Query Optimization**: Uses `windows.iter().next()` for proper window dimension access
 - **Performance**: Reduced particle counts prevent excessive spawning while maintaining visual quality
 
-### 📊 Particle Lifetime Comparison
+### =� Particle Lifetime Comparison
 | Weather Type | Old Lifetime | New Lifetime | Reason |
 |--------------|--------------|--------------|--------|
 | Rain | 5s | 3s | Fast falling, optimized |
@@ -59,229 +425,3 @@
 | AuroraStorm | 5s | **15s** | Very slow floating |
 | Sandstorm | 5s | 10s | Moderate horizontal |
 | AshStorm | 5s | 12s | Erratic movement |
-
----
-
-## Version 0.2.5 - 3D Arrow Model & Improved Collision (October 8, 2025)
-
-### 🏹 3D Arrow Model System
-- **NEW**: Arrows now use proper 3D GLB models instead of 2D textures
-  - Model file: `assets/models/projectiles/arrow2.glb`
-  - Scale: 15x for proper visibility
-  - Automatic rotation based on velocity direction
-  - Loaded via `GltfAssetLabel::Scene(0).from_asset()` (Bevy 0.17)
-- **Visual Upgrade**: Arrows look like actual 3D objects with depth and proper perspective
-- **Model Source**: Exported from Blender with standard PBR materials (not SpecularGlossiness)
-
-### 🎯 Tip-Based Collision Detection
-- **IMPROVED**: Arrows now use tip-based collision instead of circular hitbox
-  - Arrow tip calculated 40 units ahead along velocity direction
-  - Collision radius reduced from 30.0 → 10.0 (thin point)
-  - Arrows only hit when **tip** penetrates target, not when body passes nearby
-- **Bug Fix**: Arrows no longer hit when flying sideways past characters
-- **More Accurate**: Collision detection matches visual arrow trajectory
-- **Physics**: Proper line-based collision for long thin projectiles
-
-### 🔗 Parent-Child Transform Hierarchy
-- **IMPROVED**: Stuck arrows now use Bevy's parent-child entity system
-  - Arrows become **child entities** of hit targets using `set_parent_in_place()`
-  - Transform updates handled automatically by Bevy's `TransformPropagateSystem`
-  - **Zero lag**: Arrows perfectly follow entities when jumping/moving
-  - **Performance boost**: No manual position queries every frame
-- **Transform Preservation**: Rotation and scale preserved when arrow sticks
-  - Rotation frozen at impact angle
-  - Scale maintained at 15x
-  - Local coordinates used for offset positioning
-
-### 🐛 Bug Fixes
-- **FIXED**: Arrows moving away from characters during movement
-  - Old system: Manual position update every frame (laggy)
-  - New system: Parent-child hierarchy (automatic, zero lag)
-- **FIXED**: Stuck arrows appearing at wrong angles
-  - Now preserves rotation from impact moment
-- **FIXED**: Arrow hitbox too wide causing false hits
-  - Changed from circular (30.0 radius) to tip-based (10.0 radius)
-- **FIXED**: GLB model loading with unsupported extensions
-  - User re-exported model from Blender with standard PBR materials
-  - Changed from `arrow.glb` to `arrow2.glb`
-
-### ⚡ Performance Improvements
-- **Parent-child hierarchy** is more performant than manual updates:
-  - **Before**: Query parent transform + write arrow transform for every stuck arrow (per frame)
-  - **After**: Zero cost - Bevy's transform system handles it automatically
-  - Removed entire `entity_transforms` query from running every frame
-  - SIMD-optimized and cache-friendly transform propagation
-- **One-time setup cost** at impact, but better runtime performance
-
-### 🔧 Technical Details
-- **Files Modified**:
-  - `src/systems/projectile_system.rs` - Tip-based collision, parent-child hierarchy
-  - `src/systems/enemy_ai_system.rs` - 3D arrow spawning with SceneRoot
-  - `src/plugins/powers_plugin.rs` - Hero arrow barrage with 3D model
-  - `src/plugins/asset_loader_plugin.rs` - GLB model loading
-  - `src/resources/asset_handles.rs` - ProjectileModels resource
-- **Arrow Offset Adjustment**: 20-unit forward adjustment along velocity for GLB model origin
-- **Query Conflict Fix**: Added `Without<Block>` to arrow query to prevent Bevy ECS conflicts
-
-### 📊 Collision Detection Comparison
-| Method | Accuracy | Performance | False Positives |
-|--------|----------|-------------|-----------------|
-| Old: Circular (30.0 radius) | Low | Fast | High (hits when passing sideways) |
-| **New: Tip-based (10.0 radius)** | **High** | **Fast** | **Low (only tip hits)** |
-
----
-
-## Version 0.2.5 - Username Labels for Twitch Integration (October 8, 2025)
-
-### 👥 Username Label System
-- **NEW**: Spawned villagers now display the Twitch viewer's username above their heads
-- **Rendering**: Uses Text2d with dual-camera setup (Camera3d + Camera2d overlay)
-- **Positioning**: Labels float above villagers, below hearts (same as heart system)
-- **Responsive Scaling**: Font size adapts to window resolution
-  - Formula: `(window_height / 720.0) * 16.0`
-  - At 720p: 16px font
-  - At 1440p: 32px font
-  - At 360p: 8px font
-- **Unique Colors**: Each username gets a vibrant color based on hash (HSL with 0.9 saturation)
-- **Stable Movement**: Sub-pixel rounding prevents jitter
-- **Performance**: Same as hearts (~0.01ms per label) - uses 3D→2D projection
-- **API Integration**: Works with VILLAGERS command
-  ```bash
-  curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \
-    -d '{"action":"VILLAGERS","username":"CoolViewer123"}'
-  ```
-
-### 🎥 Dual-Camera Architecture
-- **Camera3d**: Renders 3D game world (blocks, entities, hearts)
-  - Order: 0 (renders first)
-  - Clear color: Dark blue background
-- **Camera2d**: Renders 2D text overlays (username labels)
-  - Order: 1 (renders on top)
-  - Clear color: None (transparent, doesn't clear 3D scene)
-- **Benefits**:
-  - Text rendered in screen space (always crisp)
-  - No perspective distortion
-  - Proper layering (text on top of 3D)
-
-### 🎨 Visual Features
-- **World-to-Screen Projection**: Converts 3D villager positions to 2D screen coordinates
-- **Auto-hide**: Labels disappear when villagers go off-screen
-- **Color Variety**: 360 unique hues generated from username hash
-- **Centering**: Accounts for window dimensions dynamically
-
-### 🔧 Technical Implementation
-- **Files Added**:
-  - Updated `src/systems/username_label_system.rs` - Dual-camera projection system
-  - Updated `src/systems/entity_spawn.rs` - Username parameter in spawn functions
-  - Updated `src/main.rs` - Camera2d setup
-  - Updated `src/plugins/external_api_plugin.rs` - Username forwarding
-  - Updated `src/systems/background_system.rs` - Camera3d explicit query
-
-### 📊 Performance Comparison
-| Approach | Cost/Frame | Notes |
-|----------|------------|-------|
-| UI Overlay (initial) | ~0.1ms | World→Screen + UI layout |
-| 3D Rectangles | ~0.05ms | No actual text |
-| **Current: Text2d** | **~0.01ms** | Same as hearts, actual text |
-
-### 🎮 Gameplay Impact
-- ✅ Viewers can see their username above "their" villagers
-- ✅ Easy to identify which villagers belong to which viewer
-- ✅ Labels resize properly when window is resized
-- ✅ Smooth following, no jitter or lag
-- ✅ Professional MMO-style nameplate system
-
-### 🐛 Bug Fixes
-- **FIXED**: Camera2d not interfering with 3D background rendering
-- **FIXED**: Username labels positioned correctly in 2D screen space
-- **FIXED**: Text size scaling with window resolution
-- **FIXED**: Sub-pixel jitter by rounding screen coordinates
-
----
-
-## Version 0.2.5 - Mirror Power & Projectile Fixes (October 7, 2025)
-
-### 🪞 New Power: Magic Barrier (MIRROR)
-- **NEW**: Mirror power creates a protective shield that reflects projectiles
-  - Duration: 8 seconds
-  - Radius: 150 units
-  - Visual: Cyan semi-transparent circular barrier
-  - Follows hero as they move
-  - Reflects both arrows and snowballs back at enemies
-  - **Team Switching**: Reflected projectiles change teams (enemy → friendly, friendly → enemy)
-  - Amplifies reflected velocity by 1.2x for dramatic effect
-- **Component**: `MagicBarrier` ([src/components/projectile.rs:82-87](src/components/projectile.rs:82-87))
-- **Systems**:
-  - `spawn_magic_barrier()` - Creates barrier around hero
-  - `barrier_update()` - Follows hero and manages lifetime
-  - `barrier_reflect_projectiles()` - Reflects and switches team affiliation
-- **API**: Available via `curl -X POST http://localhost:3029/command -d '{"action":"MIRROR"}'`
-
-### 🔧 Bug Fixes
-- **FIXED**: Snowballs no longer go through walls
-  - Added block collision detection using spatial hash (same as arrows)
-  - Snowballs now despawn on wall impact ([src/systems/frozen_system.rs:42-61](src/systems/frozen_system.rs:42-61))
-  - Uses proper 2D distance calculation (ignores Z axis)
-  - Collision radius: snowball (12.0) + block (32.0)
-
-### 🎮 Gameplay Improvements
-- Reflected projectiles now properly damage their new team
-  - Enemy arrows reflected by barrier will hit enemies
-  - Enemy snowballs reflected by barrier will freeze enemies
-  - Creates strategic defensive gameplay
-
-## Version 0.2.5 - Architecture Refactoring (October 6, 2025)
-
-### 🏗️ Architecture Improvements
-
-#### AssetLoaderPlugin
-- **NEW**: Centralized asset loading plugin (`src/plugins/asset_loader_plugin.rs`)
-- **Clean main.rs**: Removed 150+ lines of asset loading code
-- **Organization**: All texture loading in one place
-- **Startup**: Loads all assets (textures, blocks, enemies, projectiles) during startup
-- **Logging**: Clear initialization messages for debugging
-
-#### SystemSets
-- **NEW**: Explicit system execution ordering (`src/utils/system_sets.rs`)
-- **Predictable**: Systems run in defined order: Input → AI → Physics → Combat → Effects → World → Visual → UI
-- **No Race Conditions**: `.chain()` ensures exact execution sequence
-- **Flexibility**: Easy to add new systems to specific phases
-- **Best Practice**: Follows Bevy 0.17 system ordering patterns
-
-#### Config Files (RON)
-- **NEW**: Data-driven configuration files in `assets/configs/`
-- **enemies.ron**: Enemy stats (health, speed, damage, shoot intervals)
-- **biomes.ron**: Biome configuration (blocks, ores, enemies, spawn rates)
-- **projectiles.ron**: Projectile properties (speed, damage, lifetime, size)
-- **Future**: Systems can load from configs instead of hardcoded values
-
-#### Trait Abstractions (Priority 2) - Complete Polymorphic Architecture
-- **NEW**: **ProjectileBehavior** trait ([src/components/projectile.rs:12](src/components/projectile.rs:12))
-  - Methods: `team()`, `damage()`, `should_despawn()`, `update()`, `push_force()`, `on_hit()`
-  - Implemented for `Arrow` (150 push, 1 dmg) and `Snowball` (50 push, 0 dmg, freeze effect)
-  - Extensible: Add fireballs, ice shards, magic missiles with consistent interface
-
-- **NEW**: **EnemyBehavior** trait ([src/components/enemy.rs:16](src/components/enemy.rs:16))
-  - Methods: `max_health()`, `movement_speed()`, `shoot_interval()`, `color()`, `attack_damage()`, `can_shoot()`
-  - Implemented for all enemies: Zombie (3HP, 0.6 speed), Skeleton (2HP, 0.8 speed, shoots every 3s), Yeti (5HP, 1.0 speed, snowballs every 2s)
-  - Centralized stats: No more scattered hardcoded values
-
-- **NEW**: **PowerBehavior** trait ([src/resources/command_queue.rs:10](src/resources/command_queue.rs:10))
-  - Methods: `name()`, `description()`, `cooldown()`, `category()`, `requires_hero()`
-  - Implemented for 12 powers: TNT, FAST, SLOW, ARROW, LASER, VILLAGERS, MIRROR, etc.
-  - Categorized: Offensive, Movement, Defensive, Summoning, Utility
-  - Cooldowns ready for UI: TNT (3s), ARROW (15s), VILLAGERS (20s), FAST/SLOW (10s)
-
-- **NEW**: **BuffBehavior** trait ([src/components/buff.rs:4](src/components/buff.rs:4))
-  - Methods: `name()`, `overlay_color()`, `damage_per_tick()`, `velocity_multiplier()`, `is_beneficial()`
-  - Implemented for 6 status effects: Burning (1 dmg/tick), Freezing (0.5x speed), Poisoned (1 dmg/tick), Regeneration (-1 dmg/tick = heal), Speed (1.5x), Slowness (0.6x)
-  - Visual feedback via color overlays + automatic beneficial/harmful detection
-
-#### Code Quality & Best Practices
-- **Cleaner main.rs**: Reduced from ~220 lines to ~120 lines (46% reduction)
-- **Separation of Concerns**: Assets, systems, and configuration properly separated
-- **Trait-Based Architecture**: Projectiles, Enemies, Powers, and Buffs all use polymorphic traits
-- **Maintainability**: Game balance changes via trait methods, not scattered constants
-- **Scalability**: Adding new content requires only implementing trait + enum variant
-- **Extensibility**: Consistent interfaces across all game systems
-- **Best Practices**: Follows Rust/Bevy ECS patterns with trait composition
