@@ -4,7 +4,7 @@ use crate::components::{
     villager::Villager,
     enemy::Health,
     buff::Buffable,
-    bundles::{SpriteBundle3d, PhysicsBundle},
+    bundles::{SpriteBundle3d, PhysicsBundle, avian_physics},
     username_label::UsernameLabel,
 };
 use crate::resources::asset_handles::GameTextures;
@@ -40,7 +40,7 @@ pub fn spawn_villager(
         },
         Health::new(6),
         Buffable,
-        PhysicsBundle::new(Vec2::ZERO, STANDARD_GRAVITY, VILLAGER_BOUNCE),
+        avian_physics::character(),  // Avian physics for villagers
         SpriteBundle3d::new(
             meshes.add(Rectangle::new(VILLAGER_SIZE, VILLAGER_SIZE)),
             material,

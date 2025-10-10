@@ -14,7 +14,7 @@ pub struct RotatingResource {
 impl Default for RotatingResource {
     fn default() -> Self {
         Self {
-            rotation_speed: 180.0, // 180 degrees per second
+            rotation_speed: 180.0, // 180 degrees per second (0.5 rotations/sec)
         }
     }
 }

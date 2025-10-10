@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use crate::components::enemy::Health;
 use crate::components::hero::Hero;
 use crate::components::damage_visual::{DamageVisual, DeathAnimation, MarkedForDeath};
-use crate::components::physics::Velocity;
+use avian2d::prelude::{LinearVelocity, RigidBody, GravityScale, CollisionLayers};
 use crate::events::damage_events::{EntityDamaged, EntityDied};
 
 pub fn handle_entity_damage(
@@ -60,13 +60,17 @@ pub fn handle_entity_death(
             continue; // Entity already despawned, skip
         }
 
-        // Freeze entity and add death animation (1 second)
+        // Freeze entity completely by making it Static (non-interactive, no physics)
+        // Remove all physics components to make entity completely frozen
         commands.entity(event.entity)
-            .remove::<Velocity>()  // Stop movement
+            .insert(RigidBody::Static)  // Make static = no forces, no collisions, completely frozen
             .insert(DeathAnimation::new())
-            .insert(DamageVisual::new(1.0));  // Show damage visual for full 1 second
+            .insert(DamageVisual::new(1.0))  // Show damage visual for full 1 second (red tint)
+            .remove::<LinearVelocity>()  // Remove velocity
+            .remove::<GravityScale>()  // Remove gravity
+            .remove::<CollisionLayers>();  // Remove collision layers so it doesn't interact
 
-        info!("Entity {:?} died - frozen for death animation", event.entity);
+        info!("Entity {:?} died - frozen as static for death animation", event.entity);
     }
 }
 

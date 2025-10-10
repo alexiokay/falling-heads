@@ -6,7 +6,10 @@
       "Bash(cargo run:*)",
       "Bash(cargo build:*)",
       "Bash(cargo clippy:*)",
-      "Bash(Select-String -Pattern \"damage|health|died|villager\" -CaseSensitive:$false)"
+      "Bash(Select-String -Pattern \"damage|health|died|villager\" -CaseSensitive:$false)",
+      "Bash(Select-String -Pattern \"error|warning\" -Context 0,2)",
+      "Read(//c/Users/alexispace/Desktop/webdev/communityGaming/avian/crates/avian2d/examples/**)",
+      "Read(//c/Users/alexispace/Desktop/webdev/communityGaming/avian/src/**)"
     ],
     "deny": [],
     "ask": []

@@ -1,7 +1,8 @@
 use bevy::prelude::*;
-use crate::components::block::Block;
+use crate::components::block::{Block, BlockType};
 use crate::components::damage_overlay::{BlockDamageOverlay, get_damage_stage};
 use crate::resources::asset_handles::{DamageStageTextures, DamageOverlayCache};
+use crate::events::block_events::BlockDamaged;
 use crate::states::GameState;
 
 pub struct BlockDamageOverlayPlugin;
@@ -14,16 +15,17 @@ impl Plugin for BlockDamageOverlayPlugin {
                 spawn_damage_overlays,
                 update_damage_overlays,
                 cleanup_orphan_overlays,
-            ).run_if(in_state(GameState::Playing)));
+            ).chain().run_if(in_state(GameState::Playing)));
 
         info!("BlockDamageOverlayPlugin loaded");
     }
 }
 
-/// Spawn damage overlay child entities for blocks that don't have one yet
+/// Spawn damage overlay child entities when blocks are damaged (event-driven)
 fn spawn_damage_overlays(
     mut commands: Commands,
-    block_query: Query<(Entity, Option<&Children>), With<Block>>,
+    mut damage_events: MessageReader<BlockDamaged>,
+    block_query: Query<(&Transform, &BlockType, &Block, Option<&Children>), With<Block>>,
     overlay_query: Query<&BlockDamageOverlay>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -46,7 +48,12 @@ fn spawn_damage_overlays(
         }
     }
 
-    for (block_entity, children) in block_query.iter() {
+    // Process blocks that were just damaged
+    for event in damage_events.read() {
+        let Ok((block_transform, block_type, block, children)) = block_query.get(event.entity) else {
+            continue; // Block was destroyed
+        };
+
         // Check if this block already has a damage overlay
         let has_overlay = if let Some(children) = children {
             children.iter().any(|child| overlay_query.get(child).is_ok())
@@ -55,17 +62,49 @@ fn spawn_damage_overlays(
         };
 
         if !has_overlay {
-            // Spawn damage overlay using cached mesh and material (stage 0)
+            // Determine initial visibility based on current damage
+            let damage_stage = get_damage_stage(block.health, block.max_health);
+            let initial_visibility = if damage_stage > 0 {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+            // Determine overlay scale based on parent block's scale
+            // If parent is scaled (stone/coal use 64.0), overlay stays 1.0
+            // If parent is not scaled (melon/wood use 1.0), overlay needs 64.0
+            let overlay_scale = if block_transform.scale.x > 1.5 {
+                1.0 // Parent is already scaled, keep overlay at 1.0
+            } else {
+                64.0 // Parent not scaled, scale overlay to match block size
+            };
+
+            // Z offset needs to be adjusted based on scale
+            // For scale 1.0: z_offset = 0.51 (normal)
+            // For scale 64.0: Use a larger offset since the mesh is already 64x64x64 in world space
+            let z_offset = if overlay_scale > 1.5 {
+                // For scaled overlays (melon/wood): use larger offset in local space
+                32.51  // This will be 32.51 in local coords, but overlay is at front of 64-unit block
+            } else {
+                // For unscaled overlays (stone/coal): use normal offset
+                0.51
+            };
+
+            // Get initial material based on current damage stage
+            let initial_material = overlay_cache.materials.get(damage_stage)
+                .unwrap_or(&overlay_cache.materials[0])
+                .clone();
+
+            // Spawn damage overlay with correct initial state
             let overlay = commands.spawn((
                 BlockDamageOverlay,
-                Mesh3d(overlay_cache.mesh.clone().unwrap()),  // Shared mesh
-                MeshMaterial3d(overlay_cache.materials[0].clone()),  // Stage 0 material
-                Transform::from_xyz(0.0, 0.0, 0.51), // Just in front of block face
-                Visibility::Hidden, // Initially hidden (no damage)
+                Mesh3d(overlay_cache.mesh.clone().unwrap()),  // Shared 1x1 mesh
+                MeshMaterial3d(initial_material),  // Start with correct damage stage material
+                Transform::from_xyz(0.0, 0.0, z_offset).with_scale(Vec3::splat(overlay_scale)),
+                initial_visibility, // Start visible if block is already damaged
             )).id();
 
             // Use queue closure to safely handle parent-child relationship
-            // This prevents crashes when blocks are despawned by chunk unloading mid-frame
+            let block_entity = event.entity;
             commands.queue(move |world: &mut World| {
                 // Only add child if parent still exists at command flush time
                 if let Ok(mut parent_entity) = world.get_entity_mut(block_entity) {

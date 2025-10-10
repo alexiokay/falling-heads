@@ -4,11 +4,12 @@ use crate::components::block::{Block, BlockType, BiomeType, BiomeBehavior};
 use crate::components::chunk::{Chunk, ChunkMember, LoadedChunks, CHUNK_SIZE, world_to_chunk_coords};
 use crate::components::hero::Hero;
 use crate::components::enemy::{Enemy, Health, EnemyBehavior};
-use crate::components::bundles::{SpriteBundle3d, PhysicsBundle};
+use crate::components::bundles::{SpriteBundle3d, PhysicsBundle, avian_physics};
 use crate::resources::asset_handles::BlockTextures;
 use crate::resources::material_cache::MaterialCache;
 use crate::resources::mesh_cache::MeshCache;
 use crate::utils::biome_utils::determine_biome_at_chunk;
+use avian2d::prelude::*;
 
 const BLOCK_SIZE: f32 = 1.0;  // 3D cube size
 const BLOCK_SPACING: f32 = 0.0;  // No spacing - blocks touch
@@ -213,6 +214,7 @@ pub fn generate_chunk(
                 },
                 block_type,
                 ChunkMember { chunk_x, chunk_y },
+                // Blocks do NOT use Avian - spatial hash is much faster for 42k+ static blocks
                 Mesh3d(block_mesh),
                 MeshMaterial3d(material),
                 transform,
@@ -221,45 +223,79 @@ pub fn generate_chunk(
     }
 }
 
-/// Check if a block should be a cave (empty space) - Minecraft-style organic caves with biome-specific patterns
+/// Check if a block should be a cave (empty space) - Small, varied caves with unique biome-specific generation
 fn should_generate_cave(block_x: i32, block_y: i32, biome: BiomeType) -> bool {
-    // Minecraft-style cave generation using layered noise
-    // Combines multiple frequencies for organic, natural-looking caves
-
     let x = block_x as f32;
     let y = block_y as f32;
 
-    // Biome-specific cave parameters
-    let (frequency_mult, threshold, worm_chance) = match biome {
-        BiomeType::Nether => (1.5, 0.45, 0.6),  // More frequent, larger caves with many tunnels
-        BiomeType::End => (0.8, 0.25, 0.2),     // Smaller, rarer caves
-        BiomeType::Underground => (1.2, 0.4, 0.4), // Moderate caves
-        _ => (1.0, 0.35, 0.3),                  // Default
-    };
+    // Biome-specific cave structure patterns
+    match biome {
+        BiomeType::Nether => {
+            // Nether: Isolated vertical lava tubes with varying sizes
+            // Layered noise for organic tubes
+            let noise1 = ((x * 0.08).sin() * (y * 0.05).cos()).abs();
+            let noise2 = ((x * 0.12 + 100.0).cos() * (y * 0.07 + 50.0).sin()).abs();
+            let combined = noise1 * 0.6 + noise2 * 0.4;
 
-    // Primary cave noise - creates main cave structure
-    let cave_noise_1 = ((x * 0.02 * frequency_mult).sin() * (y * 0.03 * frequency_mult).cos()
-        + (x * 0.015 * frequency_mult + y * 0.025 * frequency_mult).sin()).abs();
+            // Small tubes
+            combined < 0.12
+        },
 
-    // Secondary cave noise - adds variation
-    let cave_noise_2 = ((x * 0.04 * frequency_mult + 100.0).cos() * (y * 0.05 * frequency_mult + 50.0).sin()).abs();
+        BiomeType::End => {
+            // End: NO caves - completely solid
+            false
+        },
 
-    // Tertiary noise - creates smaller pockets and variation
-    let cave_noise_3 = ((x * 0.08 * frequency_mult).sin() + (y * 0.07 * frequency_mult).cos()).abs();
+        BiomeType::Underground => {
+            // Underground: More frequent small cave pockets
+            let noise1 = ((x * 0.1).sin() * (y * 0.12).cos()).abs();
+            let noise2 = ((x * 0.15 + 200.0).cos() * (y * 0.18 + 100.0).sin()).abs();
+            let combined = noise1 * 0.7 + noise2 * 0.3;
 
-    // Combine noises with different weights
-    let combined_noise = cave_noise_1 * 0.6 + cave_noise_2 * 0.3 + cave_noise_3 * 0.1;
+            // Medium-sized scattered caves
+            combined < 0.15
+        },
 
-    // Cave exists if noise is below threshold
-    let is_cave = combined_noise < threshold;
+        BiomeType::Mountains => {
+            // Mountains: Elongated horizontal caverns (vein-like)
+            let noise1 = ((x * 0.06).sin() * (y * 0.15).cos()).abs();
+            let noise2 = ((x * 0.04 + 150.0).cos() + (y * 0.2 + 75.0).sin()).abs();
+            let combined = noise1 * 0.5 + noise2 * 0.5;
 
-    // Add worm-like tunnels for variety (horizontal meandering paths)
-    let worm_center_y = ((x * 0.01).sin() * 40.0) as i32;
-    let distance_from_worm = (y as i32 - worm_center_y).abs();
-    let worm_thickness = 2 + ((x * 0.05).cos().abs() * 3.0) as i32; // 2-5 blocks thick
-    let is_worm_tunnel = distance_from_worm < worm_thickness && ((x / 80.0).fract() < worm_chance);
+            // Horizontal streaks
+            combined < 0.1
+        },
 
-    is_cave || is_worm_tunnel
+        BiomeType::Iceland => {
+            // Iceland: Rare small ice pockets
+            let noise1 = ((x * 0.14).sin() + (y * 0.16).cos()).abs();
+            let noise2 = ((x * 0.09 + 300.0).cos() * (y * 0.11 + 150.0).sin()).abs();
+            let combined = noise1 * 0.6 + noise2 * 0.4;
+
+            // Very small, rare caves
+            combined < 0.08
+        },
+
+        BiomeType::Desert => {
+            // Desert: NO caves
+            false
+        },
+
+        BiomeType::Forest => {
+            // Forest: Small scattered root cavities
+            let noise1 = ((x * 0.13).sin() * (y * 0.14).cos()).abs();
+            let noise2 = ((x * 0.18 + 250.0).cos() + (y * 0.16 + 125.0).sin()).abs();
+            let combined = noise1 * 0.65 + noise2 * 0.35;
+
+            // Small irregular pockets
+            combined < 0.11
+        },
+
+        BiomeType::Plains => {
+            // Plains: NO caves
+            false
+        },
+    }
 }
 
 /// Determine block type based on biome and position
@@ -409,12 +445,19 @@ fn spawn_chunk_enemies(
                     rng.gen_range(100.0..200.0)    // Upward velocity to pop out of spawn area
                 );
 
+                // Use flying physics for dragon, enemy physics with initial velocity for others
+                let physics_components = if enemy_type == crate::components::enemy::EnemyType::Dragon {
+                    avian_physics::flying_enemy()
+                } else {
+                    avian_physics::enemy_with_velocity(initial_velocity)
+                };
+
                 commands.spawn((
                     Enemy::new(enemy_type),
                     Health::new(max_health),
-                    crate::components::buff::Buffable,  // Add Buffable to test if this fixes bouncing
+                    crate::components::buff::Buffable,
                     ChunkMember { chunk_x, chunk_y },
-                    PhysicsBundle::new(initial_velocity, crate::utils::constants::STANDARD_GRAVITY, crate::utils::constants::ENEMY_BOUNCE),
+                    physics_components,  // Avian physics with initial velocity
                     SpriteBundle3d::new(
                         mesh_cache.enemy_mesh.clone(),
                         material,

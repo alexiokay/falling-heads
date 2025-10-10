@@ -8,11 +8,14 @@ use crate::components::{
     hero::Hero,
     villager::Villager,
     enemy::Enemy,
+    bundles::avian_physics,
+    collision_layers::GameLayer,
 };
 use crate::events::damage_events::EntityDamaged;
 use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
 use crate::utils::constants::*;
+use avian2d::prelude::*;
 
 /// Component to handle sequential arrow spawning
 #[derive(Component)]
@@ -63,6 +66,7 @@ pub fn spawn_tnt(
         Tnt {
             timer: Timer::from_seconds(TNT_FUSE_TIME, TimerMode::Once),
         },
+        avian_physics::tnt(),  // Avian physics for TNT
         Mesh3d(mesh_cache.tnt_mesh.clone()),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::WHITE,
@@ -73,9 +77,6 @@ pub fn spawn_tnt(
             ..default()
         })),
         Transform::from_translation(position),  // No rotation needed - UVs are correct
-        Velocity { x: 0.0, y: 0.0 },
-        Gravity { force: -500.0 },
-        // NO Bouncy component - TNT doesn't bounce
     )).id();
 
     // Spawn username label if provided
@@ -142,7 +143,7 @@ fn tnt_explosion(
     mut commands: Commands,
     explosion_query: Query<(Entity, &Explosion, &Transform), Added<Explosion>>,
     block_query: Query<(Entity, &Transform), With<Block>>,
-    mut entity_query: Query<(Entity, &Transform, &mut Velocity), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
+    mut entity_query: Query<(Entity, &Transform, &mut LinearVelocity), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
     mut damage_events: MessageWriter<EntityDamaged>,
     explosion_textures: Option<Res<crate::resources::asset_handles::ExplosionTextures>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -419,10 +420,17 @@ fn update_arrow_barrage(
                 10.0  // Z=10 same as entities
             );
 
-            // Spawn arrow using GLB model
+            // Spawn arrow using GLB model with Avian physics
             commands.spawn((
                 crate::components::projectile::Arrow::new_friendly(1),  // Friendly arrow - won't hit hero/villagers
-                crate::components::bundles::PhysicsBundle::projectile(velocity, ARROW_GRAVITY),
+                RigidBody::Dynamic,
+                LinearVelocity(velocity),
+                GravityScale(1.0),  // Use global gravity
+                Collider::circle(8.0),  // Small circular collider for arrow tip (follows center of mass)
+                Sensor,  // Don't physically collide, just detect overlaps
+                CollisionLayers::new(GameLayer::Arrow, GameLayer::Arrow.filters()),
+                LockedAxes::ROTATION_LOCKED,  // Prevent physics from rotating arrow (we control rotation manually)
+                NoTransformEasing,  // Disable interpolation for fast-moving arrows (causes visual lag)
                 SceneRoot(projectile_models.arrow.clone()),
                 Transform::from_translation(spawn_pos).with_scale(Vec3::new(15.0, 15.0, 15.0)),
                 Visibility::Visible,
@@ -531,7 +539,7 @@ fn barrier_update(
 /// Reflect projectiles that hit the magic barrier
 fn barrier_reflect_projectiles(
     barrier_query: Query<(&Transform, &crate::components::projectile::MagicBarrier)>,
-    mut arrow_query: Query<(&Transform, &mut Velocity, &mut Arrow)>,
+    mut arrow_query: Query<(&Transform, &mut LinearVelocity, &mut Arrow)>,
 ) {
     use crate::components::projectile::Team;
 
@@ -545,9 +553,9 @@ fn barrier_reflect_projectiles(
                 let dy = arrow_transform.translation.y - barrier_transform.translation.y;
                 let bounce_angle = dy.atan2(dx);
 
-                // Preserve and amplify the arrow's speed for dramatic effect
+                // Preserve arrow's speed (just bounce, no acceleration)
                 let current_speed = (arrow_velocity.x.powi(2) + arrow_velocity.y.powi(2)).sqrt();
-                let bounce_speed = (current_speed * 1.5).max(500.0); // At least 500, or 1.5x current speed
+                let bounce_speed = current_speed; // Keep same speed, just reflect direction
 
                 arrow_velocity.x = bounce_angle.cos() * bounce_speed;
                 arrow_velocity.y = bounce_angle.sin() * bounce_speed;

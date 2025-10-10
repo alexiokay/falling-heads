@@ -11,14 +11,21 @@ pub const RESOURCE_SIZE: f32 = 32.0;
 pub const ARROW_WIDTH: f32 = 90.0;  // MUCH bigger for testing
 pub const ARROW_HEIGHT: f32 = 48.0;  // MUCH bigger for testing
 
+// Mass values
+pub const CHARACTER_MASS: f32 = 1.0;  // Light for easy bouncing
+pub const TNT_MASS: f32 = 0.7;  // Very light so characters can push it
+
 // Bounce/restitution values
-pub const HERO_BOUNCE: f32 = 1.0;
+
+
+// Bounce/restitution values
+pub const HERO_BOUNCE: f32 = 1.0;  // Extra bouncy for better gameplay
 pub const VILLAGER_BOUNCE: f32 = 1.0;
 pub const ENEMY_BOUNCE: f32 = 1.0;  // Same as villagers
 pub const STANDARD_BOUNCE: f32 = 1.0;
 pub const NO_BOUNCE: f32 = 0.0;
-pub const MIN_BOUNCE_VELOCITY: f32 = 400.0;  // Minimum upward bounce from blocks
-pub const MAX_BOUNCE_VELOCITY: f32 = 400.0;  // Maximum upward bounce from blocks
+pub const MIN_BOUNCE_VELOCITY: f32 = 400.0;  // Very asmall minimum to prevent tiny bounces
+pub const MAX_BOUNCE_VELOCITY: f32 = 550.0;  // High limit to allow strong bounces from high falls
 
 // Enemy behavior
 pub const SKELETON_SHOOT_INTERVAL: f32 = 2.0;  // seconds between shots

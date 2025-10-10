@@ -8,9 +8,10 @@ use crate::components::{
     chunk::LoadedChunks,
     enemy::Health,
     buff::Buffable,
-    bundles::{SpriteBundle3d, PhysicsBundle},
+    bundles::{SpriteBundle3d, PhysicsBundle, avian_physics},
     background::BackgroundCache,
 };
+use avian2d::prelude::*;
 use crate::events::block_events::{BlockDamaged, BlockDestroyed};
 use crate::events::resource_events::ResourceCollected;
 use crate::events::damage_events::{EntityDamaged, EntityDied};
@@ -122,7 +123,7 @@ fn spawn_hero(
         },
         Health::new(3),
         Buffable,
-        PhysicsBundle::new(Vec2::ZERO, STANDARD_GRAVITY, HERO_BOUNCE),
+        avian_physics::character(),  // Avian physics: RigidBody, Collider, LinearVelocity, etc.
         SpriteBundle3d::new(
             meshes.add(Rectangle::new(HERO_SIZE, HERO_SIZE)),
             material,
@@ -170,7 +171,7 @@ fn spawn_villagers(
 /// Hero moves automatically like villagers, but player can override/boost with A/D keys
 fn hero_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Velocity, &mut Hero, Option<&SpeedModifier>), With<Hero>>,
+    mut query: Query<(&mut LinearVelocity, &mut Hero, Option<&SpeedModifier>), With<Hero>>,
     time: Res<Time>,
 ) {
     let Ok((mut velocity, mut hero, speed_mod)) = query.single_mut() else {
@@ -268,7 +269,7 @@ fn spawn_resources_from_destroyed_blocks(
         commands.spawn((
             Resource { resource_type },
             RotatingResource::default(),
-            PhysicsBundle::settling(Vec2::new(0.0, RESOURCE_DROP_VELOCITY_Y)),
+            avian_physics::resource(Vec2::new(0.0, RESOURCE_DROP_VELOCITY_Y)),  // Avian physics for gravity/collisions
             SpriteBundle3d::new(
                 meshes.add(Rectangle::new(RESOURCE_SIZE, RESOURCE_SIZE)),
                 material,
@@ -349,7 +350,8 @@ fn camera_follow_hero(
         let offset_y = 80.0;  // Keep camera above hero
 
         // Time-based lerp for consistent speed regardless of framerate
-        let lerp_speed = 10.0;
+        // Increased from 10.0 to 30.0 for tighter, more responsive camera at high speeds
+        let lerp_speed = 30.0;
         let lerp_factor = (lerp_speed * time.delta_secs()).min(1.0);
 
         camera_transform.translation.x += (target_x + offset_x - camera_transform.translation.x) * lerp_factor;

@@ -4,10 +4,11 @@ use crate::components::hero::Hero;
 use crate::components::villager::Villager;
 use crate::components::projectile::{Arrow, Snowball};
 use crate::components::physics::Velocity;
-use crate::components::bundles::{SpriteBundle3d, PhysicsBundle};
+use crate::components::bundles::{SpriteBundle3d, PhysicsBundle, avian_physics};
 use crate::resources::asset_handles::ProjectileTextures;
 use crate::states::GameState;
 use crate::utils::constants::*;
+use avian2d::prelude::*;
 
 pub struct EnemyAIPlugin;
 
@@ -97,7 +98,7 @@ fn skeleton_shoot_arrows(
             // Spawn arrow using GLB model (scale: bigger and longer)
             let arrow_entity = commands.spawn((
                 Arrow::new(1),
-                PhysicsBundle::projectile(velocity, ARROW_GRAVITY),
+                avian_physics::arrow(velocity),  // Avian physics for arrows
                 SceneRoot(projectile_models.arrow.clone()),
                 Transform::from_translation(spawn_pos).with_scale(Vec3::new(15.0, 15.0, 15.0)),
                 Visibility::Visible,
@@ -188,7 +189,13 @@ fn yeti_throw_snowballs(
 
             commands.spawn((
                 Snowball::new(),
-                Velocity { x: velocity.x, y: velocity.y },
+                LinearVelocity(velocity),  // Avian LinearVelocity for snowballs
+                RigidBody::Dynamic,
+                Collider::circle(SNOWBALL_SIZE / 2.0),
+                GravityScale(0.6),  // Light projectile with some gravity
+                Restitution::new(0.0),
+                Friction::new(0.1),
+                LockedAxes::ROTATION_LOCKED,
                 SpriteBundle3d::new(
                     meshes.add(Circle::new(SNOWBALL_SIZE / 2.0)),
                     material,

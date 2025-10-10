@@ -1,6 +1,6 @@
 use bevy::prelude::*;
+use avian2d::prelude::*;
 use crate::components::projectile::{Arrow, StuckArrow};
-use crate::components::physics::Velocity;
 use crate::components::hero::Hero;
 use crate::components::villager::Villager;
 use crate::components::enemy::Enemy;
@@ -14,12 +14,12 @@ pub struct ProjectilePlugin;
 
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (
-            update_arrow_lifetime,
-        ).run_if(in_state(GameState::Playing)))
-        // Run arrow collisions in PostUpdate to avoid Velocity query conflicts
+        app.add_systems(Update,
+            update_arrow_lifetime.run_if(in_state(GameState::Playing))
+        )
+        // Run arrow systems in PostUpdate
         .add_systems(PostUpdate, (
-            check_arrow_collisions,
+            check_arrow_collisions,  // Manual collision detection for arrow game logic
             update_arrow_rotation,
             update_stuck_arrows,  // Run AFTER physics updates to get latest entity positions
         ).chain().run_if(in_state(GameState::Playing)));
@@ -28,9 +28,12 @@ impl Plugin for ProjectilePlugin {
     }
 }
 
+// REMOVED: apply_arrow_gravity - Now using Avian's GravityScale instead of manual gravity
+// REMOVED: apply_arrow_velocity - Avian handles velocity integration automatically
+
 /// Update arrow rotation to match velocity direction (realistic arrow physics)
 fn update_arrow_rotation(
-    mut query: Query<(&Velocity, &mut Transform), With<Arrow>>,
+    mut query: Query<(&LinearVelocity, &mut Transform), With<Arrow>>,
 ) {
     for (velocity, mut transform) in query.iter_mut() {
         // Calculate angle from velocity direction
@@ -88,19 +91,19 @@ fn update_stuck_arrows(
 fn check_arrow_collisions(
     mut commands: Commands,
     spatial_hash: Res<SpatialHash>,
-    mut arrow_query: Query<(Entity, &mut Transform, &Arrow, &Velocity), (Without<StuckArrow>, Without<Block>)>, // Skip arrows that are already stuck
+    mut arrow_query: Query<(Entity, &mut Transform, &Arrow, &LinearVelocity), (Without<StuckArrow>, Without<Block>)>, // Skip arrows that are already stuck
     block_query: Query<&Transform, With<Block>>,
     mut entities: ParamSet<(
-        Query<(Entity, &Transform, &mut Velocity), (With<Hero>, Without<Arrow>)>,
-        Query<(Entity, &Transform, &mut Velocity), (With<Villager>, Without<Arrow>)>,
-        Query<(Entity, &Transform, &mut Velocity), (With<Enemy>, Without<Arrow>, Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
+        Query<(Entity, &Transform, &mut LinearVelocity), (With<Hero>, Without<Arrow>)>,
+        Query<(Entity, &Transform, &mut LinearVelocity), (With<Villager>, Without<Arrow>)>,
+        Query<(Entity, &Transform, &mut LinearVelocity), (With<Enemy>, Without<Arrow>, Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
     )>,
     mut damage_events: MessageWriter<EntityDamaged>,
 ) {
     let arrow_tip_radius = 10.0; // Small radius for arrow tip (thin point)
     let entity_radius = 32.0; // 64x64 entities, use half size
     let block_radius = 32.0; // 64x64 blocks, use half size
-    let arrow_length = 40.0; // Length of arrow model for tip calculation
+    let arrow_length = 20.0; // Length offset for arrow tip (arrow center to visual tip)
 
     // Collect all arrow hits first (can't mutate velocity while iterating arrows)
     let mut hero_hits: Vec<(Entity, Vec3, Vec3, Vec3, Quat)> = Vec::new(); // (arrow_entity, arrow_pos, hero_pos, arrow_velocity, arrow_rotation)
@@ -259,8 +262,10 @@ fn check_arrow_collisions(
                     offset,
                     stuck_to_entity: hero_entity,
                 });
-                arrow_cmd.remove::<crate::components::physics::Velocity>();
-                arrow_cmd.remove::<crate::components::physics::Gravity>();
+                // Remove Avian components to stop physics
+                arrow_cmd.remove::<LinearVelocity>();
+                arrow_cmd.remove::<RigidBody>();
+                arrow_cmd.remove::<Collider>();
                 // Make arrow a child of hero - transform will update automatically
                 arrow_cmd.set_parent_in_place(hero_entity);
                 // Update transform to use local position (relative to parent) while preserving rotation
@@ -302,8 +307,10 @@ fn check_arrow_collisions(
                     offset,
                     stuck_to_entity: villager_entity,
                 });
-                arrow_cmd.remove::<crate::components::physics::Velocity>();
-                arrow_cmd.remove::<crate::components::physics::Gravity>();
+                // Remove Avian components to stop physics
+                arrow_cmd.remove::<LinearVelocity>();
+                arrow_cmd.remove::<RigidBody>();
+                arrow_cmd.remove::<Collider>();
                 // Make arrow a child of villager - transform will update automatically
                 arrow_cmd.set_parent_in_place(villager_entity);
                 // Update transform to use local position (relative to parent) while preserving rotation
@@ -345,8 +352,10 @@ fn check_arrow_collisions(
                     offset,
                     stuck_to_entity: enemy_entity,
                 });
-                arrow_cmd.remove::<crate::components::physics::Velocity>();
-                arrow_cmd.remove::<crate::components::physics::Gravity>();
+                // Remove Avian components to stop physics
+                arrow_cmd.remove::<LinearVelocity>();
+                arrow_cmd.remove::<RigidBody>();
+                arrow_cmd.remove::<Collider>();
                 // Make arrow a child of enemy - transform will update automatically
                 arrow_cmd.set_parent_in_place(enemy_entity);
                 // Update transform to use local position (relative to parent) while preserving rotation

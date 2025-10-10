@@ -296,14 +296,17 @@ fn spawn_weather_particles(
             ..default()
         });
 
+        // Use camera-following particles for continuous weather effects
+        let particle = WeatherParticle::new_camera_following(velocity, lifetime);
+
         commands.spawn((
-            WeatherParticle::new(velocity, lifetime),
+            particle,
             SpriteBundle3d::new(particle_mesh, particle_material, spawn_pos),
         ));
     }
 }
 
-/// Update weather particle positions and lifetime
+/// Update weather particle positions and lifetime - camera-relative movement
 fn update_weather_particles(
     mut commands: Commands,
     mut particle_query: Query<(Entity, &mut Transform, &mut WeatherParticle)>,
@@ -323,16 +326,32 @@ fn update_weather_particles(
     };
 
     for (entity, mut transform, mut particle) in particle_query.iter_mut() {
-        // Move particle
+        // Move particle relative to its spawn offset from camera
         transform.translation.x += particle.velocity.x * time.delta_secs();
         transform.translation.y += particle.velocity.y * time.delta_secs();
+
+        // Update camera-relative offset (follow camera on X axis for smooth scrolling)
+        // Particles maintain their X velocity but follow camera vertically for continuous effect
+        if particle.follows_camera {
+            // Only follow Y movement, particles drift on their own X axis
+            let camera_relative_y = transform.translation.y - camera_pos.y;
+
+            // If particle drifted too far off screen, respawn at top
+            if camera_relative_y < -screen_height / 2.0 - 200.0 {
+                transform.translation.y = camera_pos.y + screen_height / 2.0 + 200.0;
+            }
+        }
 
         // Update lifetime
         particle.lifetime.tick(time.delta());
 
-        // Despawn if off-screen (below visible area) or expired
+        // Despawn if off-screen (horizontally) or expired
+        let distance_x = (transform.translation.x - camera_pos.x).abs();
         let distance_below_camera = camera_pos.y - transform.translation.y;
-        if particle.lifetime.is_finished() || distance_below_camera > screen_height / 2.0 + 500.0 {
+
+        if particle.lifetime.is_finished()
+            || distance_x > 2000.0  // Far off screen horizontally
+            || distance_below_camera > screen_height / 2.0 + 500.0 {
             commands.entity(entity).despawn();
         }
     }

@@ -15,6 +15,7 @@ use crate::resources::spatial_hash::SpatialHash;
 use crate::systems::buff_system::apply_block_buff;
 use crate::states::GameState;
 use crate::utils::constants::*;
+use avian2d::prelude::*;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PhysicsSet {
@@ -38,58 +39,89 @@ impl Plugin for PhysicsPlugin {
                 PhysicsSet::Movement,
                 PhysicsSet::Collision,
             ).chain().run_if(in_state(GameState::Playing)))
-            .add_systems(Update,
-                apply_gravity.in_set(PhysicsSet::Forces)
-            )
+            // DISABLED: apply_gravity - Avian handles gravity via GravityScale
+            // DISABLED: apply_velocity - Avian handles velocity integration
             .add_systems(Update, (
                 hero_ai_movement,
                 villager_ai_movement,
                 enemy_ai_movement,
             ).in_set(PhysicsSet::AI))
-            .add_systems(Update,
-                apply_velocity.in_set(PhysicsSet::Movement)
-            )
+            // Keep spatial hash and block collisions - blocks don't use Avian physics
             .add_systems(Update,
                 rebuild_spatial_hash.in_set(PhysicsSet::Collision)
             )
             .add_systems(Update, (
-                check_all_entity_block_collisions,  // Hero + Villagers + Enemies (unified)
-                check_tnt_collisions,
-                check_resource_collisions,
-                check_hero_tnt_push,
-                check_hero_enemy_collision,
-                check_hero_melee_damage,  // Hero damages enemies on collision
-                check_entity_collisions,
+                check_all_entity_block_collisions,  // Blocks use custom spatial hash, not Avian
+                check_tnt_block_collisions,  // TNT needs block collision (blocks don't have Avian colliders)
+                check_resource_collisions,  // Resources need block collision (blocks don't have Avian colliders)
+                handle_avian_collision_melee,  // Hero melee damage via Avian collision events
+                handle_enemy_damage_collisions,  // Enemy damage to hero/villagers via Avian collision events
             ).in_set(PhysicsSet::Collision).after(rebuild_spatial_hash));
 
         info!("PhysicsPlugin loaded");
     }
 }
 
-fn apply_gravity(
-    time: Res<Time>,
-    mut query: Query<(&Gravity, &mut Velocity)>,
-) {
-    for (gravity, mut velocity) in query.iter_mut() {
-        velocity.y += gravity.force * time.delta_secs();
-    }
-}
+// REMOVED: apply_gravity - Avian handles this via GravityScale
+// REMOVED: apply_velocity - Avian handles this via LinearVelocity integration
 
-fn apply_velocity(
-    time: Res<Time>,
-    mut query: Query<(&Velocity, &mut Transform, Option<&crate::components::projectile::Arrow>), Without<crate::components::damage_visual::DeathAnimation>>,
+/// TNT vs Blocks collision - simpler version that just stops TNT when it hits blocks
+fn check_tnt_block_collisions(
+    mut tnt_query: Query<(&mut Transform, &mut LinearVelocity), With<Tnt>>,
+    block_query: Query<&Transform, (With<Block>, Without<Tnt>)>,
 ) {
-    for (velocity, mut transform, _arrow) in query.iter_mut() {
-        let delta = time.delta_secs();
-        let dx = velocity.x * delta;
-        let dy = velocity.y * delta;
+    for (mut tnt_transform, mut tnt_velocity) in tnt_query.iter_mut() {
+        let tnt_pos = tnt_transform.translation;
+        let tnt_size = BLOCK_SIZE;
+        let block_size = BLOCK_SIZE;
 
-        transform.translation.x += dx;
-        transform.translation.y += dy;
+        for block_transform in block_query.iter() {
+            let block_pos = block_transform.translation;
+
+            let tnt_half = tnt_size / 2.0;
+            let block_half = block_size / 2.0;
+
+            let dx = tnt_pos.x - block_pos.x;
+            let dy = tnt_pos.y - block_pos.y;
+
+            let overlap_x = tnt_half + block_half - dx.abs();
+            let overlap_y = tnt_half + block_half - dy.abs();
+
+            if overlap_x > 0.0 && overlap_y > 0.0 {
+                // Collision resolution
+                if overlap_x < overlap_y {
+                    // Horizontal
+                    let separation = overlap_x + 0.5;
+                    if dx > 0.0 {
+                        tnt_transform.translation.x += separation;
+                    } else {
+                        tnt_transform.translation.x -= separation;
+                    }
+                    tnt_velocity.x = 0.0;
+                } else {
+                    // Vertical
+                    let separation = overlap_y + 0.5;
+                    if dy > 0.0 {
+                        tnt_transform.translation.y += separation;
+                        if tnt_velocity.y < 0.0 {
+                            tnt_velocity.y = 0.0;
+                            tnt_velocity.x *= 0.9; // Friction
+                        }
+                    } else {
+                        tnt_transform.translation.y -= separation;
+                        if tnt_velocity.y > 0.0 {
+                            tnt_velocity.y = 0.0;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 /// Rebuild spatial hash every frame for fast collision queries
+/// Rebuild spatial hash - ONLY for blocks (not entities)
+/// Entities use Avian's collision detection, blocks use spatial hash since they don't have Avian colliders
 fn rebuild_spatial_hash(
     mut spatial_hash: ResMut<SpatialHash>,
     block_query: Query<(Entity, &Transform), With<Block>>,
@@ -98,6 +130,8 @@ fn rebuild_spatial_hash(
     spatial_hash.clear();
 
     let mut block_count = 0;
+
+    // Add blocks to spatial hash (blocks don't use Avian physics)
     for (entity, transform) in block_query.iter() {
         let pos = transform.translation;
         spatial_hash.insert(entity, pos.x, pos.y);
@@ -106,7 +140,7 @@ fn rebuild_spatial_hash(
 
     // Log every 5 seconds to monitor performance
     if time.elapsed_secs() % 5.0 < time.delta_secs() {
-        info!("Spatial hash rebuilt with {} blocks", block_count);
+        info!("🗺️ Spatial hash rebuilt: {} blocks", block_count);
     }
 }
 
@@ -114,7 +148,7 @@ fn rebuild_spatial_hash(
 fn check_all_entity_block_collisions(
     mut commands: Commands,
     spatial_hash: Res<SpatialHash>,
-    mut entity_query: Query<(Entity, &mut Transform, &mut Velocity, &Bouncy, Option<&Enemy>), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Block>, Without<crate::components::enemy::Flying>)>,
+    mut entity_query: Query<(Entity, &mut Transform, &mut LinearVelocity, &Restitution, Option<&Enemy>), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Block>, Without<crate::components::enemy::Flying>)>,
     block_query: Query<(Entity, &Transform, &BlockType, &ChunkMember), With<Block>>,
     chunk_query: Query<&crate::components::chunk::Chunk>,
     mut damage_events: MessageWriter<BlockDamaged>,
@@ -122,7 +156,7 @@ fn check_all_entity_block_collisions(
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_secs();
-    for (entity, mut transform, mut velocity, bouncy, is_enemy) in entity_query.iter_mut() {
+    for (entity, mut transform, mut velocity, restitution, is_enemy) in entity_query.iter_mut() {
         let pos = transform.translation;
         let entity_size = HERO_SIZE;
         let block_size = BLOCK_SIZE;
@@ -197,7 +231,7 @@ fn check_all_entity_block_collisions(
                     transform.translation.x -= separation;
                 }
                 // Apply restitution to horizontal bounces (same as vertical)
-                velocity.x = -velocity.x * bouncy.restitution;
+                velocity.x = -velocity.x * restitution.coefficient;
                 // Clamp horizontal bounce to prevent infinite acceleration
                 velocity.x = velocity.x.clamp(-MAX_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
             } else {
@@ -206,7 +240,7 @@ fn check_all_entity_block_collisions(
                 if dy > 0.0 {
                     transform.translation.y += separation;
                     if velocity.y < 0.0 {
-                        velocity.y = -velocity.y * bouncy.restitution;
+                        velocity.y = -velocity.y * restitution.coefficient;
                         velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
                     }
                 } else {
@@ -220,8 +254,18 @@ fn check_all_entity_block_collisions(
     }
 }
 
-/// Enemy collision - NO block damage, NO buffs, uses Bouncy component like friendlies
-fn check_enemy_block_collisions(
+// REMOVED: check_enemy_block_collisions - now unified with check_all_entity_block_collisions
+
+// REMOVED: check_tnt_collisions - Avian handles TNT physics
+// REMOVED: check_resource_collisions - Avian handles resource physics
+// REMOVED: check_hero_tnt_push - Avian handles entity-entity collisions
+// REMOVED: check_entity_collisions - Avian handles entity-entity collisions
+// REMOVED: check_hero_melee_damage - Will use Avian collision events
+// REMOVED: check_hero_enemy_collision - Will use Avian collision events
+
+// TODO: Re-implement gameplay collision handlers using Avian's CollisionStarted/CollisionEnded events
+
+fn _disabled_check_enemy_block_collisions(
     spatial_hash: Res<SpatialHash>,
     mut enemy_query: Query<(&mut Transform, &mut Velocity, &Bouncy), (With<Enemy>, Without<Block>)>,
     block_query: Query<&Transform, With<Block>>,
@@ -456,7 +500,7 @@ fn check_tnt_collisions(
 
 // Resource vs Blocks collision
 fn check_resource_collisions(
-    mut resource_query: Query<(&mut Transform, &mut Velocity), (With<Resource>, Without<Block>)>,
+    mut resource_query: Query<(&mut Transform, &mut LinearVelocity), (With<Resource>, Without<Block>)>,
     block_query: Query<&Transform, (With<Block>, Without<Resource>)>,
 ) {
     for (mut resource_transform, mut resource_velocity) in resource_query.iter_mut() {
@@ -672,7 +716,7 @@ fn check_entity_collisions(
 /// Hero AI - automatic movement (same as villagers), can be overridden by player input
 fn hero_ai_movement(
     time: Res<Time>,
-    mut hero_query: Query<(&mut Hero, &mut Velocity, Option<&crate::components::power_effect::SpeedModifier>)>,
+    mut hero_query: Query<(&mut Hero, &mut LinearVelocity, Option<&crate::components::power_effect::SpeedModifier>)>,
 ) {
     for (mut hero, mut velocity, speed_mod) in hero_query.iter_mut() {
         // Tick direction change timer
@@ -703,9 +747,10 @@ fn hero_ai_movement(
 /// Villager AI - walk back and forth with periodic direction changes
 fn villager_ai_movement(
     time: Res<Time>,
-    mut villager_query: Query<(&mut Villager, &mut Velocity)>,
+    mut villager_query: Query<(&mut Villager, &mut LinearVelocity)>,
 ) {
     for (mut villager, mut velocity) in villager_query.iter_mut() {
+
         // Tick direction change timer
         villager.direction_change_timer.tick(time.delta());
 
@@ -728,7 +773,7 @@ fn villager_ai_movement(
 /// Enemy AI - chase nearest hero or villager (melee enemies) OR keep distance (ranged skeletons)
 fn enemy_ai_movement(
     time: Res<Time>,
-    mut enemy_query: Query<(&Transform, &mut Velocity, &Enemy)>,
+    mut enemy_query: Query<(&Transform, &mut LinearVelocity, &Enemy)>,
     target_query: Query<&Transform, Or<(With<Hero>, With<Villager>)>>,
 ) {
     for (enemy_transform, mut velocity, enemy) in enemy_query.iter_mut() {
@@ -778,9 +823,77 @@ fn enemy_ai_movement(
     }
 }
 
+/// Handle enemy damage to hero/villagers using Avian collision events
+/// Triggers when enemy physically collides with hero/villager
+fn handle_enemy_damage_collisions(
+    mut commands: Commands,
+    mut collision_events: EventReader<CollisionStart>,
+    hero_query: Query<Entity, With<Hero>>,
+    villager_query: Query<Entity, With<Villager>>,
+    enemy_query: Query<&crate::components::enemy::Enemy>,
+    mut damage_events: MessageWriter<EntityDamaged>,
+    mut enemy_damage_cooldown: ResMut<DamageCooldown>,
+    time: Res<Time>,
+) {
+    let current_time = time.elapsed_secs();
+
+    for event in collision_events.read() {
+        let entity1 = event.collider1;
+        let entity2 = event.collider2;
+
+        // Check if friendly (hero or villager) collides with enemy
+        let friendly_entity = if hero_query.contains(entity1) || villager_query.contains(entity1) {
+            Some(entity1)
+        } else if hero_query.contains(entity2) || villager_query.contains(entity2) {
+            Some(entity2)
+        } else {
+            None
+        };
+
+        let enemy_entity = if enemy_query.contains(entity1) {
+            Some(entity1)
+        } else if enemy_query.contains(entity2) {
+            Some(entity2)
+        } else {
+            None
+        };
+
+        // If we have both a friendly and an enemy in this collision
+        if let (Some(friendly), Some(enemy)) = (friendly_entity, enemy_entity) {
+            if let Ok(enemy_data) = enemy_query.get(enemy) {
+                // Skeletons don't melee
+                if enemy_data.enemy_type == crate::components::enemy::EnemyType::Skeleton {
+                    continue;
+                }
+
+                // Check cooldown
+                if !enemy_damage_cooldown.can_damage(friendly, current_time, 1.0) {
+                    continue;
+                }
+
+                // Deal damage
+                damage_events.write(EntityDamaged {
+                    entity: friendly,
+                    damage: 1,
+                });
+
+                // Apply burning buff from Pigman
+                if enemy_data.enemy_type == crate::components::enemy::EnemyType::Pigman {
+                    commands.entity(friendly).insert(Buff::new(BuffType::Burning, 3.0));
+                }
+
+                enemy_damage_cooldown.record_damage(friendly, current_time);
+            }
+        }
+    }
+}
+
+/// DEPRECATED: Replaced by handle_entity_collisions using Avian events
 /// Hero damages enemies on collision (melee attack)
 /// Uses per-enemy cooldown: each enemy has separate attack cooldown (industry standard)
-fn check_hero_melee_damage(
+/// OPTIMIZED: Uses spatial hash to only check nearby enemies
+fn _deprecated_check_hero_melee_damage(
+    spatial_hash: Res<SpatialHash>,
     hero_query: Query<(Entity, &Transform), With<Hero>>,
     enemy_query: Query<(Entity, &Transform), (With<crate::components::enemy::Enemy>, Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
     mut damage_events: MessageWriter<EntityDamaged>,
@@ -794,8 +907,15 @@ fn check_hero_melee_damage(
         let hero_pos = hero_transform.translation;
         let hero_half = hero_size / 2.0;
 
-        // Check all enemies for collision - USE SAME COLLISION AS BOUNCE SYSTEM (AABB)
-        for (enemy_entity, enemy_transform) in enemy_query.iter() {
+        // OPTIMIZED: Only check enemies in nearby chunks (not all enemies!)
+        let nearby_entities = spatial_hash.query_nearby(hero_pos.x, hero_pos.y);
+
+        for nearby_entity in nearby_entities {
+            // Check if this nearby entity is actually an enemy
+            let Ok((enemy_entity, enemy_transform)) = enemy_query.get(nearby_entity) else {
+                continue; // Not an enemy, skip
+            };
+
             let enemy_pos = enemy_transform.translation;
             let enemy_size = ENEMY_SIZE;
             let enemy_half = enemy_size / 2.0;
@@ -828,11 +948,14 @@ fn check_hero_melee_damage(
     }
 }
 
+/// DEPRECATED: Replaced by handle_entity_collisions using Avian events
 /// Enemy vs Hero/Villager collision - damage hero/villager and apply buffs
-fn check_hero_enemy_collision(
+/// OPTIMIZED: Uses spatial hash to only check nearby enemies
+fn _deprecated_check_hero_enemy_collision(
     mut commands: Commands,
+    spatial_hash: Res<SpatialHash>,
     mut entity_query: Query<(Entity, &Transform), Or<(With<Hero>, With<Villager>)>>,
-    enemy_query: Query<(&Transform, &crate::components::enemy::Enemy), (Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
+    enemy_query: Query<(Entity, &Transform, &crate::components::enemy::Enemy), (Without<crate::components::damage_visual::DeathAnimation>, Without<crate::components::damage_visual::MarkedForDeath>)>,
     mut damage_events: MessageWriter<EntityDamaged>,
     time: Res<Time>,
     mut cooldown: ResMut<DamageCooldown>,
@@ -848,7 +971,15 @@ fn check_hero_enemy_collision(
 
         let entity_pos = entity_transform.translation;
 
-        for (enemy_transform, enemy) in enemy_query.iter() {
+        // OPTIMIZED: Only check enemies in nearby chunks (not all enemies!)
+        let nearby_entities = spatial_hash.query_nearby(entity_pos.x, entity_pos.y);
+
+        for nearby_entity in nearby_entities {
+            // Check if this nearby entity is actually an enemy
+            let Ok((enemy_entity, enemy_transform, enemy)) = enemy_query.get(nearby_entity) else {
+                continue; // Not an enemy, skip
+            };
+
             let enemy_pos = enemy_transform.translation;
             let enemy_size = ENEMY_SIZE;
 
@@ -876,6 +1007,52 @@ fn check_hero_enemy_collision(
 
                 cooldown.record_damage(entity, current_time);
                 break; // Only damage once per entity per frame
+            }
+        }
+    }
+}
+
+/// Handle melee damage using Avian collision events
+/// Triggers whenever hero/villager physically collides with enemy
+fn handle_avian_collision_melee(
+    mut collision_events: EventReader<CollisionStart>,
+    hero_query: Query<Entity, With<Hero>>,
+    villager_query: Query<Entity, With<Villager>>,
+    enemy_query: Query<Entity, With<crate::components::enemy::Enemy>>,
+    mut damage_events: MessageWriter<EntityDamaged>,
+    mut melee_cooldown: ResMut<MeleeAttackCooldown>,
+    time: Res<Time>,
+) {
+    let current_time = time.elapsed_secs();
+
+    for event in collision_events.read() {
+        let entity1 = event.collider1;
+        let entity2 = event.collider2;
+
+        // Check if hero collides with enemy
+        if let Ok(_hero) = hero_query.get(entity1) {
+            if let Ok(enemy) = enemy_query.get(entity2) {
+                if melee_cooldown.can_attack(enemy, current_time, HERO_MELEE_COOLDOWN) {
+                    info!("⚔️ HERO MELEE HIT (collision)! enemy={:?}", enemy);
+                    damage_events.write(EntityDamaged {
+                        entity: enemy,
+                        damage: HERO_MELEE_DAMAGE,
+                    });
+                    melee_cooldown.record_hit(enemy, current_time);
+                }
+            }
+        }
+        // Check reverse (enemy collides with hero)
+        if let Ok(_hero) = hero_query.get(entity2) {
+            if let Ok(enemy) = enemy_query.get(entity1) {
+                if melee_cooldown.can_attack(enemy, current_time, HERO_MELEE_COOLDOWN) {
+                    info!("⚔️ HERO MELEE HIT (collision)! enemy={:?}", enemy);
+                    damage_events.write(EntityDamaged {
+                        entity: enemy,
+                        damage: HERO_MELEE_DAMAGE,
+                    });
+                    melee_cooldown.record_hit(enemy, current_time);
+                }
             }
         }
     }

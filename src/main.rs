@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::{WindowResolution, PresentMode};
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use avian2d::{math::*, prelude::*};
 
 mod components;
 mod resources;
@@ -31,6 +32,7 @@ use systems::block_damage_overlay_system::BlockDamageOverlayPlugin;
 use systems::weather_system::WeatherSystemPlugin;
 use systems::frozen_system::FrozenPlugin;
 use systems::dev_panel_system::DevPanelPlugin;
+use systems::snow_accumulation_system::SnowAccumulationPlugin;
 use systems::username_label_system::UsernameLabelPlugin;
 use systems::death_particle_system::DeathParticlePlugin;
 use resources::asset_handles::BlockTextures;
@@ -48,16 +50,26 @@ fn main() {
             primary_window: Some(Window {
                 title: "Falling Heads - Minecraft Block Breaker".to_string(),
                 resolution: WindowResolution::new(1280, 720),
-                present_mode: PresentMode::AutoVsync, // Enable VSync for smooth rendering
+                present_mode: PresentMode::AutoNoVsync, // Disable VSync for uncapped FPS and smooth movement
                 ..default()
             }),
             ..default()
         }))
         .init_state::<GameState>()
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        // Enable interpolation for ALL rigid bodies by default for smooth movement at any framerate
+        .add_plugins(PhysicsPlugins::default()
+            .with_length_unit(64.0)
+            .build()
+            .disable::<PhysicsInterpolationPlugin>()
+            .add(PhysicsInterpolationPlugin::interpolate_all()))
+        .insert_resource(Gravity(Vector::NEG_Y * 500.0))  // -500 gravity (matching old constant)
+        .insert_resource(SubstepCount(1))  // Reduce substeps from default 6 to 1 for performance
+        .add_systems(OnEnter(GameState::Paused), pause_physics)
+        .add_systems(OnEnter(GameState::Playing), resume_physics)
         .add_plugins(AssetLoaderPlugin)  // Load assets first
         .add_plugins((
-            PhysicsPlugin,
+            PhysicsPlugin,  // Keep custom physics plugin for migration
             GameplayPlugin,
             PowersPlugin,
             RenderingPlugin,
@@ -77,6 +89,7 @@ fn main() {
             FrozenPlugin,
             DevPanelPlugin,
             DeathParticlePlugin,
+            SnowAccumulationPlugin,
         ))
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()
@@ -91,6 +104,16 @@ fn main() {
     configure_system_sets(&mut app);
 
     app.run();
+}
+
+/// Pause Avian physics when entering Paused state
+fn pause_physics(mut time: ResMut<Time<Physics>>) {
+    time.pause();
+}
+
+/// Resume Avian physics when entering Playing state
+fn resume_physics(mut time: ResMut<Time<Physics>>) {
+    time.unpause();
 }
 
 fn setup(mut commands: Commands) {
