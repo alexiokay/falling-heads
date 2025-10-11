@@ -131,7 +131,7 @@ pub mod avian_physics {
             RigidBody::Static,
             Collider::cuboid(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE),
             Friction::new(1.0),
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
             CollisionLayers::new(GameLayer::Block, GameLayer::Block.filters()),
         )
     }
@@ -146,7 +146,7 @@ pub mod avian_physics {
             Collider::cuboid(HERO_SIZE, HERO_SIZE, HERO_SIZE),
             Restitution::new(HERO_BOUNCE),  // 1.5 = extra bouncy
             Friction::new(0.0),  // No friction at all
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
             CollisionLayers::new(GameLayer::Character, GameLayer::Character.filters()),
             CollisionEventsEnabled,
         )
@@ -162,7 +162,7 @@ pub mod avian_physics {
             Collider::cuboid(ENEMY_SIZE, ENEMY_SIZE, ENEMY_SIZE),
             Restitution::new(ENEMY_BOUNCE),  // 1.5 = extra bouncy
             Friction::new(0.0),  // No friction at all
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
             CollisionLayers::new(GameLayer::Enemy, GameLayer::Enemy.filters()),
             CollisionEventsEnabled,
         )
@@ -178,7 +178,7 @@ pub mod avian_physics {
             Collider::cuboid(ENEMY_SIZE, ENEMY_SIZE, ENEMY_SIZE),
             Restitution::new(ENEMY_BOUNCE),  // 1.5 = extra bouncy
             Friction::new(0.0),  // No friction at all
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
             CollisionLayers::new(GameLayer::Enemy, GameLayer::Enemy.filters()),
             CollisionEventsEnabled,
         )
@@ -194,7 +194,7 @@ pub mod avian_physics {
             Collider::cuboid(ENEMY_SIZE, ENEMY_SIZE, ENEMY_SIZE),
             Restitution::new(0.0),
             Friction::new(0.0),  // No friction at all
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
             CollisionLayers::new(GameLayer::Enemy, GameLayer::Enemy.filters()),
             CollisionEventsEnabled,
         )
@@ -209,7 +209,7 @@ pub mod avian_physics {
             Mass(0.1),  // CRITICAL: Light mass prevents NaN in physics
             Collider::sphere(8.0),  // Small spherical collider for arrow tip
             Sensor,  // Sensor = detects collisions but doesn't apply forces
-            LockedAxes::ROTATION_LOCKED,  // Prevent physics rotation (manual control)
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),  // Prevent physics rotation (manual control)
             CollisionLayers::new(GameLayer::Arrow, GameLayer::Arrow.filters()),
             NoTransformEasing,  // Disable interpolation for fast arrows (visual lag)
         )
@@ -225,7 +225,7 @@ pub mod avian_physics {
             Collider::cuboid(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE),
             Restitution::new(0.0),
             Friction::new(0.3),  // Lower friction so it slides
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
         )
     }
 
@@ -254,7 +254,7 @@ pub mod avian_physics {
             Collider::cuboid(128.0, 128.0, 128.0),
             Restitution::new(0.0),
             Friction::new(0.3),
-            LockedAxes::ROTATION_LOCKED,
+            LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
         )
     }
 }
