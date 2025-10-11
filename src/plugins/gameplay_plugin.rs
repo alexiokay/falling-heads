@@ -351,14 +351,24 @@ fn camera_follow_hero(
     if let Ok(mut camera_transform) = camera_query.single_mut() {
         let offset_x = 30.0;  // Keep camera slightly offset from hero
         let offset_y = 80.0;  // Keep camera above hero
+        let offset_z = 1500.0;  // Keep camera at fixed Z distance for consistent perspective
 
         // Time-based lerp for consistent speed regardless of framerate
         // Increased from 10.0 to 30.0 for tighter, more responsive camera at high speeds
         let lerp_speed = 30.0;
         let lerp_factor = (lerp_speed * time.delta_secs()).min(1.0);
 
-        camera_transform.translation.x += (target_x + offset_x - camera_transform.translation.x) * lerp_factor;
-        camera_transform.translation.y += (target_y + offset_y - camera_transform.translation.y) * lerp_factor;
+        let target_camera_x = target_x + offset_x;
+        let target_camera_y = target_y + offset_y;
+
+        camera_transform.translation.x += (target_camera_x - camera_transform.translation.x) * lerp_factor;
+        camera_transform.translation.y += (target_camera_y - camera_transform.translation.y) * lerp_factor;
+        camera_transform.translation.z = offset_z;
+
+        // Update camera rotation to always look at hero position (Z=0 plane)
+        // This maintains consistent perspective regardless of Y position
+        let look_target = Vec3::new(target_x, target_y, 0.0);
+        *camera_transform = camera_transform.looking_at(look_target, Vec3::Y);
     }
 }
 
