@@ -50,7 +50,10 @@ pub struct BlockTextures {
     pub netherrack: Handle<Image>,
     pub nether: Handle<Image>,
     pub obsidian: Handle<Image>,
+    pub sand: Handle<Image>,
     pub sandstone: Handle<Image>,
+    pub sandstone_top: Handle<Image>,
+    pub sandstone_bottom: Handle<Image>,
     pub oak_log: Handle<Image>,
     pub oak_log_top: Handle<Image>,
     pub oak_leaves: Handle<Image>,
@@ -66,6 +69,14 @@ pub struct BlockTextures {
     pub diamond_block: Handle<Image>,
     pub emerald_ore: Handle<Image>,
     pub gold_block: Handle<Image>,
+    pub gold_ore: Handle<Image>,
+    pub iron_ore: Handle<Image>,
+    pub redstone_ore: Handle<Image>,
+    pub glowstone: Handle<Image>,
+    pub end_stone: Handle<Image>,
+    pub cactus_top: Handle<Image>,
+    pub cactus_side: Handle<Image>,
+    pub cactus_bottom: Handle<Image>,
     // Iceland biome textures
     pub snow: Handle<Image>,
     pub ice: Handle<Image>,
@@ -84,12 +95,20 @@ pub struct BlockAtlases {
     pub oak_leaves: Handle<Image>,  // Oak leaves atlas: oak_leaves | oak_leaves | oak_leaves | oak_leaves
     pub melon: Handle<Image>,       // Melon atlas: melon_top | melon_top | melon_side | melon_side
     pub tnt: Handle<Image>,         // TNT atlas: tnt_top | tnt_bottom | tnt_side | tnt_side
+    pub sandstone: Handle<Image>,   // Sandstone atlas: sandstone_top | sandstone_bottom | sandstone | sandstone
+    pub cactus: Handle<Image>,      // Cactus atlas: cactus_top | cactus_bottom | cactus_side | cactus_side
 }
 
 /// Explosion animation frames (16 frames total)
 #[derive(Resource)]
 pub struct ExplosionTextures {
     pub frames: Vec<Handle<Image>>,
+}
+
+/// Effect textures (fire, etc.)
+#[derive(Resource, Default)]
+pub struct EffectTextures {
+    pub fire: Handle<Image>,
 }
 
 #[derive(Resource, Default)]
@@ -114,4 +133,61 @@ pub struct DamageOverlayCache {
 #[derive(Resource)]
 pub struct DragonAnimation {
     pub fly: Handle<AnimationClip>,  // Built-in fly animation from GLB
+}
+
+/// Hero sound effects
+#[derive(Resource, Default)]
+pub struct HeroSounds {
+    pub hit1: Handle<AudioSource>,
+    pub hit2: Handle<AudioSource>,
+    pub hit3: Handle<AudioSource>,
+    pub fallbig: Handle<AudioSource>,
+    pub fallsmall: Handle<AudioSource>,
+}
+
+/// Skeleton sound effects
+#[derive(Resource, Default)]
+pub struct SkeletonSounds {
+    pub hurt1: Handle<AudioSource>,
+    pub hurt2: Handle<AudioSource>,
+    pub hurt3: Handle<AudioSource>,
+    pub hurt4: Handle<AudioSource>,
+    pub death: Handle<AudioSource>,
+}
+
+/// Villager sound effects
+#[derive(Resource, Default)]
+pub struct VillagerSounds {
+    pub hit1: Handle<AudioSource>,
+    pub hit2: Handle<AudioSource>,
+    pub hit3: Handle<AudioSource>,
+    pub hit4: Handle<AudioSource>,
+    pub death: Handle<AudioSource>,
+}
+
+/// Bow sound effects
+#[derive(Resource, Default)]
+pub struct BowSounds {
+    pub shoot: Handle<AudioSource>,
+}
+
+/// Block breaking sound effects
+#[derive(Resource, Default)]
+pub struct BlockSounds {
+    pub stone_break1: Handle<AudioSource>,
+    pub stone_break2: Handle<AudioSource>,
+    pub stone_break3: Handle<AudioSource>,
+    pub wood_break: Handle<AudioSource>,
+    pub leaves_break1: Handle<AudioSource>,
+    pub leaves_break2: Handle<AudioSource>,
+    pub leaves_break3: Handle<AudioSource>,
+    pub leaves_break4: Handle<AudioSource>,
+    pub leaves_break5: Handle<AudioSource>,
+    pub sand_break1: Handle<AudioSource>,
+    pub sand_break2: Handle<AudioSource>,
+    pub sand_break3: Handle<AudioSource>,
+    pub sand_break4: Handle<AudioSource>,
+    pub snow_break1: Handle<AudioSource>,
+    pub snow_break2: Handle<AudioSource>,
+    pub snow_break3: Handle<AudioSource>,
 }

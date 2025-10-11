@@ -1,8 +1,9 @@
 use bevy::prelude::*;
+use avian3d::prelude::LinearVelocity;
 use crate::components::buff::{Buff, BuffType, Buffable, BuffBehavior};
 use crate::components::block::{BlockType, BiomeType};
 use crate::components::enemy::Health;
-use crate::components::physics::Velocity;
+use crate::components::damage_visual::MarkedForDeath;
 use crate::events::damage_events::EntityDamaged;
 use crate::states::GameState;
 
@@ -37,25 +38,28 @@ fn update_buffs(
 
 /// Apply buff effects (damage/healing, velocity changes)
 fn apply_buff_effects(
-    mut query: Query<(Entity, &mut Buff, Option<&Health>, Option<&mut Velocity>), With<Buffable>>,
+    mut query: Query<(Entity, &mut Buff, Option<&Health>, Option<&mut LinearVelocity>), (With<Buffable>, Without<MarkedForDeath>)>,
     mut damage_events: MessageWriter<EntityDamaged>,
     time: Res<Time>,
 ) {
     for (entity, mut buff, health_opt, velocity_opt) in query.iter_mut() {
         buff.tick_timer.tick(time.delta());
 
-        // Apply damage/healing on tick
+        // Apply damage/healing on tick (multiplied by stacks)
         if buff.tick_timer.just_finished() {
-            let damage = buff.buff_type.damage_per_tick();
+            let base_damage = buff.buff_type.damage_per_tick();
 
-            if damage != 0 {
+            if base_damage != 0 {
                 if let Some(_health) = health_opt {
-                    if damage > 0 {
-                        // Emit damage event - let health system handle death
+                    if base_damage > 0 {
+                        // Apply damage multiplied by stack count
+                        let total_damage = (base_damage as f32 * buff.get_damage_multiplier()) as u32;
                         damage_events.write(EntityDamaged {
                             entity,
-                            damage: damage as u32,
+                            damage: total_damage,
                         });
+                        info!("Buff {} dealing {} damage (base {} × {} stacks)",
+                              buff.buff_type.name(), total_damage, base_damage, buff.stacks);
                     } else {
                         // Healing not implemented yet - would need EntityHealed event
                         // For now, skip healing
@@ -78,7 +82,7 @@ fn apply_buff_effects(
 
 /// Apply visual effects for buffs (color overlay)
 fn apply_buff_visual_effects(
-    mut query: Query<(&Buff, &mut Sprite), With<Buffable>>,
+    mut query: Query<(&Buff, &mut Sprite), (With<Buffable>, Without<MarkedForDeath>)>,
 ) {
     for (buff, mut sprite) in query.iter_mut() {
         // Blend the buff color with the sprite's base color
@@ -87,14 +91,25 @@ fn apply_buff_visual_effects(
     }
 }
 
-/// Helper function to apply a buff to an entity
+/// Helper function to apply a buff to an entity (stacking logic)
 pub fn apply_buff(
     commands: &mut Commands,
     entity: Entity,
     buff_type: BuffType,
     duration: f32,
+    existing_buff: Option<&mut Buff>,
 ) {
-    commands.entity(entity).insert(Buff::new(buff_type, duration));
+    if let Some(mut buff) = existing_buff {
+        // Buff already exists - add stack if same type
+        if buff.buff_type == buff_type {
+            buff.add_stack(duration);
+            info!("Stacked {} buff (now {} stacks)", buff_type.name(), buff.stacks);
+        }
+    } else {
+        // No buff exists - add new one
+        commands.entity(entity).insert(Buff::new(buff_type, duration));
+        info!("Applied new {} buff", buff_type.name());
+    }
 }
 
 /// Apply block-specific buffs based on biome and block type
@@ -103,6 +118,7 @@ pub fn apply_block_buff(
     entity: Entity,
     block_type: BlockType,
     biome: BiomeType,
+    existing_buff: Option<&mut Buff>,
 ) {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -145,6 +161,6 @@ pub fn apply_block_buff(
     };
 
     if let Some((buff_type, duration)) = buff {
-        commands.entity(entity).insert(Buff::new(buff_type, duration));
+        apply_buff(commands, entity, buff_type, duration, existing_buff);
     }
 }

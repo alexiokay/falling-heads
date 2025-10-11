@@ -90,6 +90,46 @@ pub fn setup_settings_menu(
                     ));
                 });
 
+            // FPS Limit Button (disabled when VSync is on)
+            parent
+                .spawn((
+                    Button,
+                    Node {
+                        width: Val::Px(300.0),
+                        height: Val::Px(65.0),
+                        margin: UiRect::all(Val::Px(10.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(if settings.vsync_enabled {
+                        Color::srgb(0.2, 0.2, 0.2) // Grayed out when VSync is on
+                    } else {
+                        Color::srgb(0.3, 0.6, 0.3)
+                    }),
+                    FpsLimitButton,
+                ))
+                .with_children(|parent| {
+                    let fps_text = if settings.fps_limit == 0 {
+                        "FPS Limit: Unlimited".to_string()
+                    } else {
+                        format!("FPS Limit: {}", settings.fps_limit)
+                    };
+                    parent.spawn((
+                        Text::new(fps_text),
+                        TextFont {
+                            font_size: 28.0,
+                            ..default()
+                        },
+                        TextColor(if settings.vsync_enabled {
+                            Color::srgb(0.5, 0.5, 0.5) // Grayed out text
+                        } else {
+                            Color::WHITE
+                        }),
+                        ToggleButtonText,
+                    ));
+                });
+
             // Dev Mode Toggle Button
             parent
                 .spawn((
@@ -158,6 +198,7 @@ pub fn handle_settings_buttons(
             &mut BackgroundColor,
             Option<&VsyncToggleButton>,
             Option<&FpsToggleButton>,
+            Option<&FpsLimitButton>,
             Option<&DevModeToggleButton>,
             Option<&BackToMenuButton>,
         ),
@@ -168,10 +209,14 @@ pub fn handle_settings_buttons(
     mut window_query: Query<&mut Window, With<PrimaryWindow>>,
     vsync_button_query: Query<&Children, With<VsyncToggleButton>>,
     fps_button_query: Query<&Children, With<FpsToggleButton>>,
+    fps_limit_button_query: Query<&Children, With<FpsLimitButton>>,
+    fps_limit_bg_query: Query<Entity, With<FpsLimitButton>>,
     dev_button_query: Query<&Children, With<DevModeToggleButton>>,
     mut text_query: Query<&mut Text, With<ToggleButtonText>>,
+    mut text_color_query: Query<&mut TextColor>,
+    mut bg_color_query: Query<&mut BackgroundColor>,
 ) {
-    for (interaction, mut color, vsync_btn, fps_btn, dev_btn, back_btn) in &mut interaction_query {
+    for (interaction, mut color, vsync_btn, fps_btn, fps_limit_btn, dev_btn, back_btn) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 if vsync_btn.is_some() {
@@ -187,11 +232,33 @@ pub fn handle_settings_buttons(
                         };
                     }
 
-                    // Update button text
+                    // Update VSync button text
                     if let Ok(children) = vsync_button_query.single() {
                         for child in children.iter() {
                             if let Ok(mut text) = text_query.get_mut(child) {
                                 **text = if settings.vsync_enabled { "VSync: ON" } else { "VSync: OFF" }.to_string();
+                            }
+                        }
+                    }
+
+                    // Update FPS limit button appearance (gray out when VSync is on)
+                    if let Ok(fps_limit_entity) = fps_limit_bg_query.get_single() {
+                        if let Ok(mut bg) = bg_color_query.get_mut(fps_limit_entity) {
+                            *bg = BackgroundColor(if settings.vsync_enabled {
+                                Color::srgb(0.2, 0.2, 0.2)
+                            } else {
+                                Color::srgb(0.3, 0.6, 0.3)
+                            });
+                        }
+                    }
+                    if let Ok(children) = fps_limit_button_query.single() {
+                        for &child in children.iter() {
+                            if let Ok(mut text_color) = text_color_query.get_mut(child) {
+                                *text_color = TextColor(if settings.vsync_enabled {
+                                    Color::srgb(0.5, 0.5, 0.5)
+                                } else {
+                                    Color::WHITE
+                                });
                             }
                         }
                     }
@@ -204,6 +271,32 @@ pub fn handle_settings_buttons(
                         for child in children.iter() {
                             if let Ok(mut text) = text_query.get_mut(child) {
                                 **text = if settings.show_fps { "FPS Counter: ON" } else { "FPS Counter: OFF" }.to_string();
+                            }
+                        }
+                    }
+                } else if fps_limit_btn.is_some() {
+                    // Only allow changing FPS limit when VSync is off
+                    if !settings.vsync_enabled {
+                        // Cycle through FPS limits: 30 -> 60 -> 120 -> 144 -> 240 -> Unlimited (0) -> 30
+                        settings.fps_limit = match settings.fps_limit {
+                            30 => 60,
+                            60 => 120,
+                            120 => 144,
+                            144 => 240,
+                            240 => 0,
+                            _ => 30,
+                        };
+
+                        // Update button text
+                        if let Ok(children) = fps_limit_button_query.single() {
+                            for child in children.iter() {
+                                if let Ok(mut text) = text_query.get_mut(child) {
+                                    **text = if settings.fps_limit == 0 {
+                                        "FPS Limit: Unlimited".to_string()
+                                    } else {
+                                        format!("FPS Limit: {}", settings.fps_limit)
+                                    };
+                                }
                             }
                         }
                     }
@@ -226,11 +319,22 @@ pub fn handle_settings_buttons(
                 }
             }
             Interaction::Hovered => {
-                *color = BackgroundColor(Color::srgb(0.6, 0.6, 0.8));
+                // Don't highlight if it's the FPS limit button and VSync is enabled
+                if fps_limit_btn.is_some() && settings.vsync_enabled {
+                    // Keep it grayed out
+                } else {
+                    *color = BackgroundColor(Color::srgb(0.6, 0.6, 0.8));
+                }
             }
             Interaction::None => {
                 if vsync_btn.is_some() || fps_btn.is_some() {
                     *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.6));
+                } else if fps_limit_btn.is_some() {
+                    *color = BackgroundColor(if settings.vsync_enabled {
+                        Color::srgb(0.2, 0.2, 0.2) // Keep grayed out when VSync is on
+                    } else {
+                        Color::srgb(0.3, 0.6, 0.3)
+                    });
                 } else if dev_btn.is_some() {
                     *color = BackgroundColor(Color::srgb(0.6, 0.3, 0.3));
                 } else if back_btn.is_some() {

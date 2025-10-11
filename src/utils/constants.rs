@@ -26,6 +26,8 @@ pub const STANDARD_BOUNCE: f32 = 1.0;
 pub const NO_BOUNCE: f32 = 0.0;
 pub const MIN_BOUNCE_VELOCITY: f32 = 400.0;  // Very asmall minimum to prevent tiny bounces
 pub const MAX_BOUNCE_VELOCITY: f32 = 550.0;  // High limit to allow strong bounces from high falls
+pub const MAX_ENTITY_HORIZONTAL_SPEED: f32 = 1200.0;  // Absolute max horizontal velocity (prevents teleportation from cumulative forces)
+pub const MAX_ENTITY_VERTICAL_SPEED: f32 = 1500.0;    // Absolute max vertical velocity (allows high falls)
 
 // Enemy behavior
 pub const SKELETON_SHOOT_INTERVAL: f32 = 2.0;  // seconds between shots

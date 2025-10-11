@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::weather::{WeatherType, WeatherCategory, ActiveWeather, BiomeWeather};
+use crate::components::weather::{WeatherType, WeatherCategory, ActiveWeather};
 use crate::components::weather_particle::WeatherParticle;
 use crate::components::hero::Hero;
 use crate::components::block::BiomeType;
@@ -56,7 +56,18 @@ fn get_biome_at_y(y: f32) -> BiomeType {
 
 /// Select random weather from weighted probabilities
 fn select_random_weather(options: &[(WeatherType, f32)]) -> WeatherType {
+    // CRITICAL FIX: Handle empty options to prevent panic
+    if options.is_empty() {
+        return WeatherType::Clear;  // Default fallback
+    }
+
     let total: f32 = options.iter().map(|(_, prob)| prob).sum();
+
+    // Handle zero total probability
+    if total <= 0.0 {
+        return options[0].0;
+    }
+
     let mut rng = rand::thread_rng();
     let mut roll = rng.gen_range(0.0..1.0) * total;
 
@@ -207,7 +218,7 @@ fn spawn_weather_particles(
 
     let mut rng = rand::thread_rng();
 
-    for i in 0..particle_count {
+    for _i in 0..particle_count {
         // Get texture, velocity, and lifetime based on weather type
         let (texture_path, velocity, particle_color, lifetime) = match weather.weather_type {
             WeatherType::Rain => (
@@ -218,7 +229,7 @@ fn spawn_weather_particles(
             ),
             WeatherType::Snow => (
                 "textures/effects/snow.png",
-                Vec2::new(rng.gen_range(-60.0..60.0), rng.gen_range(-180.0..-120.0)), // Slower gentle drift
+                Vec2::new(rng.gen_range(-60.0..60.0), rng.gen_range(-120.0..-80.0)), // Slower gentle drift
                 Color::srgba(1.0, 1.0, 1.0, weather.intensity),
                 12.0, // Reduced lifetime to prevent accumulation
             ),

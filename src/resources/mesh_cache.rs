@@ -12,6 +12,8 @@ pub struct MeshCache {
     pub resource_mesh: Handle<Mesh>,  // Shared Sphere mesh for resources
     pub arrow_mesh: Handle<Mesh>,   // Shared 3D arrow mesh (thin rectangular prism)
     pub tnt_mesh: Handle<Mesh>,     // Shared UV-mapped cube for TNT (same UV system as blocks)
+    pub cactus_mesh: Handle<Mesh>,  // Shared UV-mapped cube for Cactus (4x1 atlas)
+    pub sandstone_mesh: Handle<Mesh>, // Shared UV-mapped cube for Sandstone (4x1 atlas)
 }
 
 impl MeshCache {
@@ -26,6 +28,8 @@ impl MeshCache {
             resource_mesh: meshes.add(Sphere::new(0.15)),
             arrow_mesh: meshes.add(create_arrow_mesh()),
             tnt_mesh: meshes.add(create_uv_cube(64.0, UVLayout::tnt())),  // Directional TNT with 4x1 atlas
+            cactus_mesh: meshes.add(create_uv_cube(64.0, UVLayout::cactus())),  // Directional Cactus with 4x1 atlas
+            sandstone_mesh: meshes.add(create_uv_cube(64.0, UVLayout::sandstone())),  // Directional Sandstone with 4x1 atlas
         }
     }
 }

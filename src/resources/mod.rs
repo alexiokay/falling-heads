@@ -11,3 +11,4 @@ pub mod spatial_hash;
 pub mod settings;
 pub mod weather_config;
 pub mod cube_mesh;
+pub mod day_night_cycle;

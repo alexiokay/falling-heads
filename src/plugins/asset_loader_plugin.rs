@@ -34,7 +34,10 @@ fn load_all_assets(
         netherrack: asset_server.load("textures/blocks/nether/netherrack.png"),
         nether: asset_server.load("textures/blocks/nether/nether.png"),
         obsidian: asset_server.load("textures/blocks/nether/obsidian.png"),
-        sandstone: asset_server.load("textures/blocks/desert/sandstone.png"),
+        sand: asset_server.load("textures/blocks/desert/sand.png"),
+        sandstone: asset_server.load("textures/blocks/desert/sandstone/sandstone.png"),
+        sandstone_top: asset_server.load("textures/blocks/desert/sandstone/sandstone_top.png"),
+        sandstone_bottom: asset_server.load("textures/blocks/desert/sandstone/sandstone_bottom.png"),
         oak_log: asset_server.load("textures/blocks/forest/oak_log/oak_log.png"),
         oak_log_top: asset_server.load("textures/blocks/forest/oak_log/oak_log_top.png"),
         oak_leaves: asset_server.load("textures/blocks/forest/oak_leaves.png"),
@@ -50,6 +53,14 @@ fn load_all_assets(
         diamond_block: asset_server.load("textures/blocks/general/diamond_block.png"),
         emerald_ore: asset_server.load("textures/blocks/general/emerald_ore.png"),
         gold_block: asset_server.load("textures/blocks/general/gold_block.png"),
+        gold_ore: asset_server.load("textures/blocks/general/gold_ore.png"),
+        iron_ore: asset_server.load("textures/blocks/general/iron_ore.png"),
+        redstone_ore: asset_server.load("textures/blocks/general/redstone_ore.png"),
+        glowstone: asset_server.load("textures/blocks/nether/glowstone.png"),
+        end_stone: asset_server.load("textures/blocks/end/end_stone.png"),
+        cactus_top: asset_server.load("textures/blocks/cactus/cactus_top.png"),
+        cactus_side: asset_server.load("textures/blocks/cactus/cactus_side.png"),
+        cactus_bottom: asset_server.load("textures/blocks/cactus/cactus_bottom.png"),
         snow: asset_server.load("textures/blocks/iceland/snow.png"),
         ice: asset_server.load("textures/blocks/iceland/ice.png"),
         packed_ice: asset_server.load("textures/blocks/iceland/packed_ice.png"),
@@ -141,6 +152,69 @@ fn load_all_assets(
     commands.insert_resource(crate::resources::asset_handles::ExplosionTextures {
         frames: explosion_frames,
     });
+
+    // Load effect textures
+    let effect_textures = crate::resources::asset_handles::EffectTextures {
+        fire: asset_server.load("textures/effects/buffs/campfire_fire.png"),
+    };
+    commands.insert_resource(effect_textures);
+
+    // Load hero sound effects
+    let hero_sounds = crate::resources::asset_handles::HeroSounds {
+        hit1: asset_server.load("audio/sfx/mobs/hero/hit1.ogg"),
+        hit2: asset_server.load("audio/sfx/mobs/hero/hit2.ogg"),
+        hit3: asset_server.load("audio/sfx/mobs/hero/hit3.ogg"),
+        fallbig: asset_server.load("audio/sfx/mobs/hero/fallbig.ogg"),
+        fallsmall: asset_server.load("audio/sfx/mobs/hero/fallsmall.ogg"),
+    };
+    commands.insert_resource(hero_sounds);
+
+    // Load skeleton sound effects
+    let skeleton_sounds = crate::resources::asset_handles::SkeletonSounds {
+        hurt1: asset_server.load("audio/sfx/mobs/skeleton/hurt1.ogg"),
+        hurt2: asset_server.load("audio/sfx/mobs/skeleton/hurt2.ogg"),
+        hurt3: asset_server.load("audio/sfx/mobs/skeleton/hurt3.ogg"),
+        hurt4: asset_server.load("audio/sfx/mobs/skeleton/hurt4.ogg"),
+        death: asset_server.load("audio/sfx/mobs/skeleton/death.ogg"),
+    };
+    commands.insert_resource(skeleton_sounds);
+
+    // Load villager sound effects
+    let villager_sounds = crate::resources::asset_handles::VillagerSounds {
+        hit1: asset_server.load("audio/sfx/mobs/villager/hit1.ogg"),
+        hit2: asset_server.load("audio/sfx/mobs/villager/hit2.ogg"),
+        hit3: asset_server.load("audio/sfx/mobs/villager/hit3.ogg"),
+        hit4: asset_server.load("audio/sfx/mobs/villager/hit4.ogg"),
+        death: asset_server.load("audio/sfx/mobs/villager/death.ogg"),
+    };
+    commands.insert_resource(villager_sounds);
+
+    // Load bow sound effects
+    let bow_sounds = crate::resources::asset_handles::BowSounds {
+        shoot: asset_server.load("audio/sfx/bow/bow.ogg"),
+    };
+    commands.insert_resource(bow_sounds);
+
+    // Load block breaking sound effects
+    let block_sounds = crate::resources::asset_handles::BlockSounds {
+        stone_break1: asset_server.load("audio/sfx/blocks/stone/break1.ogg"),
+        stone_break2: asset_server.load("audio/sfx/blocks/stone/break2.ogg"),
+        stone_break3: asset_server.load("audio/sfx/blocks/stone/break3.ogg"),
+        wood_break: asset_server.load("audio/sfx/blocks/wood/break1.ogg"),
+        leaves_break1: asset_server.load("audio/sfx/blocks/leaves/break1.ogg"),
+        leaves_break2: asset_server.load("audio/sfx/blocks/leaves/break2.ogg"),
+        leaves_break3: asset_server.load("audio/sfx/blocks/leaves/break3.ogg"),
+        leaves_break4: asset_server.load("audio/sfx/blocks/leaves/break4.ogg"),
+        leaves_break5: asset_server.load("audio/sfx/blocks/leaves/break5.ogg"),
+        sand_break1: asset_server.load("audio/sfx/blocks/sand/break1.ogg"),
+        sand_break2: asset_server.load("audio/sfx/blocks/sand/break2.ogg"),
+        sand_break3: asset_server.load("audio/sfx/blocks/sand/break3.ogg"),
+        sand_break4: asset_server.load("audio/sfx/blocks/sand/break4.ogg"),
+        snow_break1: asset_server.load("audio/sfx/blocks/snow/break1.ogg"),
+        snow_break2: asset_server.load("audio/sfx/blocks/snow/break2.ogg"),
+        snow_break3: asset_server.load("audio/sfx/blocks/snow/break3.ogg"),
+    };
+    commands.insert_resource(block_sounds);
 
     info!("✅ All assets loaded successfully!");
 }

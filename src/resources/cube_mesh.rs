@@ -80,6 +80,18 @@ impl UVLayout {
     pub fn tnt() -> Self {
         Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
     }
+
+    /// Cactus: [cactus_top | cactus_bottom | cactus_side | cactus_side]
+    /// Atlas slots: [0:top, 1:bottom, 2:sides, 3:front(=sides)]
+    pub fn cactus() -> Self {
+        Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
+    }
+
+    /// Sandstone: [sandstone_top | sandstone_bottom | sandstone | sandstone]
+    /// Atlas slots: [0:top, 1:bottom, 2:sides, 3:front(=sides)]
+    pub fn sandstone() -> Self {
+        Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
+    }
 }
 
 /// Helper function to generate UV coordinates for top/bottom faces

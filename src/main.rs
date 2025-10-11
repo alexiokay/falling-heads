@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy::window::{WindowResolution, PresentMode};
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-use avian2d::{math::*, prelude::*};
+use bevy::winit::WinitSettings;
+use bevy_framepace::{FramepacePlugin, FramepaceSettings, Limiter};
+use avian3d::{math::*, prelude::*};
 
 mod components;
 mod resources;
@@ -45,6 +47,8 @@ use utils::system_sets::configure_system_sets;
 
 fn main() {
     let mut app = App::new();
+    let settings = GameSettings::new();
+    let fps_limit = settings.fps_limit;
 
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -55,6 +59,27 @@ fn main() {
             }),
             ..default()
         }))
+        .insert_resource(WinitSettings {
+            focused_mode: bevy::winit::UpdateMode::Continuous,
+            unfocused_mode: bevy::winit::UpdateMode::Continuous, // Keep rendering when unfocused
+        })
+        .add_plugins(FramepacePlugin)
+        .insert_resource(if settings.vsync_enabled {
+            // VSync is on, disable framepace limiter
+            FramepaceSettings {
+                limiter: Limiter::Off,
+            }
+        } else if fps_limit > 0 {
+            // VSync is off, use framepace limiter
+            FramepaceSettings {
+                limiter: Limiter::from_framerate(fps_limit as f64),
+            }
+        } else {
+            // VSync off, no limit
+            FramepaceSettings {
+                limiter: Limiter::Off,
+            }
+        })
         .init_state::<GameState>()
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         // Enable interpolation for ALL rigid bodies by default for smooth movement at any framerate
@@ -94,11 +119,12 @@ fn main() {
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()
         .init_resource::<resources::command_queue::CommandQueue>()
-        .insert_resource(GameSettings::new())
+        .insert_resource(settings)
         .add_systems(Startup, setup)
         .add_systems(Update, initialize_mesh_cache)
         .add_systems(Update, initialize_material_cache)
-        .add_systems(Update, log_performance_metrics);
+        .add_systems(Update, log_performance_metrics)
+        .add_systems(Update, apply_fps_limit);
 
     // Configure system execution order
     configure_system_sets(&mut app);
@@ -114,6 +140,26 @@ fn pause_physics(mut time: ResMut<Time<Physics>>) {
 /// Resume Avian physics when entering Playing state
 fn resume_physics(mut time: ResMut<Time<Physics>>) {
     time.unpause();
+}
+
+/// Apply FPS limit based on settings
+/// VSync takes priority - when enabled, framepace limiter is disabled
+fn apply_fps_limit(
+    settings: Res<GameSettings>,
+    mut framepace_settings: ResMut<FramepaceSettings>,
+) {
+    if settings.is_changed() {
+        framepace_settings.limiter = if settings.vsync_enabled {
+            // VSync enabled - disable framepace and let VSync handle frame limiting
+            Limiter::Off
+        } else if settings.fps_limit > 0 {
+            // VSync disabled - use framepace limiter
+            Limiter::from_framerate(settings.fps_limit as f64)
+        } else {
+            // VSync disabled, no FPS limit - unlimited
+            Limiter::Off
+        };
+    }
 }
 
 fn setup(mut commands: Commands) {

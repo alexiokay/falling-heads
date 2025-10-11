@@ -2,16 +2,15 @@ use bevy::prelude::*;
 use crate::components::{
     hero::Hero,
     block::{Block, BlockType},
-    physics::Velocity,
     resource::{Resource, ResourceType, RotatingResource},
     power_effect::SpeedModifier,
     chunk::LoadedChunks,
     enemy::Health,
     buff::Buffable,
-    bundles::{SpriteBundle3d, PhysicsBundle, avian_physics},
+    bundles::{SpriteBundle3d, avian_physics},
     background::BackgroundCache,
 };
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 use crate::events::block_events::{BlockDamaged, BlockDestroyed};
 use crate::events::resource_events::ResourceCollected;
 use crate::events::damage_events::{EntityDamaged, EntityDied};
@@ -20,7 +19,7 @@ use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
 use crate::systems::world_generation::{generate_chunks_around_hero, despawn_distant_chunks};
 use crate::systems::health_system::{handle_entity_damage, handle_entity_death, update_death_animations, cleanup_marked_entities};
-use crate::systems::health_ui_system::{spawn_health_bars, update_health_bars};
+use crate::systems::ui::health_ui::{spawn_health_bars, update_health_bars};
 use crate::systems::background_system::update_background;
 use crate::systems::entity_spawn::spawn_villagers_around_position;
 use crate::systems::dragon_ai_system::dragon_ai_system;
@@ -123,6 +122,7 @@ fn spawn_hero(
         },
         Health::new(3),
         Buffable,
+        crate::components::experience::Experience::default(), // Start at level 1 with 0 XP
         avian_physics::character(),  // Avian physics: RigidBody, Collider, LinearVelocity, etc.
         SpriteBundle3d::new(
             meshes.add(Rectangle::new(HERO_SIZE, HERO_SIZE)),
@@ -131,7 +131,7 @@ fn spawn_hero(
         ),
     ));
 
-    info!("Hero spawned in Forest biome (Y=130000)");
+    info!("Hero spawned in Forest biome (Y=130000) with XP system");
 }
 
 fn spawn_villagers(
@@ -266,14 +266,17 @@ fn spawn_resources_from_destroyed_blocks(
             ..default()
         });
 
+        // Random Z offset to prevent Z-fighting when resources stack
+        let z_offset = rand::random::<f32>() * 2.0; // 0.0 to 2.0 range
+
         commands.spawn((
             Resource { resource_type },
             RotatingResource::default(),
-            avian_physics::resource(Vec2::new(0.0, RESOURCE_DROP_VELOCITY_Y)),  // Avian physics for gravity/collisions
+            avian_physics::resource(Vec3::new(0.0, RESOURCE_DROP_VELOCITY_Y, 0.0)),  // Avian physics for gravity/collisions
             SpriteBundle3d::new(
                 meshes.add(Rectangle::new(RESOURCE_SIZE, RESOURCE_SIZE)),
                 material,
-                Vec3::new(event.position.x, event.position.y, 5.0),
+                Vec3::new(event.position.x, event.position.y, 5.0 + z_offset),
             ),
         ));
     }

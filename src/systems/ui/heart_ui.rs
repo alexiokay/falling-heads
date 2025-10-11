@@ -68,37 +68,75 @@ fn update_hearts(
         return;
     };
 
-    for (heart_entity, heart_ui, mut heart_transform, material_3d) in heart_query.iter_mut() {
-        // Find the owner entity
-        if let Ok((owner_entity, owner_transform, health)) = entity_query.get(heart_ui.owner) {
-            // Position heart above the entity (centered)
-            let num_hearts = (health.max / 2) as f32;
-            let heart_spacing = 26.0; // Bigger spacing for bigger hearts (18 → 26)
-            let total_width = num_hearts * heart_spacing;
-            let start_x = -(total_width / 2.0) + (heart_spacing / 2.0); // Center and offset by half heart width
-            let x_offset = start_x + (heart_ui.heart_index as f32 * heart_spacing);
+    // First pass: collect all hearts per entity and mark for despawn
+    let mut hearts_by_entity: std::collections::HashMap<Entity, Vec<(Entity, usize)>> = std::collections::HashMap::new();
+    let mut to_despawn = Vec::new();
 
-            heart_transform.translation.x = owner_transform.translation.x + x_offset;
-            heart_transform.translation.y = owner_transform.translation.y + 60.0; // Higher above head (40 → 60)
-            heart_transform.translation.z = 15.0; // Front layer
+    for (heart_entity, heart_ui, _transform, _material) in heart_query.iter() {
+        if let Ok((_owner_entity, _owner_transform, health)) = entity_query.get(heart_ui.owner) {
+            let heart_value = heart_ui.heart_index * 2;
 
-            // Calculate which texture to use based on health
-            let heart_value = heart_ui.heart_index * 2; // Each heart represents 2 health
-            let texture = if health.current > (heart_value + 1) as u32 {
-                heart_textures.full.clone() // Full heart
-            } else if health.current == (heart_value + 1) as u32 {
-                heart_textures.half.clone() // Half heart
+            if health.current <= heart_value as u32 {
+                to_despawn.push(heart_entity);
             } else {
-                heart_textures.container.clone() // Empty heart
+                hearts_by_entity.entry(heart_ui.owner)
+                    .or_insert_with(Vec::new)
+                    .push((heart_entity, heart_ui.heart_index));
+            }
+        } else {
+            to_despawn.push(heart_entity);
+        }
+    }
+
+    // Despawn marked hearts
+    for entity in to_despawn {
+        commands.entity(entity).despawn();
+    }
+
+    // Sort hearts by index
+    for hearts in hearts_by_entity.values_mut() {
+        hearts.sort_by_key(|(_, idx)| *idx);
+    }
+
+    // Second pass: update positions and textures
+    for (heart_entity, heart_ui, mut heart_transform, material_3d) in heart_query.iter_mut() {
+        if let Ok((_owner_entity, owner_transform, health)) = entity_query.get(heart_ui.owner) {
+            let heart_value = heart_ui.heart_index * 2;
+
+            if health.current <= heart_value as u32 {
+                continue; // Already marked for despawn
+            }
+
+            // Determine texture
+            let texture = if health.current > (heart_value + 1) as u32 {
+                heart_textures.full.clone()
+            } else {
+                heart_textures.half.clone()
             };
 
-            // Update material texture
+            // Get this entity's hearts and find position
+            if let Some(entity_hearts) = hearts_by_entity.get(&heart_ui.owner) {
+                let num_hearts = entity_hearts.len();
+                let position_index = entity_hearts.iter()
+                    .position(|(e, _)| *e == heart_entity)
+                    .unwrap_or(0);
+
+                // Center the hearts
+                let heart_spacing = 26.0;
+                let total_width = (num_hearts.saturating_sub(1)) as f32 * heart_spacing;
+                let start_x = -(total_width / 2.0);
+                let x_offset = start_x + (position_index as f32 * heart_spacing);
+
+                // Update transform
+                heart_transform.translation.x = owner_transform.translation.x + x_offset;
+                heart_transform.translation.y = owner_transform.translation.y + 60.0;
+                heart_transform.translation.z = 15.0;
+            }
+
+            // Update texture
             if let Some(material) = materials.get_mut(&material_3d.0) {
                 material.base_color_texture = Some(texture);
             }
-        } else {
-            // Owner entity despawned - remove heart
-            commands.entity(heart_entity).despawn();
         }
     }
 }

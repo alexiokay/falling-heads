@@ -1,427 +1,338 @@
-# MineHeads - Release Notes
+# Release Notes - Version 0.3 (FPS Limiting & Unfocused Rendering)
 
-## Version 0.2.10 - Physics & AI Movement Fixes (October 9, 2025)
+## ⚙️ Settings & Performance
 
-### ⚙️ Character-to-Character Physics Improvements
-- **IMPROVED**: Character collisions now use unconditional velocity swapping
-  - Simple elastic collision physics (billiard ball style)
-  - Restitution applied to both horizontal and vertical bounces
-  - Separation clamped to 100 units to prevent teleportation
-  - Removed "approaching check" that caused sticking issues
-- **FIXED**: Characters now bounce naturally from all angles
-  - Bouncing from heads, sides, all directions feels consistent
-  - No more sticking together in clusters
-  - Ball-like physics behavior achieved
+### FPS Limiting System
+- **Added configurable FPS limiter** with precise frame pacing using `bevy_framepace`
+  - Default: 60 FPS limit (configurable in settings)
+  - Cycle through presets: 30 → 60 → 120 → 144 → 240 → Unlimited
+  - Works independently of window focus (no more FPS drops when unfocused)
+  - Perfect for streaming/recording - consistent FPS whether game is focused or not
 
-### 🎮 AI Movement System Overhaul
-- **FIXED**: AI no longer interferes with player/physics velocity
-  - AI only applies movement when velocity < 50 (nearly stationary)
-  - Prevents AI from killing existing momentum from bounces/player input
-  - Character preserves velocity from physics interactions
-- **NEW**: Turbo-aware AI movement
-  - When SpeedModifier (turbo/speed boost) is active, AI continues to help
-  - Allows AI to provide extra momentum even when already moving
-  - Better feel when using speed power-ups
-- **IMPROVED**: Direction changes only when stationary
-  - AI direction timer only triggers when velocity < 50
-  - Prevents erratic direction flips during bouncing
+### VSync Integration
+- **Smart VSync/FPS limiter coordination**
+  - When VSync is ON: FPS limiter automatically disables (VSync controls frame rate)
+  - When VSync is OFF: FPS limiter takes over with precise frame timing
+  - Default changed to VSync OFF + 60 FPS limit (less input lag than VSync)
+  - FPS Limit button visually grays out when VSync is enabled
 
-### 🏐 Horizontal vs Vertical Bounce Parity
-- **FIXED**: Horizontal wall bounces now match vertical bounce power
-  - Horizontal collisions now apply restitution coefficient
-  - Was: `velocity.x = -velocity.x * 1.0` (no energy loss)
-  - Now: `velocity.x = -velocity.x * bouncy.restitution` (consistent physics)
-  - Characters bounce off walls with same energy as bouncing off floor
+### Settings Menu Updates
+- **New "FPS Limit" button** in settings menu
+  - Green button when active, grayed out when VSync enabled
+  - Click to cycle through FPS presets
+  - Shows current limit or "Unlimited"
+  - Disabled interaction when VSync is on (visual + functional)
 
-### 🛡️ Crash Prevention
-- **FIXED**: Integer overflow crash in spatial hash system
-  - Used `saturating_add()` instead of regular addition
-  - Prevents panic when extreme positions occur from velocity accumulation
-  - Game no longer crashes when many villagers cluster together
+### Files Modified
+1. **Cargo.toml**
+   - Added `bevy_framepace = "0.19"` dependency
+2. **src/resources/settings.rs**
+   - Added `fps_limit: u32` field to `GameSettings`
+   - Changed default: `vsync_enabled: false`, `fps_limit: 60`
+3. **src/main.rs**
+   - Added `WinitSettings` with continuous update mode (focused + unfocused)
+   - Integrated `FramepacePlugin` with conditional limiter setup
+   - Added `apply_fps_limit()` system to dynamically adjust FPS when settings change
+4. **src/components/settings_menu.rs**
+   - Added `FpsLimitButton` component
+5. **src/systems/settings_menu_system.rs**
+   - Added FPS Limit button to UI (grayed out when VSync enabled)
+   - Added cycling logic for FPS presets
+   - Added dynamic color/text updates when VSync toggles
+   - Hover effects disabled on FPS button when VSync is on
 
-### 🔧 Technical Details
-- **Files Modified**:
-  - `src/plugins/physics_plugin.rs` - Character collision physics, AI movement logic
-  - `src/resources/spatial_hash.rs` - Overflow protection with saturating math
-- **Physics Constants**:
-  - MAX_BOUNCE_VELOCITY: 400.0 (horizontal)
-  - MAX_BOUNCE_VELOCITY * 2.0: 800.0 (vertical)
-  - Separation clamp: 100.0 units
-  - AI activation threshold: 50.0 velocity
-- **AI Behavior**:
-  - Checks for `SpeedModifier` component (turbo power)
-  - Applies movement when `velocity.x.abs() < 50.0 || has_turbo`
-  - Maintains VILLAGER_MOVE_SPEED and VILLAGER_MAX_SPEED constants
 
-### 📊 Physics Comparison
-| Aspect | Before | After |
-|--------|--------|-------|
-| Horizontal bounce | No restitution (1.0x) | Restitution applied |
-| AI interference | Active at velocity < 300 | Only at < 50 or with turbo |
-| Character collisions | Complex formulas | Simple velocity swap |
-| Spatial hash | Panic on overflow | Saturating math |
-| Cluster behavior | Teleporting/sticking | Natural bouncing |
+# Release Notes - Version 0.3 (Fireball Collision & Latest Fixes)
 
----
+## 🔥 Ghast Fireball Fixes
 
-## Version 0.2.9 - Dragon Boss System & Dev Panel Hotkey (October 9, 2025)
+### Fireball Collision System
+- **Fixed fireballs not exploding on character contact** - Fireballs now properly explode when touching heroes, villagers, and enemies
+  - Added missing `CollisionLayers` to fireball spawn (using Snowball layer)
+  - Increased fireball spawn offset from 60.0 to 100.0 units to prevent immediate collision with shooting ghast
+  - Root cause: Fireballs had Sensor + CollisionEventsEnabled but NO CollisionLayers, so Avian didn't know what to collide with
 
-### ⌨️ Dev Panel Hotkey
-- **NEW**: Tab key toggle for dev panel
-  - Press `Tab` during gameplay to instantly open/close dev panel
-  - No need to navigate through Settings menu
-  - Quick access to weather controls, powers, and biome teleport
-  - Visual feedback in console when toggled
-- **IMPROVED**: Dev panel now has keyboard shortcut accessibility
-  - Settings menu toggle still available
-  - Both methods work simultaneously
+### Files Modified
+1. **src/systems/enemy_ai_system.rs** (lines 267-299)
+   - Added `CollisionLayers::new(GameLayer::Snowball, ...)` to fireball spawn
+   - Increased spawn offset to 100.0 (outside ghast's 80-radius collider)
 
-### 🐉 Dragon Boss Enemy (Work in Progress)
-- **NEW**: Ender Dragon boss mob spawnable via DRAGON command
-  - 3D animated dragon model (minecraft_dragon_-_free_-_black_and_white.glb)
-  - **SCALE**: 80x size - massive, impressive boss appearance
-  - **HIGH HP**: 20 health points (10x more than regular enemies)
-  - **FLYING AI**: Ignores block collisions, flies through the air
 
-- **NEW**: Dragon State Machine AI
-  - **Emerging**: Flies onto screen from right to left (400 units)
-  - **Flying**: Active flight with dynamic movement (200 units/s)
-  - **Hovering**: Floats in place with sine wave bobbing
-  - **Landing**: Smart descent to exposed surface blocks only
-  - **Landed**: Sits on blocks for 3 seconds before taking off again
+# Release Notes - Version 0.3 (Cave Generation Overhaul)
 
-- **NEW**: Smart Landing System
-  - Dragons only land on exposed blocks (not buried blocks)
-  - Clearance checking: 6 blocks height + 3 blocks radius
-  - Avoids landing in cramped spaces
-  - Finds nearest valid landing spot within 800 unit radius
+## 🕳️ Cave System Complete Redesign
 
-- **NEW**: Dynamic Flight Behavior
-  - Rotation toward flight direction (yaw, pitch, roll)
-  - Hover bobbing effect (30 unit amplitude sine wave)
-  - Random flight patterns (70% land, 30% keep flying)
-  - 40% chance to fly offscreen after landing
+### Corridor-Based Cave Generation
+- **Completely redesigned cave system** with corridor-based structures instead of large organic caves
+- Caves are now **much smaller** (2-4 blocks wide typically) and **more structured**
+- Each biome has **unique corridor patterns and shapes**
 
-- **COMPONENTS**: Dragon-specific systems
-  - `Dragon` - State machine component with timer, hover offset, targets
-  - `DragonState` - Enum: Emerging, Flying, Hovering, Landing, Landed
-  - `Flying` - Marker component to bypass block collision
-  - `DragonAnimationClip` - Stores animation handle for future animation
+### Biome-Specific Cave Structures
 
-- **NOTE**: Animation system infrastructure added but playback disabled
-  - Bevy 0.17 AnimationGraph API requires complex setup
-  - Dragon flies and behaves correctly without wing animation
-  - Wing flapping animation TODO for future update
+#### 🔥 Nether
+- **Vertical wavy corridors** (lava tubes)
+- 2-4 blocks wide with meandering patterns
+- Small pocket rooms scattered throughout
 
-### 📦 Dragon Asset System
-- **MODELS**: Three dragon GLB models available
-  - `realistic_dragon_minecraft.glb` - Original, no animations (unused)
-  - `minecraft_ender_hydra_3_headed_ender_dragon.glb` - 3-headed variant (unused)
-  - `minecraft_dragon_-_free_-_black_and_white.glb` - **Active model** with built-in "fly" animation
+#### 🌌 End
+- **Diagonal crystalline corridors** (geometric patterns)
+- Straight diagonal tunnels with sparse distribution
+- Unique angular geometry matching End theme
 
-- **ANIMATION LOADING**:
-  - Dragon animation clip loaded via `GltfAssetLabel::Animation(0)`
-  - Stored in `DragonAnimation` resource
-  - Animation system searches GLB hierarchy for AnimationPlayer component
+#### ⛏️ Underground
+- **Classic dungeon layout** with horizontal and vertical winding corridors
+- Multiple intersecting tunnels (2-3 blocks wide/tall)
+- Larger rooms at corridor intersections
 
-### 🔧 Technical Details
-- **Dev Panel Hotkey**:
-  - Added `toggle_dev_panel_with_tab()` system to dev_panel_system.rs
-  - Listens for `KeyCode::Tab` and toggles `GameSettings.dev_mode`
-  - Works alongside existing Settings menu toggle
+#### 🏔️ Mountains
+- **Horizontal mining shaft corridors** at different heights
+- Multiple parallel shafts running horizontally
+- Small caverns scattered throughout
 
-- **Dragon System Files Created**:
-  - `src/systems/dragon_ai_system.rs` - Complete dragon AI and movement
-  - `src/systems/dragon_animation_system.rs` - Animation infrastructure (WIP)
-  - `inspect_glb.py` - Python GLB model analyzer tool
+#### ❄️ Iceland
+- **Thin jagged ice cracks** (1-2 blocks wide)
+- Irregular crack patterns
+- Very small ice pockets
 
-- **Dragon System Files Modified**:
-  - `src/plugins/asset_loader_plugin.rs` - Dragon model and animation loading
-  - `src/plugins/external_api_plugin.rs` - spawn_dragon() function, DRAGON command
-  - `src/plugins/gameplay_plugin.rs` - Added dragon_ai_system to game loop
-  - `src/plugins/physics_plugin.rs` - Exclude Flying entities from collisions
-  - `src/components/enemy.rs` - Dragon, DragonState, Flying, DragonAnimationClip
-  - `src/components/bundles.rs` - PhysicsBundle::dragon() with minimal gravity
-  - `src/resources/asset_handles.rs` - EnemyModels, DragonAnimation resources
-  - `src/resources/command_queue.rs` - PowerCommandType::Dragon
-  - `src/systems/mod.rs` - Export dragon systems
+#### 🏜️ Desert
+- **Horizontal tomb corridors** (sparse distribution)
+- Ancient tomb-like passages
+- Small tomb rooms
 
-- **Constants**:
-  - `DRAGON_FLIGHT_SPEED`: 200.0 - Fast flight speed
-  - `HOVER_AMPLITUDE`: 30.0 - Vertical bobbing range
-  - `HOVER_FREQUENCY`: 2.0 - Bobbing speed
-  - `FLYING_DURATION`: 4.0s - Time to fly across screen
-  - `HOVERING_DURATION`: 2.0s - Time to hover in place
-  - `LANDED_DURATION`: 3.0s - Time sitting on blocks
+#### 🌳 Forest
+- **Twisting organic root corridors**
+- Both horizontal and vertical twisting paths
+- Root cavities (small natural chambers)
 
-### 🎮 Future Dragon Plans (NOT IMPLEMENTED)
-- Kill dragon to collect dragon eggs (drops)
-- Dragon egg collection unlocks friendly dragon summon power
-- Friendly dragon does flyby fire attack and leaves
-- Dragon boss battles and level completion mechanics
-- Dragon fireball attacks while flying
-- Full wing flapping animation with Bevy 0.17 AnimationGraph
-- Multiple dragon variants (3-headed hydra, different colors)
+#### 🌾 Plains
+- **Rare shallow horizontal burrows** (very sparse)
+- Minimal cave presence
+
+### Key Features
+- ✅ **Biome-specific generation** - Each biome has unique cave patterns
+- ✅ **Small and structured** - No more massive open caves
+- ✅ **Corridor-focused** - Explorable tunnel systems
+- ✅ **Generative variety** - Each cave has natural variation
+- ✅ **Better enemy spawning** - Enemies spawn in cave systems
+
+### Technical Implementation
+- Replaced large noise-based caves with corridor generation algorithms
+- Each biome uses custom pattern matching for corridor shapes
+- Vertical, horizontal, and diagonal corridor support
+- Dynamic corridor width variation based on biome
+
+### Files Modified
+1. **src/systems/world_generation.rs** (lines 226-358)
+   - Complete rewrite of `should_generate_cave()` function
+   - Implemented 8 unique biome-specific cave patterns
+   - Changed from organic noise caves to structured corridors
 
 ---
 
-## Version 0.2.8 - Death Particle System & Collision Fixes (October 9, 2025)
+# Release Notes - Version 0.3 (Physics & Audio Fixes)
 
-### 💀 Death Particle System
-- **NEW**: Textured death particles when characters die
-  - Particles use actual character textures (not solid colors)
-  - Characters fragment into 8-12 textured pieces
-  - Each particle shows piece of character's skin/material
-  - Example: Black skeleton spawns black bone texture particles, white skeleton spawns white bone particles
-- **NEW**: Dynamic particle physics with rotation
-  - Random velocities: explosive scatter effect
-  - Gravity applied: particles fall realistically
-  - **Random initial rotation**: Each particle spawns at random angle (0-360° all axes)
-  - **Spinning motion**: Particles rotate while falling (-5 to +5 rad/sec per axis)
-  - **Size variation**: 6-18 units base with non-uniform scaling (0.8-1.2x per axis)
-  - **Lifetime**: 1.5-2.5 seconds (longer for natural tumbling effect)
-  - Upward bias: particles fly up before falling (100-400 units/s vertical)
+## =' Critical Bug Fixes
 
-### 🛡️ Dead Entity Collision Fix
-- **FIXED**: Dead characters no longer interact with game
-  - Dead entities excluded from hero melee damage system
-  - Dead entities excluded from enemy collision damage
-  - Dead entities excluded from arrow collision
-  - Prevents duplicate death particles from hitting corpses
-- **IMPROVED**: Death animation isolation
-  - Entities with `DeathAnimation` component ignored by collision systems
-  - Entities with `MarkedForDeath` component ignored by collision systems
-  - Clean death animation without interference
+### Ghast Collision System
+- **Fixed visual overlap with Ghasts** - Players can no longer partially phase through Ghast entities
+  - Changed Ghast AI from direct velocity assignment to acceleration-based movement
+  - Added `LinearDamping(2.0)` to allow Avian's collision response to work properly
+  - Adjusted collider size to 80.0 (160x160) to match pattern used by other entities
+  - Root cause: AI was overwriting velocity every frame, preventing physics collision separation
 
-### 🎨 Damage Visual Color Fix
-- **FIXED**: Death particles no longer affected by red damage overlay
-  - DamageVisual component now stores `original_color` before red tint
-  - Death particles use stored original color (not red-tinted material)
-  - Particles show true character appearance even when damaged
-- **FIXED**: Progressive red tinting bug
-  - When entity gets damaged multiple times, system now reuses stored original color
-  - Prevents entities from becoming progressively redder with each hit
-  - Hero no longer turns permanently red from repeated arrow hits
-- **IMPROVED**: Material color restoration
-  - Damage visual resets to original color (not just white)
-  - Preserves character color tints and variations
-  - Better visual consistency
+### Audio System Memory Leak
+- **Fixed permanent audio distortion** - Sounds no longer become corrupted after many entities take damage
+  - Added `PlaybackSettings::DESPAWN` to ALL audio spawns (damage, death, bow, blocks)
+  - Root cause: AudioPlayer entities were never cleaned up, accumulating infinitely and clogging the audio mixer
+  - Affected sounds now auto-despawn when finished playing
 
-### 🔧 Technical Details
-- **Files Modified**:
-  - `src/systems/death_particle_system.rs` - Textured particles with rotation and size variation
-  - `src/components/death_particle.rs` - Added `rotation_velocity` field
-  - `src/components/damage_visual.rs` - Added `original_color` field to DamageVisual
-  - `src/systems/damage_visual_system.rs` - Store/restore original color, prevent red accumulation
-  - `src/plugins/physics_plugin.rs` - Exclude dead entities from collisions
-  - `src/systems/projectile_system.rs` - Arrows ignore dead enemies
-  - `src/main.rs` - Added DeathParticlePlugin
-- **New Components**:
-  - `DeathParticle { velocity: Vec3, rotation_velocity: Vec3, lifetime: Timer }` - Particle physics with rotation
-- **Death Particle Pipeline**:
-  1. Entity dies → EntityDied event
-  2. Get entity's material and DamageVisual
-  3. Clone material with original_color (pre-damage)
-  4. Spawn 8-12 particles with random rotation and size
-  5. Apply physics (velocity + gravity + rotation)
-  6. Despawn after lifetime
-- **Rotation System**:
-  - Initial rotation: Random quaternion on all axes (0-2π)
-  - Angular velocity: -5 to +5 rad/sec on each axis
-  - Update: `rotation = rotation * delta_rotation` each frame
+### Extreme Velocity Bug (Teleportation Fix)
+- **Fixed players being launched to extreme coordinates** - No more teleporting millions of units away
+  - Added `clamp_entity_velocities()` system that runs after physics updates
+  - Limits horizontal velocity to �1200 units/second (`MAX_ENTITY_HORIZONTAL_SPEED`)
+  - Limits vertical velocity to �1500 units/second (`MAX_ENTITY_VERTICAL_SPEED`)
+  - Root cause: When many entities overlap, Avian applies cumulative push forces causing exponential velocity buildup
 
-### 📊 Death Particle Specs
-| Property | Value | Notes |
-|----------|-------|-------|
-| Particle count | 8-12 | Random per death |
-| Particle size | 6-18 units base | Random variation |
-| Size scaling | 0.8-1.2x per axis | Non-uniform for realism |
-| Velocity X | -300 to 300 units/s | Horizontal scatter |
-| Velocity Y | 100 to 400 units/s | Upward explosion |
-| Velocity Z | -50 to 50 units/s | Depth variation |
-| Rotation velocity | -5 to +5 rad/s | Per axis (X, Y, Z) |
-| Initial rotation | 0-360° per axis | Random start angle |
-| Gravity | -800 units/s² | Realistic fall |
-| Lifetime | 1.5-2.5s | Random duration (increased) |
-| Material | Clone of character | With original color |
-| Texture | Character texture | Actual skin pieces |
+### Dead Entities Buff System
+- **Fixed dead entities continuing to take buff damage** - Dead characters no longer burn or generate buff sounds
+  - Added `Without<MarkedForDeath>` filter to buff effect systems
+  - Added automatic buff removal on death in `handle_entity_death()`
+  - Root cause: Buff systems didn't check if entities were dead before applying effects
 
----
+## <� Code Quality Improvements
 
-## Version 0.2.7 - TNT Visual Overhaul & Physics Improvements (October 9, 2025)
+### Constants Centralization
+- Moved velocity limit constants to `constants.rs`:
+  - `MAX_ENTITY_HORIZONTAL_SPEED: f32 = 1200.0`
+  - `MAX_ENTITY_VERTICAL_SPEED: f32 = 1500.0`
+- Ensures consistent velocity limits across the codebase
 
-### 💥 TNT Visual & Audio Enhancements
-- **NEW**: TNT now uses directional 3D cube mesh with proper textures
-  - Custom UV-mapped 4x1 atlas: tnt_top | tnt_bottom | tnt_side | tnt_side
-  - Removed upside-down texture hack (180° rotation)
-  - Fixed backface culling - correct mesh winding order for all faces
-  - TNT appears correctly oriented from all angles
-- **NEW**: Minecraft-style explosion particle animation system
-  - 16-frame explosion animation (assets/textures/effects/explosion/explosion_0-15.png)
-  - 12-16 particles per explosion with random positioning
-  - Particles spawn across full explosion radius (±273 units, 80% of TNT_EXPLOSION_RADIUS)
-  - Staggered delays (0-1200ms) - particles appear gradually over 1.2 seconds
-  - Fast animation speed (20ms per frame, 320ms total per particle)
-  - Particles hidden until delay finishes (proper visibility control)
-  - Particle size variation: 75-125 units (2x smaller than initial)
-  - Total explosion effect duration: ~1.7 seconds
-- **NEW**: Dynamic explosion sound system
-  - 4 random explosion sounds (explode1-4.ogg) play as particles appear
-  - Volume controlled via constant: EXPLOSION_VOLUME = 0.3 (30%)
-  - Sounds spread over 1.2 seconds matching particle stagger
-  - Creates realistic cascading explosion audio
+### Physics System
+- **Ghast AI Movement System** (`ghast_floating_movement`):
+  - Now uses gentle acceleration instead of direct velocity control
+  - Integrates properly with Avian's collision response
+  - Applies damping for smooth, natural floating movement
 
-### 🎯 TNT Physics Improvements
-- **IMPROVED**: TNT collision with characters now velocity-based
-  - Characters pushed based on TNT's velocity (not fixed force)
-  - Horizontal: 40% of TNT velocity transferred
-  - Vertical: 60% of TNT velocity pushes characters down
-  - TNT bounces off characters (40% bounce vertically, -50% horizontally)
-- **FIXED**: TNT no longer clips through characters
-  - Full separation on collision (no partial overlap)
-  - Characters can't "hold" falling TNT on their head
-  - TNT bounces dynamically instead of getting stuck
-- **FIXED**: TNT no longer gets stuck in mid-air
-  - Added ground check system - TNT "wakes up" if block underneath is destroyed
-  - Checks for supporting block every frame when settled (gravity = 0)
-  - Prevents floating TNT when blocks are destroyed beneath it
-- **FIXED**: TNT grounding logic improved
-  - TNT touching characters can't be marked as grounded
-  - Prevents TNT from freezing in air near characters
-  - Gravity re-enabled properly when not truly settled
-- **FIXED**: Character jumping on TNT no longer pushes TNT into ground
-  - Characters bounce off TNT instead
-  - TNT only gets slight downward velocity if not grounded
-  - Prevents TNT from clipping into blocks below
+## =� Technical Details
 
-### 🔧 Technical Details
-- **Files Modified**:
-  - `src/resources/cube_mesh.rs` - Fixed mesh winding order for proper backface culling
-  - `src/resources/asset_handles.rs` - Added TNT textures and ExplosionTextures resource
-  - `src/plugins/asset_loader_plugin.rs` - Load 16 explosion frames
-  - `src/plugins/powers_plugin.rs` - TNT material, explosion animation, sound system
-  - `src/components/explosive.rs` - Added ExplosionAnimation component
-  - `src/plugins/physics_plugin.rs` - Velocity-based TNT collision, ground check, character interaction
-  - `src/utils/constants.rs` - Added EXPLOSION_VOLUME constant
-- **New Components**:
-  - `ExplosionAnimation` - tracks frame timer, delay timer, current frame, visibility state
-- **Mesh Optimization**: TNT uses shared mesh from MeshCache (64x64 cube)
-- **Audio API**: Uses `PlaybackSettings::DESPAWN.with_volume(Volume::Linear(0.3))`
+### Files Modified
+1. **src/systems/enemy_ai_system.rs** (lines 363-376)
+   - Rewrote ghast movement to use acceleration-based forces
+   - Changed from `velocity.x = ...` to `velocity.x += acceleration * delta_time`
 
-### 📊 TNT Explosion Specs
-| Property | Value | Notes |
-|----------|-------|-------|
-| Particles per explosion | 12-16 | Random count |
-| Particle size | 75-125 units | 2x smaller, varied |
-| Particle delay | 0-1200ms | Staggered start |
-| Frame duration | 20ms | Fast animation |
-| Frames per particle | 16 | explosion_0 to explosion_15 |
-| Particle lifetime | ~320ms | After delay finishes |
-| Total effect duration | ~1.7s | Including delays |
-| Explosion radius | 342 units | TNT_EXPLOSION_RADIUS |
-| Particle spread | ±273 units | 80% of radius |
-| Sound volume | 30% | EXPLOSION_VOLUME constant |
-| Sound files | 4 variants | explode1-4.ogg |
+2. **src/plugins/external_api_plugin.rs** (lines 294-297)
+   - Added `LinearDamping(2.0)` to ghast physics
+   - Updated collider size to 80.0 (half-extents) for 160x160 total collision box
+
+3. **src/systems/audio/mob_sounds.rs** (lines 49-175)
+   - Added `PlaybackSettings::DESPAWN` to 7 different sound spawn locations
+   - Prevents AudioPlayer entity memory leak
+
+4. **src/plugins/physics_plugin.rs** (lines 1070-1088)
+   - Added new `clamp_entity_velocities()` system
+   - Runs in `PhysicsSet::Collision` after spatial hash rebuild
+
+5. **src/systems/buffs/buff_core.rs** (lines 41, 82)
+   - Added `Without<MarkedForDeath>` to buff effect queries
+   - Prevents buff effects on dead entities
+
+6. **src/systems/health_system.rs** (line 73)
+   - Added `.remove::<Buff>()` to death handler
+   - Cleans up all buffs when entity dies
+
+7. **src/utils/constants.rs** (lines 29-30)
+   - Added velocity limit constants
+
+## = Known Issues Addressed
+
+### Issue #1: Ghast Overlap
+- **Symptom**: Players could stand inside Ghast sprite without bouncing
+- **Cause**: Ghast AI set velocity directly, overwriting Avian's collision forces
+- **Fix**: Acceleration-based movement + LinearDamping + proper collider size
+- **Status**:  RESOLVED
+
+### Issue #2: Audio Distortion
+- **Symptom**: After spawning many villagers and hitting them, all sounds become permanently distorted
+- **Cause**: Thousands of AudioPlayer entities never despawned, overwhelming the audio mixer
+- **Fix**: PlaybackSettings::DESPAWN on all sound spawns
+- **Status**:  RESOLVED
+
+### Issue #3: Teleportation Bug
+- **Symptom**: Spawning many villagers causes player to be launched millions of units away, crashing with AABB assertion error
+- **Cause**: Cumulative collision forces from multiple overlapping entities with no velocity cap
+- **Fix**: Velocity clamping system limits maximum speeds
+- **Status**:  RESOLVED
+
+### Issue #4: Ghost Buffs on Dead Entities
+- **Symptom**: Dead characters continue burning and making damage sounds
+- **Cause**: Buff systems didn't filter out dead entities
+- **Fix**: Filter dead entities + remove buffs on death
+- **Status**:  RESOLVED
+
+## = Comparison to Previous Commit (765c0d8)
+
+**Previous commit message**: "switched physics system to avian, some world generation (caves) fixed bugs with meshed blocks like pumpkins not getting visual damage overaly and changes ome movement and stuff"
+
+**This update focuses on**:
+- Critical physics stability (velocity clamping)
+- Audio system reliability (memory leak fix)
+- Ghast collision accuracy (overlap prevention)
+- Buff system correctness (dead entity handling)
+
+All fixes address core gameplay bugs that significantly impact player experience.
 
 ---
 
-## Version 0.2.6 - Dev Panel Power Buttons & Menu Navigation Fix (October 8, 2025)
+**Build Status**:  Compiles successfully with 86 warnings (all pre-existing, no new warnings introduced)
 
-### =' Dev Panel Enhancements
-- **NEW**: Power buttons added to dev mode UI
-  - 8 instant-trigger power buttons: TNT, FAST, SLOW, ARROW, LASER, MIRROR, VILLAGERS, GHAST
-  - Click buttons to activate powers instantly (no API needed)
-  - Visual feedback: Green flash on activation, hover effects
-  - Powers use same system as API commands (global command queue)
-- **Location**: Dev panel appears on right side when dev mode enabled
-- **Toggle**: Enable/disable dev mode in Settings menu
-
-### <� Menu Navigation Fix
-- **FIXED**: ESC key now works in Settings menu
-  - Previously: ESC only worked in Playing � Paused states
-  - Now: ESC works in Settings � Paused (go back to pause menu)
-  - Navigation flow: Playing � Paused � Settings � Paused � Playing
-- **System**: Added `toggle_pause` to Settings state update loop
-
-### = Bug Fixes
-- **FIXED**: Power buttons now correctly trigger effects
-  - Dev panel now uses global `COMMAND_QUEUE` instead of separate resource
-  - Powers execute through same pipeline as API commands
-  - Added `get_command_queue()` accessor function
-
-### =' Technical Details
-- **Files Modified**:
-  - `src/systems/dev_panel_system.rs` - Power button handler uses global queue
-  - `src/plugins/external_api_plugin.rs` - Added `get_command_queue()` public function
-  - `src/plugins/ui_plugin.rs` - Added `toggle_pause` to Settings state
-  - `src/components/dev_panel.rs` - Added `PowerButton` component
-  - `src/systems/pause_menu_system.rs` - Added Settings � Paused ESC handling
-
-### =� Dev Panel Controls
-| Section | Controls | Description |
-|---------|----------|-------------|
-| Weather | 6 buttons | Clear, Rain, Snow, Sandstorm, Ash Storm, Fire Rain |
-| Powers | 8 buttons | TNT, FAST, SLOW, ARROW, LASER, MIRROR, VILLAGERS, GHAST |
-| Info | Live status | Current weather type and intensity |
+**Testing Recommendations**:
+1. Spawn multiple ghasts and verify no visual overlap when colliding
+2. Spawn many villagers, hit them repeatedly, verify audio stays clean
+3. Spawn 20+ villagers around player, verify no extreme velocity/teleportation
+4. Kill burning entities, verify they stop taking damage and making sounds
 
 ---
 
-## Version 0.2.5 - Weather Particle Improvements (October 8, 2025)
+## UI/UX Improvements
 
-### <' Weather Particle Visual Enhancements
-- **IMPROVED**: Weather particles are now 1.5x bigger (192x768 from 128x512)
-  - Size variation: 0.9x to 1.3x for natural variety
-  - Much more visible, especially snow particles
-- **IMPROVED**: All weather particles now use full opacity (alpha = 1.0)
-  - Removed transparency reduction that made particles hard to see
-  - Rain, snow, and all weather effects now clearly visible
-- **IMPROVED**: Weather-specific particle spawn rates to prevent accumulation
-  - Snow: 1.5 particles/0.1s (reduced from 3.0 to prevent screen clutter)
-  - Other weather: 3.0 particles/0.1s
-  - Prevents slow-moving particles from accumulating on screen
+### Resource Display Overhaul
+- **Redesigned resource UI** with vertical icon-based layout in top-left corner
+- Resources now display with **icons (32px) instead of text names**
+- Added visual icons for: Coal, Iron, Gold, Diamond, Emerald, Redstone, Netherite
+- Font size increased to **28pt** for better readability
+- All resource UI elements now **scale with window size** using viewport-relative units (vw/vh)
 
-### <( Weather Particle Lifetime System
-- **NEW**: Weather-type-specific particle lifetimes
-  - Rain: 3s (fast falling, reaches bottom quickly)
-  - Snow: 12s (slow drift, needs time to cross screen)
-  - FireRain: 2s (very fast)
-  - AuroraStorm: 15s (very slow, floating effect)
-  - Sandstorm: 10s (moderate horizontal movement)
-  - AshStorm/BloodMoon: 12s (slow/erratic movement)
-  - VoidStorm: 8s (moderate speed)
-- **FIXED**: Snow particles no longer disappear in middle of screen
-  - Previous 5s lifetime was too short for slow-falling snow
-  - Now properly crosses entire screen before despawning
+### Experience System
+- **Added XP bar** at bottom center of screen with level progression
+- XP gained from:
+  - **Mob kills**: Skeleton (15 XP), Zombie (10 XP), Yeti (20 XP), Enderman (30 XP), Dragon (100 XP)
+  - **Resource collection**: Coal (2), Iron (3), Gold (5), Diamond (10), Emerald (15), Netherite (25)
+  - **Block breaking**: 1 XP per block
+- XP bar properly scales with window (40vw width, 3vh height)
+- Fixed texture clipping for smooth segment display using clip-based rendering
 
-### <� Weather Particle Movement & Distribution
-- **IMPROVED**: Snow movement tuned for realistic drift
-  - Horizontal drift: -60 to 60 units
-  - Fall speed: -120 to -180 units (slower, more gentle)
-  - Creates natural floating snowflake effect
-- **IMPROVED**: Better particle distribution across screen
-  - Uses actual window dimensions (no hardcoded 1920x1080)
-  - Spawns across full screen width with margins
-  - Varied spawn heights (100-500 units above screen)
-  - Depth variation (Z: 80-120) for layered effect
-- **IMPROVED**: Screen-relative particle spawning
-  - Particles spawn above current camera position
-  - Follow player movement smoothly
-  - Despawn when far below camera (500 units)
-  - Creates seamless overlay effect
+### Game Information Display
+- **Added Y coordinate display** showing player's vertical position
+- **Added difficulty level indicator** (orange text, 24pt)
+- **Added Day/Night cycle indicator** (yellow for day, dark blue for night, 24pt)
+- All info displays positioned in top-left below resources with proper spacing
 
-### =' Technical Details
-- **Files Modified**:
-  - `src/systems/weather_system.rs` - Particle size, lifetime, spawning, distribution
-  - `src/resources/weather_config.rs` - Updated PARTICLE_LIFETIME constant documentation
-- **Query Optimization**: Uses `windows.iter().next()` for proper window dimension access
-- **Performance**: Reduced particle counts prevent excessive spawning while maintaining visual quality
+### Heart/Health UI Improvements
+- **Hearts now removed when fully lost** instead of showing empty containers
+- **Remaining hearts automatically center** above entities after damage
+- Fixed centering to work **immediately with any damage type** (melee, TNT, projectiles)
+- System now counts actual visible hearts instead of calculating mathematically
+- Prevented integer overflow crashes with `saturating_sub()`
 
-### =� Particle Lifetime Comparison
-| Weather Type | Old Lifetime | New Lifetime | Reason |
-|--------------|--------------|--------------|--------|
-| Rain | 5s | 3s | Fast falling, optimized |
-| Snow | 5s | **12s** | Slow drift needs more time |
-| FireRain | 5s | 2s | Very fast, optimized |
-| AuroraStorm | 5s | **15s** | Very slow floating |
-| Sandstorm | 5s | 10s | Moderate horizontal |
-| AshStorm | 5s | 12s | Erratic movement |
+### Day/Night Cycle Implementation
+- **5-minute day/night cycle** (2.5 minutes day, 2.5 minutes night)
+- Created `DayNightCycle` resource to track game time
+- Visual indicator updates in real-time with color changes
+
+### Visual Effects Fixes
+- **Fixed buff/debuff visual layering** - effects now render **IN FRONT** of characters
+- Changed Z-position from -2.0 (behind) to +2.0 (in front)
+- Burning debuff fire overlay now properly visible on top of entities
+
+## Technical Improvements
+
+### System Architecture
+- Added `WorldConfig` resource initialization to main app
+- Fixed all XP system events to use custom `Message` trait instead of Bevy's `Event`
+- Improved heart UI system with **two-pass rendering** for accurate centering
+- All UI elements converted to viewport-relative units (vw/vh) for proper window scaling
+
+### Bug Fixes
+- Fixed resource UI not displaying on first load
+- Fixed difficulty display not updating
+- Fixed XP bar texture stretching with clip-based rendering
+- Fixed heart centering calculation with proper visible heart counting
+- Fixed query conflicts in heart UI system (Transform mutable borrow)
+- Prevented crashes from integer underflow in heart positioning
+
+### Files Modified (UI Update)
+1. **src/plugins/ui_plugin.rs**
+   - Redesigned resource display with icons and vertical layout
+   - Added Y coordinate, difficulty, and day/night displays
+   - Converted all UI to viewport-relative sizing
+
+2. **src/systems/ui/xp_bar.rs**
+   - Implemented XP bar with proper scaling
+   - Fixed texture clipping with container-based rendering
+
+3. **src/systems/ui/heart_ui.rs**
+   - Implemented heart removal and centering logic
+   - Two-pass system for accurate positioning
+
+4. **src/systems/progression/experience.rs**
+   - Implemented XP gain from mobs, resources, and blocks
+   - Fixed event system to use Message trait
+
+5. **src/resources/day_night_cycle.rs** (NEW)
+   - Created day/night cycle resource
+
+6. **src/systems/buffs/burning_visual.rs**
+   - Fixed Z-axis positioning for fire overlay
+
+7. **src/main.rs**
+   - Added WorldConfig resource initialization

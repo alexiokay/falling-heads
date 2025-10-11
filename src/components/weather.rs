@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::block::{BiomeType, BiomeBehavior};
+use crate::components::block::BiomeType;
 
 /// Weather event types - visual and gameplay effects
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]

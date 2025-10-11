@@ -1,4 +1,4 @@
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 
 /// Collision layers for filtering what collides with what
 #[derive(PhysicsLayer, Clone, Copy, Debug, Default)]

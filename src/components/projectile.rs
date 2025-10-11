@@ -80,7 +80,7 @@ impl ProjectileBehavior for Arrow {
     }
 
     fn should_despawn(&self) -> bool {
-        self.lifetime.finished()
+        self.lifetime.is_finished()
     }
 
     fn update(&mut self, delta: f32) {
@@ -112,7 +112,41 @@ pub struct Laser {
 
 #[derive(Component)]
 pub struct Fireball {
-    pub speed: f32,
+    pub damage: u32,
+    pub lifetime: Timer,
+    pub team: Team,
+}
+
+impl Fireball {
+    pub fn new(damage: u32) -> Self {
+        Self {
+            damage,
+            lifetime: Timer::from_seconds(6.0, TimerMode::Once), // 6 second lifetime
+            team: Team::Enemy,  // Ghasts/Dragons shoot enemy fireballs
+        }
+    }
+}
+
+impl ProjectileBehavior for Fireball {
+    fn team(&self) -> Team {
+        self.team
+    }
+
+    fn damage(&self) -> u32 {
+        self.damage
+    }
+
+    fn should_despawn(&self) -> bool {
+        self.lifetime.is_finished()
+    }
+
+    fn update(&mut self, delta: f32) {
+        self.lifetime.tick(std::time::Duration::from_secs_f32(delta));
+    }
+
+    fn push_force(&self) -> f32 {
+        200.0  // Fireballs have strong push
+    }
 }
 
 #[derive(Component)]
@@ -140,7 +174,7 @@ impl ProjectileBehavior for Snowball {
     }
 
     fn should_despawn(&self) -> bool {
-        self.lifetime.finished()
+        self.lifetime.is_finished()
     }
 
     fn update(&mut self, delta: f32) {

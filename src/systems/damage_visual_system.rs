@@ -92,7 +92,7 @@ fn apply_damage_visuals(
 fn update_damage_visuals(
     mut commands: Commands,
     mut query: Query<(Entity, &mut DamageVisual, &MeshMaterial3d<StandardMaterial>, &Children, Option<&DeathAnimation>), Or<(With<Hero>, With<Villager>, With<Enemy>)>>,
-    mut border_query: Query<(Entity, &MeshMaterial3d<StandardMaterial>), With<DamageBorder>>,
+    border_query: Query<(Entity, &MeshMaterial3d<StandardMaterial>), With<DamageBorder>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {

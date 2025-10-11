@@ -4,12 +4,11 @@ use crate::components::{
     villager::Villager,
     enemy::Health,
     buff::Buffable,
-    bundles::{SpriteBundle3d, PhysicsBundle, avian_physics},
-    username_label::UsernameLabel,
+    bundles::{SpriteBundle3d, avian_physics},
 };
 use crate::resources::asset_handles::GameTextures;
 use crate::utils::constants::*;
-use crate::systems::username_label_system::spawn_username_label;
+use crate::systems::ui::username_label::spawn_username_label;
 
 /// Spawns a single villager at the specified position
 pub fn spawn_villager(

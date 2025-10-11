@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use crate::components::enemy::{Dragon, DragonState, EnemyType};
-use crate::components::physics::Velocity;
+use avian3d::prelude::LinearVelocity;
+use crate::components::enemy::{Dragon, DragonState};
 use crate::components::block::Block;
 use crate::components::hero::Hero;
 use rand::Rng;
@@ -17,7 +17,7 @@ const FIREBALL_SHOOT_INTERVAL: f32 = 1.5;  // Shoot every 1.5s while flying
 /// Dragon AI system - dynamic flying, landing, and fireball shooting
 pub fn dragon_ai_system(
     time: Res<Time>,
-    mut dragon_query: Query<(&mut Dragon, &mut Transform, &mut Velocity, Entity)>,
+    mut dragon_query: Query<(&mut Dragon, &mut Transform, &mut LinearVelocity, Entity)>,
     block_query: Query<&Transform, (With<Block>, Without<Dragon>)>,
     hero_query: Query<&Transform, (With<Hero>, Without<Dragon>)>,
 ) {

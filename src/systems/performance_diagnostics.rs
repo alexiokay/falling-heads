@@ -4,16 +4,12 @@ use crate::components::block::Block;
 use crate::components::enemy::Enemy;
 use crate::components::background::Background;
 use crate::components::resource::Resource;
-use crate::components::health_ui::HealthBar;
 use crate::components::damage_overlay::BlockDamageOverlay;
-use crate::components::heart_ui::HeartUI;
 use crate::components::villager::Villager;
 use crate::components::hero::Hero;
 use crate::components::projectile::Arrow;
 use crate::components::explosive::Tnt;
 use crate::components::chunk::Chunk;
-use crate::components::buff::Buff;
-use crate::components::damage_visual::DamageVisual;
 
 #[derive(Resource)]
 pub struct PerformanceTracker {

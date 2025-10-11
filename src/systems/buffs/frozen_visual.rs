@@ -1,9 +1,9 @@
 use bevy::prelude::*;
-use crate::components::frozen::{FrozenStacks, FreezeOverlay};
+use avian3d::prelude::LinearVelocity;
+use crate::components::frozen::FrozenStacks;
 use crate::components::projectile::Snowball;
 use crate::components::hero::Hero;
 use crate::components::villager::Villager;
-use crate::components::physics::Velocity;
 use crate::components::block::Block;
 use crate::resources::spatial_hash::SpatialHash;
 use crate::states::GameState;
@@ -28,7 +28,7 @@ fn snowball_collision_system(
     spatial_hash: Res<SpatialHash>,
     snowball_query: Query<(Entity, &Transform), With<Snowball>>,
     block_query: Query<&Transform, With<Block>>,
-    mut target_query: Query<(Entity, &Transform, Option<&mut FrozenStacks>, &mut Velocity), Or<(With<Hero>, With<Villager>)>>,
+    mut target_query: Query<(Entity, &Transform, Option<&mut FrozenStacks>, &mut LinearVelocity), Or<(With<Hero>, With<Villager>)>>,
 ) {
     const SNOWBALL_HIT_RADIUS: f32 = 40.0;  // Collision radius for entities
     const SNOWBALL_RADIUS: f32 = 12.0;      // Snowball size (24x24, use half)
@@ -106,7 +106,7 @@ fn frozen_stacks_update_system(
         // Tick all stack timers
         frozen.stacks.retain_mut(|stack| {
             stack.timer.tick(time.delta());
-            !stack.timer.finished()  // Keep stacks that haven't expired
+            !stack.timer.is_finished()  // Keep stacks that haven't expired
         });
 
         // If all stacks expired, remove FrozenStacks component
@@ -119,7 +119,7 @@ fn frozen_stacks_update_system(
 
 /// Apply movement speed penalty based on freeze level
 fn apply_freeze_movement_penalty(
-    mut frozen_query: Query<(&FrozenStacks, &mut Velocity), Or<(With<Hero>, With<Villager>)>>,
+    mut frozen_query: Query<(&FrozenStacks, &mut LinearVelocity), Or<(With<Hero>, With<Villager>)>>,
 ) {
     for (frozen, mut velocity) in frozen_query.iter_mut() {
         let speed_mult = frozen.speed_multiplier();
@@ -145,7 +145,7 @@ pub fn update_snowballs(
     for (entity, mut snowball) in snowball_query.iter_mut() {
         snowball.lifetime.tick(time.delta());
 
-        if snowball.lifetime.finished() {
+        if snowball.lifetime.is_finished() {
             commands.entity(entity).despawn();
         }
     }

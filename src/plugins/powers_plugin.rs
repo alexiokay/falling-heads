@@ -12,10 +12,9 @@ use crate::components::{
     collision_layers::GameLayer,
 };
 use crate::events::damage_events::EntityDamaged;
-use crate::resources::asset_handles::GameTextures;
 use crate::states::GameState;
 use crate::utils::constants::*;
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 
 /// Component to handle sequential arrow spawning
 #[derive(Component)]
@@ -58,8 +57,8 @@ pub fn spawn_tnt(
     username: Option<String>,
     asset_server: Option<&AssetServer>,
 ) {
-    use crate::components::physics::Gravity;
-    use crate::systems::username_label_system::spawn_username_label;
+    
+    use crate::systems::ui::username_label::spawn_username_label;
 
     // Spawn TNT as 3D cube using same UV-mapped mesh system as blocks
     let tnt_entity = commands.spawn((
@@ -160,7 +159,7 @@ fn tnt_explosion(
 
                 // Spawn 12-16 explosion particles with random positions and delays
                 let particle_count = rng.gen_range(12..=16);
-                for i in 0..particle_count {
+                for _i in 0..particle_count {
                     // Random offset from explosion center - match explosion radius
                     let max_offset = TNT_EXPLOSION_RADIUS * 0.8; // 80% of explosion radius
                     let offset_x = rng.gen_range(-max_offset..max_offset);
@@ -212,7 +211,7 @@ fn tnt_explosion(
         }
 
         // Push all entities away from explosion and deal damage
-        let push_blocks = 3.0; // Push entities 3 blocks away
+        let _push_blocks = 3.0; // Push entities 3 blocks away (calculated dynamically below)
         for (entity, entity_transform, mut entity_velocity) in entity_query.iter_mut() {
             let entity_pos = entity_transform.translation;
             let distance = explosion_pos.distance(entity_pos);
@@ -409,7 +408,7 @@ fn update_arrow_barrage(
             let hero_pos = hero_transform.translation;
 
             // Calculate direction vector
-            let direction = Vec2::new(barrage.current_angle.cos(), barrage.current_angle.sin());
+            let direction = Vec3::new(barrage.current_angle.cos(), barrage.current_angle.sin(), 0.0);
             let velocity = direction * ARROW_SPEED;
 
             // Spawn arrow slightly offset from hero to avoid instant collision
@@ -426,7 +425,8 @@ fn update_arrow_barrage(
                 RigidBody::Dynamic,
                 LinearVelocity(velocity),
                 GravityScale(1.0),  // Use global gravity
-                Collider::circle(8.0),  // Small circular collider for arrow tip (follows center of mass)
+                Mass(0.1),  // CRITICAL: Must have mass to prevent NaN
+                Collider::sphere(8.0),  // Small spherical collider for arrow tip (follows center of mass)
                 Sensor,  // Don't physically collide, just detect overlaps
                 CollisionLayers::new(GameLayer::Arrow, GameLayer::Arrow.filters()),
                 LockedAxes::ROTATION_LOCKED,  // Prevent physics from rotating arrow (we control rotation manually)

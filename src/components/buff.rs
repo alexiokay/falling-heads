@@ -35,6 +35,7 @@ pub struct Buff {
     pub buff_type: BuffType,
     pub duration: Timer,
     pub tick_timer: Timer,  // For damage/healing over time
+    pub stacks: u8,         // Number of stacks (1-3)
 }
 
 impl Buff {
@@ -43,7 +44,25 @@ impl Buff {
             buff_type,
             duration: Timer::from_seconds(duration_secs, TimerMode::Once),
             tick_timer: Timer::from_seconds(0.5, TimerMode::Repeating),  // Tick every 0.5s
+            stacks: 1,
         }
+    }
+
+    /// Maximum stacks allowed per buff type
+    pub const MAX_STACKS: u8 = 3;
+
+    /// Add a stack (up to MAX_STACKS) and refresh duration
+    pub fn add_stack(&mut self, duration_secs: f32) {
+        if self.stacks < Self::MAX_STACKS {
+            self.stacks += 1;
+        }
+        // Refresh duration
+        self.duration = Timer::from_seconds(duration_secs, TimerMode::Once);
+    }
+
+    /// Get damage multiplier based on stacks
+    pub fn get_damage_multiplier(&self) -> f32 {
+        self.stacks as f32
     }
 }
 

@@ -50,7 +50,7 @@ fn update_username_labels(
 pub fn spawn_username_label(
     commands: &mut Commands,
     owner_entity: Entity,
-    owner_position: Vec3,
+    _owner_position: Vec3,
     username: String,
     offset_y: f32,
     _meshes: &mut Assets<Mesh>,

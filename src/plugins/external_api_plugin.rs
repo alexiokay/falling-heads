@@ -10,6 +10,9 @@ use crate::systems::entity_spawn::spawn_villagers_around_position;
 use crate::components::enemy::{Enemy, EnemyType, Health, Dragon, DragonState, Flying, EnemyBehavior, DragonAnimationClip};
 use crate::components::bundles::PhysicsBundle;
 use crate::resources::asset_handles::EnemyModels;
+use crate::components::collision_layers::GameLayer;
+use crate::utils::constants::{CHARACTER_MASS, ENEMY_BOUNCE};
+use avian3d::prelude::*;
 
 pub struct ExternalApiPlugin;
 
@@ -235,6 +238,18 @@ fn process_commands(
                     info!("🪞 MIRROR barrier activated by {}!", command.username);
                 }
             }
+            PowerCommandType::Ghast => {
+                if let Ok((_, hero_transform)) = hero_query.single() {
+                    spawn_ghast(
+                        &mut commands,
+                        hero_transform.translation + Vec3::new(200.0, 150.0, 0.0), // Spawn above and to the right
+                        &mut meshes,
+                        &mut materials,
+                        &asset_server,
+                    );
+                    info!("👻 GHAST spawned by {}!", command.username);
+                }
+            }
             PowerCommandType::Dragon => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
                     if let Some(dragon_anim) = dragon_animation.as_ref() {
@@ -257,13 +272,57 @@ fn process_commands(
     }
 }
 
+fn spawn_ghast(
+    commands: &mut Commands,
+    position: Vec3,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    asset_server: &Res<AssetServer>,
+) {
+    use crate::components::bundles::SpriteBundle3d;
+
+    // Spawn Ghast as flying enemy above hero
+    let ghast_texture = asset_server.load("textures/entities/enemy/ghast/ghast.png");
+
+    commands.spawn((
+        Enemy::new(EnemyType::Ghast),
+        Flying,  // Ghasts float and ignore block collisions
+        Health::new(EnemyType::Ghast.max_health()),
+        // Custom physics for flying - no gravity!
+        RigidBody::Dynamic,
+        LinearVelocity(Vec3::ZERO),
+        GravityScale(0.0),  // No gravity - ghasts float
+        LinearDamping(2.0),  // Slow down naturally - allows Avian collision response to work
+        Mass(CHARACTER_MASS),
+        Collider::cuboid(80.0, 80.0, 80.0),  // 160x160 collider - matches 2x pattern used by other entities (prevents overlap)
+        Restitution::new(ENEMY_BOUNCE),  // Same bounce as other enemies
+        Friction::new(0.0),
+        LockedAxes::ROTATION_LOCKED,
+        CollisionLayers::new(GameLayer::Enemy, GameLayer::Enemy.filters()),
+        CollisionEventsEnabled,
+        SpriteBundle3d::new(
+            meshes.add(Rectangle::new(80.0, 80.0)),  // Bigger size
+            materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(ghast_texture),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
+            position,
+        ),
+    ));
+
+    info!("👻 Ghast spawned at {:?}", position);
+}
+
 fn spawn_dragon(
     commands: &mut Commands,
     position: Vec3,
     enemy_models: &Res<EnemyModels>,
     dragon_animation: &DragonAnimation,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
+    _meshes: &mut ResMut<Assets<Mesh>>,
+    _materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
     // Spawn dragon in front of camera to avoid background clipping
     // Keep hero's Y (height), but move forward in Z and offset in X

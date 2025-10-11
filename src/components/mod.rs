@@ -3,6 +3,7 @@ pub mod block;
 pub mod resource;
 pub mod physics;
 pub mod collision_layers;
+pub mod experience;
 pub mod projectile;
 pub mod enemy;
 pub mod explosive;

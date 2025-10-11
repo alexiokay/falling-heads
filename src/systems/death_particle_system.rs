@@ -1,9 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
 use crate::components::death_particle::DeathParticle;
-use crate::components::hero::Hero;
-use crate::components::villager::Villager;
-use crate::components::enemy::{Enemy, EnemyType};
 use crate::events::damage_events::EntityDied;
 use crate::states::GameState;
 

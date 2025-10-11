@@ -27,10 +27,14 @@ pub fn generate_block_atlases(
     let tnt_top = images.get(&block_textures.tnt_top);
     let tnt_bottom = images.get(&block_textures.tnt_bottom);
     let tnt_side = images.get(&block_textures.tnt_side);
+    let cactus_top = images.get(&block_textures.cactus_top);
+    let cactus_bottom = images.get(&block_textures.cactus_bottom);
+    let cactus_side = images.get(&block_textures.cactus_side);
 
     if pumpkin_top.is_none() || pumpkin_side.is_none() || pumpkin_front.is_none()
         || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none()
-        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none() {
+        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none()
+        || cactus_top.is_none() || cactus_bottom.is_none() || cactus_side.is_none() {
         return; // Textures not loaded yet
     }
 
@@ -73,18 +77,29 @@ pub fn generate_block_atlases(
         tnt_side.unwrap(),         // Front (reuse side texture)
     );
 
+    // Generate cactus atlas (4x1 layout: top | bottom | side | side)
+    let cactus_atlas = create_atlas_4x1(
+        cactus_top.unwrap(),
+        cactus_bottom.unwrap(),
+        cactus_side.unwrap(),
+        cactus_side.unwrap()
+    );
+
     // Add atlases to assets after creating them
     let pumpkin_atlas_handle = images.add(pumpkin_atlas);
     let oak_log_atlas_handle = images.add(oak_log_atlas);
     let oak_leaves_atlas_handle = images.add(oak_leaves_atlas);
     let tnt_atlas_handle = images.add(tnt_atlas);
+    let cactus_atlas_handle = images.add(cactus_atlas);
 
     commands.insert_resource(BlockAtlases {
         pumpkin: pumpkin_atlas_handle.clone(),
         oak_log: oak_log_atlas_handle.clone(),
         oak_leaves: oak_leaves_atlas_handle.clone(),
         melon: oak_leaves_atlas_handle.clone(), // Placeholder (atlas generation moved to main.rs)
-        tnt: tnt_atlas_handle,
+        tnt: tnt_atlas_handle.clone(),
+        sandstone: tnt_atlas_handle, // Placeholder - uses tnt atlas for now
+        cactus: cactus_atlas_handle,
     });
 
     *atlases_generated = true;
@@ -96,7 +111,7 @@ pub fn generate_block_atlases(
 pub fn update_directional_materials(
     atlases: Option<Res<BlockAtlases>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut cache: ResMut<MaterialCache>,
+    cache: ResMut<MaterialCache>,
     mut updated: Local<bool>,
 ) {
     if *updated {

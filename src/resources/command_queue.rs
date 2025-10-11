@@ -98,7 +98,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Bolt => "Lightning bolt attack (not yet implemented)",
             PowerCommandType::Arrow => "Fire 48 arrows in a circular barrage",
             PowerCommandType::Laser => "Create a powerful laser beam",
-            PowerCommandType::Ghast => "Spawn a ghast enemy (not yet implemented)",
+            PowerCommandType::Ghast => "Spawn a floating ghast that shoots fireballs",
             PowerCommandType::Box => "Create a protective box (not yet implemented)",
             PowerCommandType::Magnet => "Attract nearby items (not yet implemented)",
             PowerCommandType::Villagers => "Spawn 5 villagers around the hero",
@@ -116,6 +116,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Laser => 8.0,
             PowerCommandType::Villagers => 20.0,
             PowerCommandType::Mirror => 15.0,
+            PowerCommandType::Ghast => 12.0,   // Medium cooldown for flying enemy
             PowerCommandType::Dragon => 30.0,  // Long cooldown for boss spawn
             _ => 0.0,
         }

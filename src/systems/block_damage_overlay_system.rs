@@ -50,7 +50,7 @@ fn spawn_damage_overlays(
 
     // Process blocks that were just damaged
     for event in damage_events.read() {
-        let Ok((block_transform, block_type, block, children)) = block_query.get(event.entity) else {
+        let Ok((block_transform, _block_type, block, children)) = block_query.get(event.entity) else {
             continue; // Block was destroyed
         };
 

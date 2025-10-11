@@ -4,12 +4,12 @@ use crate::components::block::{Block, BlockType, BiomeType, BiomeBehavior};
 use crate::components::chunk::{Chunk, ChunkMember, LoadedChunks, CHUNK_SIZE, world_to_chunk_coords};
 use crate::components::hero::Hero;
 use crate::components::enemy::{Enemy, Health, EnemyBehavior};
-use crate::components::bundles::{SpriteBundle3d, PhysicsBundle, avian_physics};
+use crate::components::bundles::{SpriteBundle3d, avian_physics};
 use crate::resources::asset_handles::BlockTextures;
 use crate::resources::material_cache::MaterialCache;
 use crate::resources::mesh_cache::MeshCache;
 use crate::utils::biome_utils::determine_biome_at_chunk;
-use avian2d::prelude::*;
+// avian3d not needed for world generation (blocks don't use Avian physics)
 
 const BLOCK_SIZE: f32 = 1.0;  // 3D cube size
 const BLOCK_SPACING: f32 = 0.0;  // No spacing - blocks touch
@@ -145,6 +145,8 @@ pub fn generate_chunk(
     let wood_mesh = mesh_cache.wood_mesh.clone();
     let leaves_mesh = mesh_cache.leaves_mesh.clone();
     let melon_mesh = mesh_cache.melon_mesh.clone();
+    let cactus_mesh = mesh_cache.cactus_mesh.clone();
+    let sandstone_mesh = mesh_cache.sandstone_mesh.clone();
 
     // Generate blocks in this chunk
     for local_x in 0..CHUNK_SIZE {
@@ -196,6 +198,14 @@ pub fn generate_chunk(
                     // Grass uses leaves mesh (reusing leaves texture for grass blocks)
                     leaves_mesh.clone()
                 }
+                BlockType::Cactus => {
+                    // Cactus uses custom UV-mapped mesh (no scaling needed, already 64x64x64)
+                    cactus_mesh.clone()
+                }
+                BlockType::Sandstone => {
+                    // Sandstone uses custom UV-mapped mesh (no scaling needed, already 64x64x64)
+                    sandstone_mesh.clone()
+                }
                 _ => {
                     // Uniform blocks use standard cube (scaled to 64x64x64)
                     transform.scale = Vec3::splat(64.0);
@@ -214,7 +224,7 @@ pub fn generate_chunk(
                 },
                 block_type,
                 ChunkMember { chunk_x, chunk_y },
-                // Blocks do NOT use Avian - spatial hash is much faster for 42k+ static blocks
+                // Blocks do NOT use Avian - spatial hash is much faster for 15k+ static blocks
                 Mesh3d(block_mesh),
                 MeshMaterial3d(material),
                 transform,
@@ -223,88 +233,170 @@ pub fn generate_chunk(
     }
 }
 
-/// Check if a block should be a cave (empty space) - Small, varied caves with unique biome-specific generation
+/// Check if a block should be a cave (empty space) - Corridor-based caves with biome-specific shapes
 fn should_generate_cave(block_x: i32, block_y: i32, biome: BiomeType) -> bool {
     let x = block_x as f32;
     let y = block_y as f32;
 
-    // Biome-specific cave structure patterns
+    // Biome-specific corridor patterns
     match biome {
         BiomeType::Nether => {
-            // Nether: Isolated vertical lava tubes with varying sizes
-            // Layered noise for organic tubes
-            let noise1 = ((x * 0.08).sin() * (y * 0.05).cos()).abs();
-            let noise2 = ((x * 0.12 + 100.0).cos() * (y * 0.07 + 50.0).sin()).abs();
-            let combined = noise1 * 0.6 + noise2 * 0.4;
+            // Nether: Vertical wavy corridors (lava tubes)
+            let corridor_center = ((y * 0.015).sin() * 20.0) as i32;
+            let distance_from_corridor = (x as i32 - corridor_center).abs();
+            let corridor_width = 2 + ((y * 0.05).cos().abs() * 2.0) as i32; // 2-4 blocks wide
 
-            // Small tubes
-            combined < 0.12
+            // Multiple parallel vertical corridors
+            let is_vertical_corridor = distance_from_corridor < corridor_width;
+
+            // Add some small pocket rooms
+            let pocket_noise = ((x * 0.12).sin() * (y * 0.1).cos()).abs();
+            let is_pocket = pocket_noise < 0.08;
+
+            is_vertical_corridor || is_pocket
         },
 
         BiomeType::End => {
-            // End: NO caves - completely solid
-            false
+            // End: Straight diagonal corridors (crystalline geometry)
+            let diagonal1 = ((x + y) % 100.0).abs();
+            let diagonal2 = ((x - y) % 100.0).abs();
+            let is_diagonal = diagonal1 < 3.0 || diagonal2 < 3.0;
+
+            // Very sparse - only show corridors sometimes
+            let sparse_check = ((x / 80.0).sin() * (y / 80.0).cos()).abs() > 0.6;
+
+            is_diagonal && sparse_check
         },
 
         BiomeType::Underground => {
-            // Underground: More frequent small cave pockets
-            let noise1 = ((x * 0.1).sin() * (y * 0.12).cos()).abs();
-            let noise2 = ((x * 0.15 + 200.0).cos() * (y * 0.18 + 100.0).sin()).abs();
-            let combined = noise1 * 0.7 + noise2 * 0.3;
+            // Underground: Winding horizontal and vertical corridors (classic dungeon)
+            // Horizontal corridors
+            let h_corridor_center = ((x * 0.012).sin() * 15.0) as i32;
+            let h_distance = (y as i32 - h_corridor_center).abs();
+            let is_h_corridor = h_distance < 2; // 2-3 blocks tall
 
-            // Medium-sized scattered caves
-            combined < 0.15
+            // Vertical corridors
+            let v_corridor_center = ((y * 0.01).cos() * 15.0) as i32;
+            let v_distance = (x as i32 - v_corridor_center).abs();
+            let is_v_corridor = v_distance < 2; // 2-3 blocks wide
+
+            // Larger rooms at intersections
+            let room_noise = ((x * 0.08).sin() * (y * 0.09).cos()).abs();
+            let is_room = room_noise < 0.12;
+
+            is_h_corridor || is_v_corridor || is_room
         },
 
         BiomeType::Mountains => {
-            // Mountains: Elongated horizontal caverns (vein-like)
-            let noise1 = ((x * 0.06).sin() * (y * 0.15).cos()).abs();
-            let noise2 = ((x * 0.04 + 150.0).cos() + (y * 0.2 + 75.0).sin()).abs();
-            let combined = noise1 * 0.5 + noise2 * 0.5;
+            // Mountains: Horizontal mining-shaft corridors at different heights
+            let shaft_height_1 = ((x * 0.008).sin() * 10.0) as i32;
+            let shaft_height_2 = ((x * 0.015 + 100.0).cos() * 12.0) as i32 + 30;
 
-            // Horizontal streaks
-            combined < 0.1
+            let dist1 = (y as i32 - shaft_height_1).abs();
+            let dist2 = (y as i32 - shaft_height_2).abs();
+
+            let is_shaft = dist1 < 2 || dist2 < 2; // 2-3 blocks tall horizontal shafts
+
+            // Small caverns
+            let cavern_noise = ((x * 0.1).sin() * (y * 0.11).cos()).abs();
+            let is_cavern = cavern_noise < 0.09;
+
+            is_shaft || is_cavern
         },
 
         BiomeType::Iceland => {
-            // Iceland: Rare small ice pockets
-            let noise1 = ((x * 0.14).sin() + (y * 0.16).cos()).abs();
-            let noise2 = ((x * 0.09 + 300.0).cos() * (y * 0.11 + 150.0).sin()).abs();
-            let combined = noise1 * 0.6 + noise2 * 0.4;
+            // Iceland: Jagged irregular corridors (ice cracks)
+            let crack_center = ((x * 0.02).sin() * 8.0) as i32;
+            let distance_from_crack = (y as i32 - crack_center).abs();
 
-            // Very small, rare caves
-            combined < 0.08
+            // Thin jagged corridors (1-2 blocks)
+            let crack_width = 1 + ((x * 0.1).cos().abs() * 1.0) as i32;
+            let is_crack = distance_from_crack < crack_width;
+
+            // Very small pockets
+            let pocket_noise = ((x * 0.15).sin() * (y * 0.16).cos()).abs();
+            let is_pocket = pocket_noise < 0.07;
+
+            is_crack || is_pocket
         },
 
         BiomeType::Desert => {
-            // Desert: NO caves
-            false
+            // Desert: Sparse horizontal sandstone corridors (tomb-like)
+            let tomb_center = ((x * 0.01).cos() * 12.0) as i32;
+            let distance_from_tomb = (y as i32 - tomb_center).abs();
+
+            // Sparse distribution
+            let sparse = ((x / 120.0).fract() * (y / 80.0).fract()).abs() > 0.7;
+            let is_corridor = distance_from_tomb < 2 && sparse;
+
+            // Small tomb rooms
+            let room_noise = ((x * 0.11).sin() * (y * 0.12).cos()).abs();
+            let is_tomb_room = room_noise < 0.08 && sparse;
+
+            is_corridor || is_tomb_room
         },
 
         BiomeType::Forest => {
-            // Forest: Small scattered root cavities
-            let noise1 = ((x * 0.13).sin() * (y * 0.14).cos()).abs();
-            let noise2 = ((x * 0.18 + 250.0).cos() + (y * 0.16 + 125.0).sin()).abs();
-            let combined = noise1 * 0.65 + noise2 * 0.35;
+            // Forest: Twisting organic root corridors (irregular and curved)
+            let root_center_1 = ((x * 0.018).sin() * 10.0) as i32;
+            let root_center_2 = ((y * 0.016).cos() * 10.0) as i32;
 
-            // Small irregular pockets
-            combined < 0.11
+            let dist_h = (y as i32 - root_center_1).abs();
+            let dist_v = (x as i32 - root_center_2).abs();
+
+            // Thin twisting corridors (1-2 blocks)
+            let is_root = dist_h < 2 || dist_v < 2;
+
+            // Root cavities (small rooms)
+            let cavity_noise = ((x * 0.13).sin() * (y * 0.14).cos()).abs();
+            let is_cavity = cavity_noise < 0.1;
+
+            is_root || is_cavity
         },
 
         BiomeType::Plains => {
-            // Plains: NO caves
-            false
+            // Plains: Rare shallow horizontal burrows
+            let burrow_center = ((x * 0.009).sin() * 8.0) as i32;
+            let distance = (y as i32 - burrow_center).abs();
+
+            // Very sparse
+            let sparse = ((x / 150.0).fract()).abs() > 0.85;
+
+            distance < 2 && sparse
         },
     }
 }
 
 /// Determine block type based on biome and position
 fn determine_block_type(biome: BiomeType, _block_x: i32, block_y: i32, rng: &mut impl Rng) -> BlockType {
-    // Chance for decorative blocks
-    if rng.gen_bool(0.05) {
+    // Chance for decorative blocks (only near surface)
+    if block_y > -100 && rng.gen_bool(0.05) {
         let decorative = biome.decorative_blocks();
         if !decorative.is_empty() {
             return decorative[rng.gen_range(0..decorative.len())];
+        }
+    }
+
+    // Desert: Mix of sand and sandstone throughout (not depth-dependent)
+    if matches!(biome, BiomeType::Desert) {
+        // Random mix of sand and sandstone blocks
+        let terrain_chance = rng.gen_range(0..100);
+
+        if terrain_chance < 60 {
+            // 60% Sand
+            return BlockType::Sand;
+        } else {
+            // 40% Sandstone or ores
+            let ore_chance = rng.gen_range(0..1000);
+            let ores = biome.ore_blocks();
+
+            return match ore_chance {
+                0..=850 => BlockType::Sandstone, // Most common
+                851..=920 => if !ores.is_empty() { ores[0] } else { BlockType::Sandstone },
+                921..=970 => if ores.len() > 1 { ores[rng.gen_range(0..2.min(ores.len()))] } else { BlockType::Sandstone },
+                971..=995 => if ores.len() > 2 { ores[rng.gen_range(1..ores.len())] } else { BlockType::Sandstone },
+                _ => if ores.len() > 3 { ores[ores.len() - 1] } else { BlockType::Sandstone },
+            };
         }
     }
 
@@ -440,9 +532,10 @@ fn spawn_chunk_enemies(
                 });
 
                 // Give enemies initial velocity to bounce around - upward boost to escape caves
-                let initial_velocity = Vec2::new(
+                let initial_velocity = Vec3::new(
                     rng.gen_range(-100.0..100.0),  // Random horizontal velocity
-                    rng.gen_range(100.0..200.0)    // Upward velocity to pop out of spawn area
+                    rng.gen_range(100.0..200.0),   // Upward velocity to pop out of spawn area
+                    0.0
                 );
 
                 // Use flying physics for dragon, enemy physics with initial velocity for others
