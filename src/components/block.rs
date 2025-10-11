@@ -104,9 +104,9 @@ impl BiomeBehavior for BiomeType {
             BiomeType::Forest => &[BlockType::Wood, BlockType::Pumpkin],
             BiomeType::Desert => &[BlockType::Cactus, BlockType::DeadBush],
             BiomeType::Mountains => &[BlockType::Snow],
-            BiomeType::Underground => &[BlockType::Mushroom, BlockType::Vines],
+            BiomeType::Underground => &[BlockType::Mushroom],
             BiomeType::Nether => &[BlockType::SoulSand, BlockType::Glowstone],
-            BiomeType::End => &[BlockType::ChorusFruit, BlockType::Purpur],
+            BiomeType::End => &[],
             BiomeType::Iceland => &[],  // Pure ice/snow (no decorative blocks)
         }
     }

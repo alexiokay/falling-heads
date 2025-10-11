@@ -43,7 +43,7 @@
         ),
         "Underground": (
             terrain_block: "Stone",
-            decorative_blocks: ["Mushroom", "Vines"],
+            decorative_blocks: ["Mushroom"],
             ore_blocks: ["Coal", "Iron", "Gold", "Diamond", "Emerald", "Redstone"],
             cave_intensity: 0.20,
             cave_threshold: 0.9,
@@ -63,7 +63,7 @@
         ),
         "End": (
             terrain_block: "EndStone",
-            decorative_blocks: ["ChorusFruit", "Purpur"],
+            decorative_blocks: [],
             ore_blocks: ["Obsidian", "Diamond", "Emerald"],
             cave_intensity: 0.12,
             cave_threshold: 1.3,
