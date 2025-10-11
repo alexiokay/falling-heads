@@ -533,7 +533,7 @@ fn initialize_material_cache(
             BlockType::Redstone => {
                 materials.add(StandardMaterial {
                     base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.coal_ore.clone()),  // Reusing coal texture for redstone (no redstone_ore texture)
+                    base_color_texture: Some(block_textures.redstone_ore.clone()),
                     unlit: true,
                     alpha_mode: AlphaMode::Opaque,
                     ..default()
@@ -582,7 +582,7 @@ fn initialize_material_cache(
                     base_color: Color::WHITE,
                     base_color_texture: Some(cactus_atlas_handle.clone()),
                     unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
+                    alpha_mode: AlphaMode::Blend,
                     cull_mode: None,
                     double_sided: true,
                     ..default()

@@ -731,9 +731,16 @@ fn check_entity_collisions(
 /// Hero AI - automatic movement (same as villagers), can be overridden by player input
 fn hero_ai_movement(
     time: Res<Time>,
-    mut hero_query: Query<(&mut Hero, &mut LinearVelocity, Option<&crate::components::power_effect::SpeedModifier>)>,
+    mut hero_query: Query<(&mut Hero, &mut LinearVelocity, Option<&crate::components::power_effect::SpeedModifier>, Option<&crate::components::frozen::FrozenStacks>)>,
 ) {
-    for (mut hero, mut velocity, speed_mod) in hero_query.iter_mut() {
+    for (mut hero, mut velocity, speed_mod, frozen) in hero_query.iter_mut() {
+        // Skip AI movement if fully frozen
+        if let Some(frozen_stacks) = frozen {
+            if frozen_stacks.is_fully_frozen() {
+                continue;
+            }
+        }
+
         // Tick direction change timer
         hero.direction_change_timer.tick(time.delta());
 
@@ -762,9 +769,15 @@ fn hero_ai_movement(
 /// Villager AI - walk back and forth with periodic direction changes
 fn villager_ai_movement(
     time: Res<Time>,
-    mut villager_query: Query<(&mut Villager, &mut LinearVelocity)>,
+    mut villager_query: Query<(&mut Villager, &mut LinearVelocity, Option<&crate::components::frozen::FrozenStacks>)>,
 ) {
-    for (mut villager, mut velocity) in villager_query.iter_mut() {
+    for (mut villager, mut velocity, frozen) in villager_query.iter_mut() {
+        // Skip AI movement if fully frozen
+        if let Some(frozen_stacks) = frozen {
+            if frozen_stacks.is_fully_frozen() {
+                continue;
+            }
+        }
 
         // Tick direction change timer
         villager.direction_change_timer.tick(time.delta());
@@ -1031,8 +1044,8 @@ fn _deprecated_check_hero_enemy_collision(
 /// Triggers whenever hero/villager physically collides with enemy
 fn handle_avian_collision_melee(
     mut collision_events: MessageReader<CollisionStart>,
-    hero_query: Query<Entity, With<Hero>>,
-    _villager_query: Query<Entity, With<Villager>>,
+    hero_query: Query<(Entity, Option<&crate::components::frozen::FrozenStacks>), With<Hero>>,
+    _villager_query: Query<(Entity, Option<&crate::components::frozen::FrozenStacks>), With<Villager>>,
     enemy_query: Query<Entity, With<crate::components::enemy::Enemy>>,
     mut damage_events: MessageWriter<EntityDamaged>,
     mut melee_cooldown: ResMut<MeleeAttackCooldown>,
@@ -1045,7 +1058,14 @@ fn handle_avian_collision_melee(
         let entity2 = event.collider2;
 
         // Check if hero collides with enemy
-        if let Ok(_hero) = hero_query.get(entity1) {
+        if let Ok((_hero, frozen)) = hero_query.get(entity1) {
+            // Skip damage if hero is fully frozen
+            if let Some(frozen_stacks) = frozen {
+                if frozen_stacks.is_fully_frozen() {
+                    continue;
+                }
+            }
+
             if let Ok(enemy) = enemy_query.get(entity2) {
                 if melee_cooldown.can_attack(enemy, current_time, HERO_MELEE_COOLDOWN) {
                     info!("⚔️ HERO MELEE HIT (collision)! enemy={:?}", enemy);
@@ -1058,7 +1078,14 @@ fn handle_avian_collision_melee(
             }
         }
         // Check reverse (enemy collides with hero)
-        if let Ok(_hero) = hero_query.get(entity2) {
+        if let Ok((_hero, frozen)) = hero_query.get(entity2) {
+            // Skip damage if hero is fully frozen
+            if let Some(frozen_stacks) = frozen {
+                if frozen_stacks.is_fully_frozen() {
+                    continue;
+                }
+            }
+
             if let Ok(enemy) = enemy_query.get(entity1) {
                 if melee_cooldown.can_attack(enemy, current_time, HERO_MELEE_COOLDOWN) {
                     info!("⚔️ HERO MELEE HIT (collision)! enemy={:?}", enemy);

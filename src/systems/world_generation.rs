@@ -9,11 +9,13 @@ use crate::resources::asset_handles::BlockTextures;
 use crate::resources::material_cache::MaterialCache;
 use crate::resources::mesh_cache::MeshCache;
 use crate::utils::biome_utils::determine_biome_at_chunk;
+use crate::utils::constants::BLOCK_SIZE;
 // avian3d not needed for world generation (blocks don't use Avian physics)
 
-const BLOCK_SIZE: f32 = 1.0;  // 3D cube size
+// World generation constants - can be adjusted independently from rendering
+const WORLD_BLOCK_SIZE: f32 = BLOCK_SIZE;  // World units per block (matches BLOCK_SIZE from constants.rs = 64.0)
 const BLOCK_SPACING: f32 = 0.0;  // No spacing - blocks touch
-const TOTAL_BLOCK_SIZE: f32 = BLOCK_SIZE + BLOCK_SPACING;
+const TOTAL_BLOCK_SIZE: f32 = WORLD_BLOCK_SIZE + BLOCK_SPACING;  // Total size including spacing (64.0 + 0.0 = 64.0)
 
 /// Generate chunks around the hero position
 pub fn generate_chunks_around_hero(
@@ -42,7 +44,7 @@ pub fn generate_chunks_around_hero(
     };
 
     let hero_pos = hero_transform.translation;
-    let (hero_chunk_x, hero_chunk_y) = world_to_chunk_coords(hero_pos.x, hero_pos.y, TOTAL_BLOCK_SIZE * 64.0);
+    let (hero_chunk_x, hero_chunk_y) = world_to_chunk_coords(hero_pos.x, hero_pos.y, TOTAL_BLOCK_SIZE);
 
     // Generate chunks in a radius around the hero
     let chunk_radius = 3;
@@ -70,7 +72,7 @@ pub fn despawn_distant_chunks(
     };
 
     let hero_pos = hero_transform.translation;
-    let (hero_chunk_x, hero_chunk_y) = world_to_chunk_coords(hero_pos.x, hero_pos.y, TOTAL_BLOCK_SIZE * 64.0);
+    let (hero_chunk_x, hero_chunk_y) = world_to_chunk_coords(hero_pos.x, hero_pos.y, TOTAL_BLOCK_SIZE);
 
     let despawn_distance = 4; // Despawn chunks more than 4 chunks away (reduced from 5 for performance)
 
@@ -154,8 +156,8 @@ pub fn generate_chunk(
             let world_block_x = chunk_x * CHUNK_SIZE + local_x;
             let world_block_y = chunk_y * CHUNK_SIZE + local_y;
 
-            let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE * 64.0;
-            let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE * 64.0;
+            let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE;
+            let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE;
 
             // Skip blocks in the spawn area (keep spawn area clear)
             let distance_to_spawn = ((world_x - spawn_area.center.x).powi(2) + (world_y - spawn_area.center.y).powi(2)).sqrt();
@@ -503,8 +505,8 @@ fn spawn_chunk_enemies(
 
             // If we found an empty cave position, spawn the enemy
             if let Some((world_block_x, world_block_y)) = spawn_pos {
-                let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE * 64.0;
-                let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE * 64.0;
+                let world_x = world_block_x as f32 * TOTAL_BLOCK_SIZE;
+                let world_y = world_block_y as f32 * TOTAL_BLOCK_SIZE;
 
                 // Pick random enemy type from biome
                 let enemy_type = enemy_types[rng.gen_range(0..enemy_types.len())];

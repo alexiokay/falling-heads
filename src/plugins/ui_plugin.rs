@@ -277,7 +277,8 @@ fn update_y_coordinate(
 ) {
     if let Ok(hero_transform) = hero_query.single() {
         for mut text in text_query.iter_mut() {
-            **text = format!("Y: {:.0}", hero_transform.translation.y);
+            let block_y = hero_transform.translation.y / crate::utils::constants::BLOCK_SIZE;
+            **text = format!("Y: {:.0}", block_y);
         }
     }
 }

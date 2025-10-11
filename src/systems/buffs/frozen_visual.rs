@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use avian3d::prelude::LinearVelocity;
+use avian3d::prelude::{LinearVelocity, Restitution, Mass};
 use crate::components::frozen::FrozenStacks;
 use crate::components::projectile::Snowball;
 use crate::components::hero::Hero;
@@ -7,6 +7,18 @@ use crate::components::villager::Villager;
 use crate::components::block::Block;
 use crate::resources::spatial_hash::SpatialHash;
 use crate::states::GameState;
+
+/// Marker component for snowball splash particles
+#[derive(Component)]
+struct SplashParticle {
+    lifetime: Timer,
+}
+
+/// Marker component for freeze overlay visual on entities
+#[derive(Component)]
+struct FreezeOverlay {
+    parent_entity: Entity,
+}
 
 pub struct FrozenPlugin;
 
@@ -16,6 +28,8 @@ impl Plugin for FrozenPlugin {
             snowball_collision_system,
             frozen_stacks_update_system,
             apply_freeze_movement_penalty,
+            update_splash_particles,
+            update_freeze_overlay,
         ).run_if(in_state(GameState::Playing)));
 
         info!("FrozenPlugin loaded");
@@ -29,6 +43,9 @@ fn snowball_collision_system(
     snowball_query: Query<(Entity, &Transform), With<Snowball>>,
     block_query: Query<&Transform, With<Block>>,
     mut target_query: Query<(Entity, &Transform, Option<&mut FrozenStacks>, &mut LinearVelocity), Or<(With<Hero>, With<Villager>)>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     const SNOWBALL_HIT_RADIUS: f32 = 40.0;  // Collision radius for entities
     const SNOWBALL_RADIUS: f32 = 12.0;      // Snowball size (24x24, use half)
@@ -50,9 +67,34 @@ fn snowball_collision_system(
                 let distance = (dx * dx + dy * dy).sqrt();
 
                 if distance < (SNOWBALL_RADIUS + BLOCK_RADIUS) {
-                    // Snowball hit wall - despawn it (just like arrows)
+                    // Snowball hit wall - spawn splash particles and despawn
                     info!("SNOWBALL HIT BLOCK: entity={:?}, distance={:.1}, snowball_pos=({:.0},{:.0}), block_pos=({:.0},{:.0})",
                         snowball_entity, distance, snowball_pos.x, snowball_pos.y, block_pos.x, block_pos.y);
+
+                    // Play snowball hit sound
+                    commands.spawn((
+                        AudioPlayer::new(asset_server.load("audio/sfx/projectiles/snowball/hurt1.ogg")),
+                        PlaybackSettings::DESPAWN,
+                    ));
+
+                    // Spawn white splash particles at block hit position
+                    for i in 0..8 {
+                        let angle = (i as f32 / 8.0) * std::f32::consts::TAU;
+                        let offset = Vec3::new(angle.cos() * 20.0, angle.sin() * 20.0, 5.0);
+
+                        commands.spawn((
+                            Mesh3d(meshes.add(Circle::new(6.0))),
+                            MeshMaterial3d(materials.add(StandardMaterial {
+                                base_color: Color::srgba(1.0, 1.0, 1.0, 0.9),
+                                unlit: true,
+                                alpha_mode: AlphaMode::Blend,
+                                ..default()
+                            })),
+                            Transform::from_translation(snowball_pos + offset),
+                            SplashParticle { lifetime: Timer::from_seconds(0.3, TimerMode::Once) },
+                        ));
+                    }
+
                     commands.entity(snowball_entity).despawn();
                     snowball_hit_something = true;
                     break; // This snowball is done, move to next snowball
@@ -72,6 +114,30 @@ fn snowball_collision_system(
             if distance < SNOWBALL_HIT_RADIUS {
                 // Hit! Despawn snowball
                 commands.entity(snowball_entity).despawn();
+
+                // Play snowball hit sound
+                commands.spawn((
+                    AudioPlayer::new(asset_server.load("audio/sfx/projectiles/snowball/hurt1.ogg")),
+                    PlaybackSettings::DESPAWN,
+                ));
+
+                // Spawn white splash particles (8 particles radiating outward)
+                for i in 0..8 {
+                    let angle = (i as f32 / 8.0) * std::f32::consts::TAU;
+                    let offset = Vec3::new(angle.cos() * 20.0, angle.sin() * 20.0, 5.0);
+
+                    commands.spawn((
+                        Mesh3d(meshes.add(Circle::new(6.0))),
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::srgba(1.0, 1.0, 1.0, 0.9),
+                            unlit: true,
+                            alpha_mode: AlphaMode::Blend,
+                            ..default()
+                        })),
+                        Transform::from_translation(target_pos + offset),
+                        SplashParticle { lifetime: Timer::from_seconds(0.3, TimerMode::Once) },
+                    ));
+                }
 
                 // Add freeze stack
                 if let Some(mut stacks) = frozen_stacks {
@@ -117,22 +183,112 @@ fn frozen_stacks_update_system(
     }
 }
 
+/// Update splash particles and despawn when lifetime expires
+fn update_splash_particles(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut particle_query: Query<(Entity, &mut SplashParticle, &mut Transform)>,
+) {
+    for (entity, mut particle, mut transform) in particle_query.iter_mut() {
+        particle.lifetime.tick(time.delta());
+
+        // Fade out and move particles outward
+        let progress = particle.lifetime.fraction();
+        transform.scale = Vec3::splat(1.0 - progress); // Shrink over time
+
+        if particle.lifetime.is_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 /// Apply movement speed penalty based on freeze level
 fn apply_freeze_movement_penalty(
-    mut frozen_query: Query<(&FrozenStacks, &mut LinearVelocity), Or<(With<Hero>, With<Villager>)>>,
+    mut frozen_query: Query<(&FrozenStacks, &mut LinearVelocity, &mut Restitution, &mut Mass), Or<(With<Hero>, With<Villager>)>>,
 ) {
-    for (frozen, mut velocity) in frozen_query.iter_mut() {
-        let speed_mult = frozen.speed_multiplier();
-
-        // Apply freeze slowdown
-        velocity.x *= speed_mult;
-        velocity.y *= speed_mult;
-
-        // If fully frozen (6 stacks), stop completely
+    for (frozen, mut velocity, mut restitution, mut mass) in frozen_query.iter_mut() {
+        // If fully frozen (6 stacks), become ice cube - no bouncing, heavy, no horizontal movement
         if frozen.is_fully_frozen() {
-            velocity.x = 0.0;
-            velocity.y = 0.0;
+            velocity.x = 0.0;  // Stop all horizontal movement
+            velocity.y = velocity.y.min(0.0);  // Only allow downward movement
+            *restitution = Restitution::new(0.0);  // No bouncing
+            mass.0 = 5.0;  // 5x heavier - falls much faster
+        } else {
+            // Normal movement when not fully frozen
+            *restitution = Restitution::new(1.5);  // Normal bounce (HERO_BOUNCE)
+            mass.0 = 1.0;  // Normal mass
         }
+    }
+}
+
+/// Create/update/remove freeze overlays based on freeze stack count
+fn update_freeze_overlay(
+    mut commands: Commands,
+    frozen_query: Query<(Entity, &FrozenStacks, &Transform), Or<(With<Hero>, With<Villager>)>>,
+    mut overlay_query: Query<(Entity, &FreezeOverlay, &mut Transform), Without<FrozenStacks>>,
+    mut overlay_material_query: Query<&mut MeshMaterial3d<StandardMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    // Track which entities currently have freeze stacks
+    let mut frozen_entities = std::collections::HashSet::new();
+
+    for (entity, frozen, transform) in frozen_query.iter() {
+        frozen_entities.insert(entity);
+        let stack_count = frozen.stack_count();
+
+        // Check if this entity already has an overlay
+        let existing_overlay = overlay_query.iter_mut()
+            .find(|(_, overlay, _)| overlay.parent_entity == entity)
+            .map(|(e, _, t)| (e, t));
+
+        if let Some((overlay_entity, mut overlay_transform)) = existing_overlay {
+            // Update overlay position to follow parent
+            overlay_transform.translation = transform.translation + Vec3::new(0.0, 0.0, 2.0);
+
+            // Update overlay color based on stack count
+            if let Ok(material_handle) = overlay_material_query.get_mut(overlay_entity) {
+                let color = get_freeze_color(stack_count);
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    material.base_color = color;
+                }
+            }
+        } else {
+            // Create new overlay
+            let color = get_freeze_color(stack_count);
+            let overlay_pos = transform.translation + Vec3::new(0.0, 0.0, 2.0);
+
+            commands.spawn((
+                Mesh3d(meshes.add(Circle::new(32.0))),  // Match character size
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: color,
+                    unlit: true,
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                })),
+                Transform::from_translation(overlay_pos),
+                FreezeOverlay { parent_entity: entity },
+            ));
+        }
+    }
+
+    // Remove overlays for entities that no longer have freeze stacks
+    for (overlay_entity, overlay, _) in overlay_query.iter() {
+        if !frozen_entities.contains(&overlay.parent_entity) {
+            commands.entity(overlay_entity).despawn();
+        }
+    }
+}
+
+/// Get freeze overlay color based on stack count (1-6)
+fn get_freeze_color(stack_count: usize) -> Color {
+    match stack_count {
+        1 => Color::srgba(0.7, 0.9, 1.0, 0.2),  // Very light blue, barely visible
+        2 => Color::srgba(0.6, 0.85, 1.0, 0.35), // Light blue
+        3 => Color::srgba(0.5, 0.8, 1.0, 0.5),   // Medium blue
+        4 => Color::srgba(0.4, 0.7, 0.95, 0.65), // Stronger blue
+        5 => Color::srgba(0.3, 0.6, 0.9, 0.8),   // Deep blue
+        _ => Color::srgba(0.2, 0.5, 0.85, 0.9),  // Full freeze - very opaque dark blue
     }
 }
 

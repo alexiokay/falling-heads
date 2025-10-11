@@ -14,11 +14,11 @@ impl FrozenStacks {
         }
     }
 
-    /// Add a snowball hit (adds 6 second stack)
+    /// Add a snowball hit (adds 12 second stack)
     pub fn add_stack(&mut self) {
         if self.stacks.len() < 6 {
             self.stacks.push(FrozenStack {
-                timer: Timer::from_seconds(6.0, TimerMode::Once),
+                timer: Timer::from_seconds(12.0, TimerMode::Once),
             });
         }
     }
@@ -41,9 +41,9 @@ impl FrozenStacks {
     /// Get movement speed multiplier based on freeze level
     pub fn speed_multiplier(&self) -> f32 {
         if self.is_fully_frozen() {
-            0.0  // Completely frozen, can't move
+            0.0  // Completely frozen at 6 stacks, can't move
         } else {
-            1.0 - (self.freeze_intensity() * 0.8)  // Gradually slower (max 80% reduction at 5 stacks)
+            1.0  // No slowdown until fully frozen
         }
     }
 
@@ -55,7 +55,7 @@ impl FrozenStacks {
 
 /// Single frozen stack from one snowball hit
 pub struct FrozenStack {
-    pub timer: Timer,  // 6 seconds per stack
+    pub timer: Timer,  // 12 seconds per stack
 }
 
 /// Visual overlay for frozen effect

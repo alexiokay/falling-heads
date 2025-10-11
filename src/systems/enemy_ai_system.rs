@@ -128,7 +128,7 @@ fn yeti_throw_snowballs(
         return;
     };
 
-    const SNOWBALL_SPEED: f32 = 300.0;  // Slower than arrows
+    const SNOWBALL_SPEED: f32 = 500.0;  // Faster snowball velocity
     const SNOWBALL_RANGE: f32 = 800.0;   // Medium range
     const SNOWBALL_SIZE: f32 = 24.0;     // Smaller than arrows
 
@@ -189,24 +189,25 @@ fn yeti_throw_snowballs(
                 ..default()
             });
 
-            commands.spawn((
+            let snowball = commands.spawn((
                 Snowball::new(),
-                LinearVelocity(velocity),  // Avian LinearVelocity for snowballs
+                LinearVelocity(velocity),
                 RigidBody::Dynamic,
-                Mass(0.1),  // CRITICAL: Must have mass to prevent NaN
+                Mass(0.1),
                 Collider::sphere(SNOWBALL_SIZE / 2.0),
-                GravityScale(0.6),  // Light projectile with some gravity
+                Sensor,
+                GravityScale(0.6),
                 Restitution::new(0.0),
                 Friction::new(0.1),
-                LockedAxes::ROTATION_LOCKED,
+                LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
                 SpriteBundle3d::new(
                     meshes.add(Circle::new(SNOWBALL_SIZE / 2.0)),
                     material,
                     spawn_pos,
                 ),
-            ));
+            )).id();
 
-            info!("SNOWBALL THROWN by Yeti at ({:.0},{:.0})", spawn_pos.x, spawn_pos.y);
+            info!("SNOWBALL THROWN by Yeti at ({:.0},{:.0}), entity={:?}", spawn_pos.x, spawn_pos.y, snowball);
         }
     }
 }
