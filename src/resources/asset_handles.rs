@@ -85,6 +85,12 @@ pub struct BlockTextures {
     pub tnt_top: Handle<Image>,
     pub tnt_bottom: Handle<Image>,
     pub tnt_side: Handle<Image>,
+    // Missing Nether blocks
+    pub soul_sand: Handle<Image>,
+    pub netherite_block: Handle<Image>,
+    pub crimson_nylium: Handle<Image>,
+    pub crimson_nylium_side: Handle<Image>,
+    pub nether_quartz_ore: Handle<Image>,
 }
 
 /// Block texture atlases for directional blocks (4x1 layout: top|bottom|sides|front)
@@ -190,4 +196,11 @@ pub struct BlockSounds {
     pub snow_break1: Handle<AudioSource>,
     pub snow_break2: Handle<AudioSource>,
     pub snow_break3: Handle<AudioSource>,
+    pub cactus_break1: Handle<AudioSource>,
+    pub cactus_break2: Handle<AudioSource>,
+    pub cactus_break3: Handle<AudioSource>,
+    pub cactus_break4: Handle<AudioSource>,
+    pub cactus_break5: Handle<AudioSource>,
+    pub pumpkin_carve1: Handle<AudioSource>,
+    pub pumpkin_carve2: Handle<AudioSource>,
 }

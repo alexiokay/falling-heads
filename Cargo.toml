@@ -6,7 +6,6 @@ rust-version = "1.88.0"
 
 [dependencies]
 bevy = { version = "0.17.1", features = ["jpeg", "bevy_dev_tools"] }
-bevy_framepace = "0.19"
 avian3d = { path = "../avian/crates/avian3d" }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }

@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use bevy::window::{WindowResolution, PresentMode};
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::winit::WinitSettings;
-use bevy_framepace::{FramepacePlugin, FramepaceSettings, Limiter};
 use avian3d::{math::*, prelude::*};
+use std::time::{Duration, Instant};
 
 mod components;
 mod resources;
@@ -25,22 +25,31 @@ use plugins::{
     external_api_plugin::ExternalApiPlugin,
     asset_loader_plugin::AssetLoaderPlugin,
 };
-use systems::buff_system::BuffPlugin;
+// Buff systems
+use systems::buffs::buff_core::BuffPlugin;
+use systems::buffs::frozen_visual::FrozenPlugin;
+use systems::buffs::burning_visual::BurningVisualPlugin;
+
+// Weather systems
+use systems::weather::weather_core::WeatherSystemPlugin;
+use systems::weather::snow_accumulation::SnowAccumulationPlugin;
+
+// UI systems
+use systems::ui::heart_ui::HeartUIPlugin;
+use systems::ui::username_label::UsernameLabelPlugin;
+use systems::ui::dev_panel::DevPanelPlugin;
+
+// Other systems
 use systems::projectile_system::ProjectilePlugin;
 use systems::enemy_ai_system::EnemyAIPlugin;
-use systems::heart_ui_system::HeartUIPlugin;
 use systems::damage_visual_system::DamageVisualPlugin;
 use systems::block_damage_overlay_system::BlockDamageOverlayPlugin;
-use systems::weather_system::WeatherSystemPlugin;
-use systems::frozen_system::FrozenPlugin;
-use systems::dev_panel_system::DevPanelPlugin;
-use systems::snow_accumulation_system::SnowAccumulationPlugin;
-use systems::username_label_system::UsernameLabelPlugin;
 use systems::death_particle_system::DeathParticlePlugin;
 use resources::asset_handles::BlockTextures;
 use resources::material_cache::MaterialCache;
 use resources::mesh_cache::MeshCache;
 use resources::settings::GameSettings;
+use resources::world_config::WorldConfig;
 use states::GameState;
 use systems::performance_diagnostics::{PerformanceTracker, log_performance_metrics};
 use utils::system_sets::configure_system_sets;
@@ -48,7 +57,6 @@ use utils::system_sets::configure_system_sets;
 fn main() {
     let mut app = App::new();
     let settings = GameSettings::new();
-    let fps_limit = settings.fps_limit;
 
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -63,23 +71,7 @@ fn main() {
             focused_mode: bevy::winit::UpdateMode::Continuous,
             unfocused_mode: bevy::winit::UpdateMode::Continuous, // Keep rendering when unfocused
         })
-        .add_plugins(FramepacePlugin)
-        .insert_resource(if settings.vsync_enabled {
-            // VSync is on, disable framepace limiter
-            FramepaceSettings {
-                limiter: Limiter::Off,
-            }
-        } else if fps_limit > 0 {
-            // VSync is off, use framepace limiter
-            FramepaceSettings {
-                limiter: Limiter::from_framerate(fps_limit as f64),
-            }
-        } else {
-            // VSync off, no limit
-            FramepaceSettings {
-                limiter: Limiter::Off,
-            }
-        })
+        .insert_resource(FpsLimiter::new())
         .init_state::<GameState>()
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         // Enable interpolation for ALL rigid bodies by default for smooth movement at any framerate
@@ -115,9 +107,11 @@ fn main() {
             DevPanelPlugin,
             DeathParticlePlugin,
             SnowAccumulationPlugin,
+            BurningVisualPlugin,
         ))
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()
+        .init_resource::<WorldConfig>()
         .init_resource::<resources::command_queue::CommandQueue>()
         .insert_resource(settings)
         .add_systems(Startup, setup)
@@ -142,24 +136,49 @@ fn resume_physics(mut time: ResMut<Time<Physics>>) {
     time.unpause();
 }
 
+/// FPS Limiter resource - tracks frame timing for manual FPS limiting
+#[derive(Resource)]
+struct FpsLimiter {
+    last_frame: Instant,
+}
+
+impl FpsLimiter {
+    fn new() -> Self {
+        Self {
+            last_frame: Instant::now(),
+        }
+    }
+}
+
 /// Apply FPS limit based on settings
-/// VSync takes priority - when enabled, framepace limiter is disabled
+/// VSync takes priority - when enabled, FPS limiter is disabled
 fn apply_fps_limit(
     settings: Res<GameSettings>,
-    mut framepace_settings: ResMut<FramepaceSettings>,
+    mut limiter: ResMut<FpsLimiter>,
 ) {
-    if settings.is_changed() {
-        framepace_settings.limiter = if settings.vsync_enabled {
-            // VSync enabled - disable framepace and let VSync handle frame limiting
-            Limiter::Off
-        } else if settings.fps_limit > 0 {
-            // VSync disabled - use framepace limiter
-            Limiter::from_framerate(settings.fps_limit as f64)
-        } else {
-            // VSync disabled, no FPS limit - unlimited
-            Limiter::Off
-        };
+    // Skip if VSync is enabled (let VSync handle frame limiting)
+    if settings.vsync_enabled {
+        limiter.last_frame = Instant::now();
+        return;
     }
+
+    // Skip if no FPS limit (unlimited)
+    if settings.fps_limit == 0 {
+        limiter.last_frame = Instant::now();
+        return;
+    }
+
+    // Calculate target frame time
+    let target_frame_time = Duration::from_secs_f64(1.0 / settings.fps_limit as f64);
+    let elapsed = limiter.last_frame.elapsed();
+
+    // Sleep if we're ahead of schedule
+    if elapsed < target_frame_time {
+        let sleep_time = target_frame_time - elapsed;
+        std::thread::sleep(sleep_time);
+    }
+
+    limiter.last_frame = Instant::now();
 }
 
 fn setup(mut commands: Commands) {
@@ -257,11 +276,15 @@ fn initialize_material_cache(
     let tnt_top = images.get(&block_textures.tnt_top);
     let tnt_bottom = images.get(&block_textures.tnt_bottom);
     let tnt_side = images.get(&block_textures.tnt_side);
+    let cactus_top = images.get(&block_textures.cactus_top);
+    let cactus_bottom = images.get(&block_textures.cactus_bottom);
+    let cactus_side = images.get(&block_textures.cactus_side);
 
     if pumpkin_top.is_none() || pumpkin_side.is_none() || pumpkin_front.is_none()
         || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none()
         || melon_top.is_none() || melon_side.is_none()
-        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none() {
+        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none()
+        || cactus_top.is_none() || cactus_bottom.is_none() || cactus_side.is_none() {
         return; // Textures not loaded yet, wait for next frame
     }
 
@@ -301,13 +324,35 @@ fn initialize_material_cache(
         tnt_side.unwrap(),
     );
 
+    // Create sandstone atlas (top, bottom, side)
+    let sandstone_top = images.get(&block_textures.sandstone_top);
+    let sandstone_bottom = images.get(&block_textures.sandstone_bottom);
+    let sandstone_side = images.get(&block_textures.sandstone);
+
+    let sandstone_atlas = crate::systems::atlas_generator::create_atlas_4x1(
+        sandstone_top.unwrap(),
+        sandstone_bottom.unwrap(),
+        sandstone_side.unwrap(),
+        sandstone_side.unwrap(),
+    );
+
+    // Create cactus atlas (top, bottom, side)
+    let cactus_atlas = crate::systems::atlas_generator::create_atlas_4x1(
+        cactus_top.unwrap(),
+        cactus_bottom.unwrap(),
+        cactus_side.unwrap(),
+        cactus_side.unwrap(),
+    );
+
     let pumpkin_atlas_handle = images.add(pumpkin_atlas);
     let oak_log_atlas_handle = images.add(oak_log_atlas);
     let oak_leaves_atlas_handle = images.add(oak_leaves_atlas);
     let melon_atlas_handle = images.add(melon_atlas);
     let tnt_atlas_handle = images.add(tnt_atlas);
+    let sandstone_atlas_handle = images.add(sandstone_atlas);
+    let cactus_atlas_handle = images.add(cactus_atlas);
 
-    info!("Generated block atlases: pumpkin, oak_log, oak_leaves, melon, tnt");
+    info!("Generated block atlases: pumpkin, oak_log, oak_leaves, melon, tnt, sandstone, cactus");
 
     // Store atlases as a resource
     commands.insert_resource(crate::resources::asset_handles::BlockAtlases {
@@ -316,6 +361,8 @@ fn initialize_material_cache(
         oak_leaves: oak_leaves_atlas_handle.clone(),
         melon: melon_atlas_handle.clone(),
         tnt: tnt_atlas_handle,
+        sandstone: sandstone_atlas_handle.clone(),
+        cactus: cactus_atlas_handle.clone(),
     });
 
     use crate::components::block::BlockType;
@@ -487,6 +534,82 @@ fn initialize_material_cache(
                 materials.add(StandardMaterial {
                     base_color: Color::WHITE,
                     base_color_texture: Some(block_textures.coal_ore.clone()),  // Reusing coal texture for redstone (no redstone_ore texture)
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })
+            }
+            BlockType::Sand => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.sand.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })
+            }
+            BlockType::Sandstone => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(sandstone_atlas_handle.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    cull_mode: None,
+                    double_sided: true,
+                    ..default()
+                })
+            }
+            BlockType::EndStone => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.end_stone.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })
+            }
+            BlockType::Snow => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.snow.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })
+            }
+            BlockType::Cactus => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(cactus_atlas_handle.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    cull_mode: None,
+                    double_sided: true,
+                    ..default()
+                })
+            }
+            BlockType::SoulSand => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.soul_sand.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })
+            }
+            BlockType::Netherite => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.netherite_block.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Opaque,
+                    ..default()
+                })
+            }
+            BlockType::Glowstone => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.glowstone.clone()),
                     unlit: true,
                     alpha_mode: AlphaMode::Opaque,
                     ..default()

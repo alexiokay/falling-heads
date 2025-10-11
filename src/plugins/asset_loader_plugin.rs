@@ -21,7 +21,7 @@ fn load_all_assets(
     // Load game textures (UI, entities)
     let textures = GameTextures {
         hero: asset_server.load("textures/entities/hero.jpg"),
-        tnt: asset_server.load("textures/effects/tnt.png"),
+        tnt: asset_server.load("textures/effects/tnt/tnt_side.png"),
         nether_bg: asset_server.load("textures/blocks/nether/nether.png"),
         villager: asset_server.load("textures/entities/villager.png"),
     };
@@ -67,8 +67,41 @@ fn load_all_assets(
         tnt_top: asset_server.load("textures/effects/tnt/tnt_top.png"),
         tnt_bottom: asset_server.load("textures/effects/tnt/tnt_bottom.png"),
         tnt_side: asset_server.load("textures/effects/tnt/tnt_side.png"),
+        soul_sand: asset_server.load("textures/blocks/nether/soul_sand.png"),
+        netherite_block: asset_server.load("textures/blocks/nether/netherite_block.png"),
+        crimson_nylium: asset_server.load("textures/blocks/nether/crimson_nylium.png"),
+        crimson_nylium_side: asset_server.load("textures/blocks/nether/crimson_nylium_side.png"),
+        nether_quartz_ore: asset_server.load("textures/blocks/nether/nether_quartz_ore.png"),
     };
     commands.insert_resource(block_textures);
+
+    // Load block break sounds (individual handles match existing struct)
+    let block_sounds = BlockSounds {
+        stone_break1: asset_server.load("audio/sfx/blocks/stone/break1.ogg"),
+        stone_break2: asset_server.load("audio/sfx/blocks/stone/break2.ogg"),
+        stone_break3: asset_server.load("audio/sfx/blocks/stone/break3.ogg"),
+        wood_break: asset_server.load("audio/sfx/blocks/wood/break1.ogg"),
+        sand_break1: asset_server.load("audio/sfx/blocks/sand/break1.ogg"),
+        sand_break2: asset_server.load("audio/sfx/blocks/sand/break2.ogg"),
+        sand_break3: asset_server.load("audio/sfx/blocks/sand/break3.ogg"),
+        sand_break4: asset_server.load("audio/sfx/blocks/sand/break4.ogg"),
+        snow_break1: asset_server.load("audio/sfx/blocks/snow/break1.ogg"),
+        snow_break2: asset_server.load("audio/sfx/blocks/snow/break2.ogg"),
+        snow_break3: asset_server.load("audio/sfx/blocks/snow/break3.ogg"),
+        leaves_break1: asset_server.load("audio/sfx/blocks/leaves/break1.ogg"),
+        leaves_break2: asset_server.load("audio/sfx/blocks/leaves/break2.ogg"),
+        leaves_break3: asset_server.load("audio/sfx/blocks/leaves/break3.ogg"),
+        leaves_break4: asset_server.load("audio/sfx/blocks/leaves/break4.ogg"),
+        leaves_break5: asset_server.load("audio/sfx/blocks/leaves/break5.ogg"),
+        cactus_break1: asset_server.load("audio/sfx/blocks/cactus/break1.ogg"),
+        cactus_break2: asset_server.load("audio/sfx/blocks/cactus/break2.ogg"),
+        cactus_break3: asset_server.load("audio/sfx/blocks/cactus/break3.ogg"),
+        cactus_break4: asset_server.load("audio/sfx/blocks/cactus/break4.ogg"),
+        cactus_break5: asset_server.load("audio/sfx/blocks/cactus/break5.ogg"),
+        pumpkin_carve1: asset_server.load("audio/sfx/blocks/pumpkin/carve1.ogg"),
+        pumpkin_carve2: asset_server.load("audio/sfx/blocks/pumpkin/carve2.ogg"),
+    };
+    commands.insert_resource(block_sounds);
 
     // Load resource textures (drops)
     let resource_textures = ResourceTextures {
@@ -78,7 +111,7 @@ fn load_all_assets(
         gold_ingot: asset_server.load("textures/resources/gold_ingot.png"),
         iron_ingot: asset_server.load("textures/resources/iron_ingot.png"),
         redstone: asset_server.load("textures/resources/redstone.png"),
-        netherite_ingot: asset_server.load("textures/resources/netherite_scrap.png"),
+        netherite_ingot: asset_server.load("textures/resources/netherite_ingot.png"),
     };
     commands.insert_resource(resource_textures);
 
@@ -213,6 +246,13 @@ fn load_all_assets(
         snow_break1: asset_server.load("audio/sfx/blocks/snow/break1.ogg"),
         snow_break2: asset_server.load("audio/sfx/blocks/snow/break2.ogg"),
         snow_break3: asset_server.load("audio/sfx/blocks/snow/break3.ogg"),
+        cactus_break1: asset_server.load("audio/sfx/blocks/cactus/break1.ogg"),
+        cactus_break2: asset_server.load("audio/sfx/blocks/cactus/break2.ogg"),
+        cactus_break3: asset_server.load("audio/sfx/blocks/cactus/break3.ogg"),
+        cactus_break4: asset_server.load("audio/sfx/blocks/cactus/break4.ogg"),
+        cactus_break5: asset_server.load("audio/sfx/blocks/cactus/break5.ogg"),
+        pumpkin_carve1: asset_server.load("audio/sfx/blocks/pumpkin/carve1.ogg"),
+        pumpkin_carve2: asset_server.load("audio/sfx/blocks/pumpkin/carve2.ogg"),
     };
     commands.insert_resource(block_sounds);
 

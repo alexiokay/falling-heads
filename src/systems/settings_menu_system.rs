@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::ecs::system::ParamSet;
 use bevy::window::{PresentMode, Window, PrimaryWindow};
 use crate::components::settings_menu::*;
 use crate::resources::settings::GameSettings;
@@ -192,31 +193,31 @@ pub fn cleanup_settings_menu(mut commands: Commands, query: Query<Entity, With<S
 }
 
 pub fn handle_settings_buttons(
-    mut interaction_query: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            Option<&VsyncToggleButton>,
-            Option<&FpsToggleButton>,
-            Option<&FpsLimitButton>,
-            Option<&DevModeToggleButton>,
-            Option<&BackToMenuButton>,
-        ),
-        Changed<Interaction>,
-    >,
+    mut param_set: ParamSet<(
+        Query<
+            (
+                Entity,
+                &Interaction,
+                &mut BackgroundColor,
+                &Children,
+                Option<&VsyncToggleButton>,
+                Option<&FpsToggleButton>,
+                Option<&FpsLimitButton>,
+                Option<&DevModeToggleButton>,
+                Option<&BackToMenuButton>,
+            ),
+            Changed<Interaction>,
+        >,
+        Query<(&mut BackgroundColor, &Children), With<FpsLimitButton>>,
+    )>,
     mut settings: ResMut<GameSettings>,
     mut next_state: ResMut<NextState<GameState>>,
     mut window_query: Query<&mut Window, With<PrimaryWindow>>,
-    vsync_button_query: Query<&Children, With<VsyncToggleButton>>,
-    fps_button_query: Query<&Children, With<FpsToggleButton>>,
-    fps_limit_button_query: Query<&Children, With<FpsLimitButton>>,
-    fps_limit_bg_query: Query<Entity, With<FpsLimitButton>>,
-    dev_button_query: Query<&Children, With<DevModeToggleButton>>,
     mut text_query: Query<&mut Text, With<ToggleButtonText>>,
     mut text_color_query: Query<&mut TextColor>,
-    mut bg_color_query: Query<&mut BackgroundColor>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
 ) {
-    for (interaction, mut color, vsync_btn, fps_btn, fps_limit_btn, dev_btn, back_btn) in &mut interaction_query {
+    for (_entity, interaction, mut color, children, vsync_btn, fps_btn, fps_limit_btn, dev_btn, back_btn) in &mut param_set.p0() {
         match *interaction {
             Interaction::Pressed => {
                 if vsync_btn.is_some() {
@@ -233,33 +234,9 @@ pub fn handle_settings_buttons(
                     }
 
                     // Update VSync button text
-                    if let Ok(children) = vsync_button_query.single() {
-                        for child in children.iter() {
-                            if let Ok(mut text) = text_query.get_mut(child) {
-                                **text = if settings.vsync_enabled { "VSync: ON" } else { "VSync: OFF" }.to_string();
-                            }
-                        }
-                    }
-
-                    // Update FPS limit button appearance (gray out when VSync is on)
-                    if let Ok(fps_limit_entity) = fps_limit_bg_query.get_single() {
-                        if let Ok(mut bg) = bg_color_query.get_mut(fps_limit_entity) {
-                            *bg = BackgroundColor(if settings.vsync_enabled {
-                                Color::srgb(0.2, 0.2, 0.2)
-                            } else {
-                                Color::srgb(0.3, 0.6, 0.3)
-                            });
-                        }
-                    }
-                    if let Ok(children) = fps_limit_button_query.single() {
-                        for &child in children.iter() {
-                            if let Ok(mut text_color) = text_color_query.get_mut(child) {
-                                *text_color = TextColor(if settings.vsync_enabled {
-                                    Color::srgb(0.5, 0.5, 0.5)
-                                } else {
-                                    Color::WHITE
-                                });
-                            }
+                    for child in children.iter() {
+                        if let Ok(mut text) = text_query.get_mut(child) {
+                            **text = if settings.vsync_enabled { "VSync: ON" } else { "VSync: OFF" }.to_string();
                         }
                     }
                 } else if fps_btn.is_some() {
@@ -267,36 +244,47 @@ pub fn handle_settings_buttons(
                     settings.show_fps = !settings.show_fps;
 
                     // Update button text
-                    if let Ok(children) = fps_button_query.single() {
-                        for child in children.iter() {
-                            if let Ok(mut text) = text_query.get_mut(child) {
-                                **text = if settings.show_fps { "FPS Counter: ON" } else { "FPS Counter: OFF" }.to_string();
-                            }
+                    for child in children.iter() {
+                        if let Ok(mut text) = text_query.get_mut(child) {
+                            **text = if settings.show_fps { "FPS Counter: ON" } else { "FPS Counter: OFF" }.to_string();
                         }
                     }
                 } else if fps_limit_btn.is_some() {
                     // Only allow changing FPS limit when VSync is off
                     if !settings.vsync_enabled {
-                        // Cycle through FPS limits: 30 -> 60 -> 120 -> 144 -> 240 -> Unlimited (0) -> 30
-                        settings.fps_limit = match settings.fps_limit {
-                            30 => 60,
-                            60 => 120,
-                            120 => 144,
-                            144 => 240,
-                            240 => 0,
-                            _ => 30,
-                        };
+                        // Check if right-click for backwards cycling
+                        let cycle_backwards = mouse_button.just_pressed(MouseButton::Right);
+
+                        if cycle_backwards {
+                            // Cycle backwards: 30 <- 60 <- 120 <- 144 <- 240 <- Unlimited (0) <- 30
+                            settings.fps_limit = match settings.fps_limit {
+                                60 => 30,
+                                120 => 60,
+                                144 => 120,
+                                240 => 144,
+                                0 => 240,
+                                _ => 0,
+                            };
+                        } else {
+                            // Left-click: Cycle forwards: 30 -> 60 -> 120 -> 144 -> 240 -> Unlimited (0) -> 30
+                            settings.fps_limit = match settings.fps_limit {
+                                30 => 60,
+                                60 => 120,
+                                120 => 144,
+                                144 => 240,
+                                240 => 0,
+                                _ => 30,
+                            };
+                        }
 
                         // Update button text
-                        if let Ok(children) = fps_limit_button_query.single() {
-                            for child in children.iter() {
-                                if let Ok(mut text) = text_query.get_mut(child) {
-                                    **text = if settings.fps_limit == 0 {
-                                        "FPS Limit: Unlimited".to_string()
-                                    } else {
-                                        format!("FPS Limit: {}", settings.fps_limit)
-                                    };
-                                }
+                        for child in children.iter() {
+                            if let Ok(mut text) = text_query.get_mut(child) {
+                                **text = if settings.fps_limit == 0 {
+                                    "FPS Limit: Unlimited".to_string()
+                                } else {
+                                    format!("FPS Limit: {}", settings.fps_limit)
+                                };
                             }
                         }
                     }
@@ -307,11 +295,9 @@ pub fn handle_settings_buttons(
                     info!("🔧 Dev Mode {}", if settings.dev_mode { "ENABLED" } else { "DISABLED" });
 
                     // Update button text
-                    if let Ok(children) = dev_button_query.single() {
-                        for child in children.iter() {
-                            if let Ok(mut text) = text_query.get_mut(child) {
-                                **text = if settings.dev_mode { "Dev Mode: ON" } else { "Dev Mode: OFF" }.to_string();
-                            }
+                    for child in children.iter() {
+                        if let Ok(mut text) = text_query.get_mut(child) {
+                            **text = if settings.dev_mode { "Dev Mode: ON" } else { "Dev Mode: OFF" }.to_string();
                         }
                     }
                 } else if back_btn.is_some() {
@@ -330,6 +316,7 @@ pub fn handle_settings_buttons(
                 if vsync_btn.is_some() || fps_btn.is_some() {
                     *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.6));
                 } else if fps_limit_btn.is_some() {
+                    // Always reflect current VSync state
                     *color = BackgroundColor(if settings.vsync_enabled {
                         Color::srgb(0.2, 0.2, 0.2) // Keep grayed out when VSync is on
                     } else {
@@ -340,6 +327,26 @@ pub fn handle_settings_buttons(
                 } else if back_btn.is_some() {
                     *color = BackgroundColor(Color::srgb(0.5, 0.5, 0.5));
                 }
+            }
+        }
+    }
+
+    // Update FPS limit button appearance based on current VSync state
+    if let Ok((mut fps_bg, fps_children)) = param_set.p1().single_mut() {
+        *fps_bg = BackgroundColor(if settings.vsync_enabled {
+            Color::srgb(0.2, 0.2, 0.2)
+        } else {
+            Color::srgb(0.3, 0.6, 0.3)
+        });
+
+        // Update text color
+        for child in fps_children.iter() {
+            if let Ok(mut text_color) = text_color_query.get_mut(child) {
+                *text_color = TextColor(if settings.vsync_enabled {
+                    Color::srgb(0.5, 0.5, 0.5)
+                } else {
+                    Color::WHITE
+                });
             }
         }
     }
