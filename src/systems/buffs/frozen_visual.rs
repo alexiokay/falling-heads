@@ -229,6 +229,7 @@ fn update_freeze_overlay(
     mut overlay_material_query: Query<&mut MeshMaterial3d<StandardMaterial>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
 ) {
     // Track which entities currently have freeze stacks
     let mut frozen_entities = std::collections::HashSet::new();
@@ -246,22 +247,24 @@ fn update_freeze_overlay(
             // Update overlay position to follow parent
             overlay_transform.translation = transform.translation + Vec3::new(0.0, 0.0, 2.0);
 
-            // Update overlay color based on stack count
+            // Update overlay alpha based on stack count
             if let Ok(material_handle) = overlay_material_query.get_mut(overlay_entity) {
-                let color = get_freeze_color(stack_count);
+                let alpha = get_freeze_alpha(stack_count);
                 if let Some(material) = materials.get_mut(&material_handle.0) {
-                    material.base_color = color;
+                    material.base_color = Color::srgba(1.0, 1.0, 1.0, alpha);
                 }
             }
         } else {
-            // Create new overlay
-            let color = get_freeze_color(stack_count);
+            // Create new overlay with ice texture
+            let alpha = get_freeze_alpha(stack_count);
             let overlay_pos = transform.translation + Vec3::new(0.0, 0.0, 2.0);
+            let ice_texture = asset_server.load("textures/blocks/iceland/ice.png");
 
             commands.spawn((
-                Mesh3d(meshes.add(Circle::new(32.0))),  // Match character size
+                Mesh3d(meshes.add(Rectangle::new(64.0, 64.0))),  // Match character size
                 MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: color,
+                    base_color: Color::srgba(1.0, 1.0, 1.0, alpha),
+                    base_color_texture: Some(ice_texture),
                     unlit: true,
                     alpha_mode: AlphaMode::Blend,
                     ..default()
@@ -280,15 +283,15 @@ fn update_freeze_overlay(
     }
 }
 
-/// Get freeze overlay color based on stack count (1-6)
-fn get_freeze_color(stack_count: usize) -> Color {
+/// Get freeze overlay alpha based on stack count (1-6)
+fn get_freeze_alpha(stack_count: usize) -> f32 {
     match stack_count {
-        1 => Color::srgba(0.7, 0.9, 1.0, 0.2),  // Very light blue, barely visible
-        2 => Color::srgba(0.6, 0.85, 1.0, 0.35), // Light blue
-        3 => Color::srgba(0.5, 0.8, 1.0, 0.5),   // Medium blue
-        4 => Color::srgba(0.4, 0.7, 0.95, 0.65), // Stronger blue
-        5 => Color::srgba(0.3, 0.6, 0.9, 0.8),   // Deep blue
-        _ => Color::srgba(0.2, 0.5, 0.85, 0.9),  // Full freeze - very opaque dark blue
+        1 => 0.15,  // Very faint ice
+        2 => 0.25,  // Light ice
+        3 => 0.40,  // Moderate ice
+        4 => 0.55,  // Strong ice
+        5 => 0.70,  // Heavy ice
+        _ => 0.85,  // Full freeze - nearly opaque ice
     }
 }
 

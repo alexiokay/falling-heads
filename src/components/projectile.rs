@@ -39,6 +39,7 @@ pub struct Arrow {
     pub lifetime: Timer,
     pub stuck_to: Option<Entity>, // Entity this arrow is stuck to
     pub team: Team,  // Which team shot this arrow
+    pub reflected: bool,  // True if already reflected by barrier (prevent multiple reflections)
 }
 
 impl Arrow {
@@ -48,6 +49,7 @@ impl Arrow {
             lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
             stuck_to: None,
             team: Team::Enemy,  // Default to enemy (for backwards compatibility with skeletons)
+            reflected: false,
         }
     }
 
@@ -57,6 +59,7 @@ impl Arrow {
             lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
             stuck_to: None,
             team: Team::Friendly,  // Friendly arrow (from hero power)
+            reflected: false,
         }
     }
 
@@ -66,6 +69,7 @@ impl Arrow {
             lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
             stuck_to: None,
             team,
+            reflected: false,
         }
     }
 }
@@ -108,6 +112,26 @@ pub struct StuckArrow {
 pub struct Laser {
     pub timer: Timer,
     pub width: f32,
+    pub id: Entity,  // Unique ID for this laser instance
+}
+
+/// Particle that flows down the laser beam
+#[derive(Component)]
+pub struct LaserParticle {
+    pub velocity: f32,  // Speed moving downward
+    pub lifetime: Timer,
+}
+
+/// Marks the core beam mesh and links it to a specific laser
+#[derive(Component)]
+pub struct LaserCore {
+    pub laser_id: Entity,  // Which laser this beam belongs to
+}
+
+/// Marks the outer glow mesh and links it to a specific laser
+#[derive(Component)]
+pub struct LaserGlow {
+    pub laser_id: Entity,  // Which laser this beam belongs to
 }
 
 #[derive(Component)]
@@ -115,6 +139,7 @@ pub struct Fireball {
     pub damage: u32,
     pub lifetime: Timer,
     pub team: Team,
+    pub reflected: bool,  // True if already reflected by barrier (prevent multiple reflections)
 }
 
 impl Fireball {
@@ -123,6 +148,7 @@ impl Fireball {
             damage,
             lifetime: Timer::from_seconds(6.0, TimerMode::Once), // 6 second lifetime
             team: Team::Enemy,  // Ghasts/Dragons shoot enemy fireballs
+            reflected: false,
         }
     }
 }
@@ -191,4 +217,36 @@ pub struct MagicBarrier {
     pub lifetime: Timer,
     pub radius: f32,
     pub owner_entity: Entity,  // Entity this barrier is protecting (hero)
+    pub animation_timer: Timer,
+    pub current_frame: usize,
+}
+
+/// Stores preloaded texture handles for barrier animation
+#[derive(Component)]
+pub struct BarrierAnimationFrames {
+    pub frames: Vec<Handle<Image>>,
+}
+
+/// Visual impact effect when barrier reflects a projectile
+#[derive(Component)]
+pub struct BarrierImpact {
+    pub lifetime: Timer,
+    pub initial_alpha: f32,
+    pub animation_timer: Timer,
+    pub current_frame: usize,
+}
+
+/// Stores preloaded texture handles for impact animation
+#[derive(Component)]
+pub struct ImpactAnimationFrames {
+    pub frames: Vec<Handle<Image>>,
+}
+
+/// Magnetic field that attracts resources to the hero
+#[derive(Component)]
+pub struct MagnetField {
+    pub lifetime: Timer,
+    pub radius: f32,
+    pub pull_strength: f32,
+    pub owner_entity: Entity,
 }

@@ -157,7 +157,7 @@ fn rebuild_spatial_hash(
 fn check_all_entity_block_collisions(
     mut commands: Commands,
     spatial_hash: Res<SpatialHash>,
-    mut entity_query: Query<(Entity, &mut Transform, &mut LinearVelocity, &Restitution, Option<&Enemy>), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<Block>, Without<crate::components::enemy::Flying>)>,
+    mut entity_query: Query<(Entity, &mut Transform, &mut LinearVelocity, &Restitution, Option<&Enemy>, Option<&crate::components::lootbox::RandomBox>), (Or<(With<Hero>, With<Villager>, With<Enemy>, With<crate::components::lootbox::RandomBox>)>, Without<Block>, Without<crate::components::enemy::Flying>)>,
     block_query: Query<(Entity, &Transform, &BlockType, &ChunkMember), With<Block>>,
     chunk_query: Query<&crate::components::chunk::Chunk>,
     mut buff_query: Query<&mut crate::components::buff::Buff>,
@@ -166,9 +166,15 @@ fn check_all_entity_block_collisions(
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_secs();
-    for (entity, mut transform, mut velocity, restitution, is_enemy) in entity_query.iter_mut() {
+    for (entity, mut transform, mut velocity, restitution, is_enemy, is_randombox) in entity_query.iter_mut() {
         let pos = transform.translation;
-        let entity_size = HERO_SIZE;
+        // Use actual scaled size (supports Grow buff - scale changes via Transform)
+        let base_size = if is_randombox.is_some() {
+            48.0 // RANDOMBOX_SIZE
+        } else {
+            HERO_SIZE
+        };
+        let entity_size = base_size * transform.scale.x;  // Apply scale from Transform (e.g., 64 * 1.2 = 76.8 for Grow buff)
         let block_size = BLOCK_SIZE;
 
         let nearby_blocks = spatial_hash.query_nearby(pos.x, pos.y);
@@ -203,6 +209,11 @@ fn check_all_entity_block_collisions(
 
         // Only process collision with the CLOSEST block
         if let Some((block_entity, _, block_pos, block_type, chunk_member)) = closest_collision {
+            // Skip collision with cobwebs - they're non-solid (slow effect handled separately)
+            if block_type == BlockType::Cobweb {
+                continue;
+            }
+
             let entity_half = entity_size / 2.0;
             let block_half = block_size / 2.0;
 
@@ -212,8 +223,8 @@ fn check_all_entity_block_collisions(
             let overlap_x = entity_half + block_half - dx.abs();
             let overlap_y = entity_half + block_half - dy.abs();
 
-            // Only friendlies damage blocks and get buffs
-            if is_enemy.is_none() {
+            // Only friendlies (not enemies, not randombox) damage blocks and get buffs
+            if is_enemy.is_none() && is_randombox.is_none() {
                 // Check BOTH per-block AND per-attacker cooldown (prevents rapid multi-block damage)
                 if block_cooldown.can_damage(block_entity, current_time, BLOCK_DAMAGE_COOLDOWN)
                     && block_cooldown.can_attacker_damage(entity, current_time, BLOCK_DAMAGE_COOLDOWN) {
@@ -516,14 +527,19 @@ fn check_tnt_collisions(
 // Resource vs Blocks collision
 fn check_resource_collisions(
     mut resource_query: Query<(&mut Transform, &mut LinearVelocity), (With<Resource>, Without<Block>)>,
-    block_query: Query<&Transform, (With<Block>, Without<Resource>)>,
+    block_query: Query<(&Transform, &BlockType), (With<Block>, Without<Resource>)>,
 ) {
     for (mut resource_transform, mut resource_velocity) in resource_query.iter_mut() {
         let resource_pos = resource_transform.translation;
         let resource_size = RESOURCE_SIZE;
         let block_size = BLOCK_SIZE;
 
-        for block_transform in block_query.iter() {
+        for (block_transform, block_type) in block_query.iter() {
+            // Skip cobwebs - resources pass through them
+            if *block_type == BlockType::Cobweb {
+                continue;
+            }
+
             let block_pos = block_transform.translation;
 
             let resource_half = resource_size / 2.0;

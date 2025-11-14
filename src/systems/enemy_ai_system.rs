@@ -69,7 +69,7 @@ fn skeleton_shoot_arrows(
 
             // Only shoot if we have a target within range
             let Some(target_pos) = nearest_pos else {
-                info!("Skeleton ready to shoot but no target in range (range={})", SKELETON_SHOOT_RANGE);
+                // info!("Skeleton ready to shoot but no target in range (range={})", SKELETON_SHOOT_RANGE);
                 continue;
             };
 

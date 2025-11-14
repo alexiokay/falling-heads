@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::ecs::system::ParamSet;
 use bevy::window::{PresentMode, Window, PrimaryWindow};
+use bevy::ui::RelativeCursorPosition;
 use crate::components::settings_menu::*;
 use crate::resources::settings::GameSettings;
 use crate::states::GameState;
@@ -130,6 +131,122 @@ pub fn setup_settings_menu(
                         ToggleButtonText,
                     ));
                 });
+
+            // Effects Volume Slider
+            parent.spawn((
+                Node {
+                    width: Val::Px(400.0),
+                    height: Val::Px(80.0),
+                    margin: UiRect::all(Val::Px(10.0)),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                EffectsVolumeSlider,
+            ))
+            .with_children(|slider_parent| {
+                slider_parent.spawn((
+                    Text::new(format!("Effects Volume: {}%", (settings.effects_volume * 100.0) as i32)),
+                    TextFont { font_size: 24.0, ..default() },
+                    TextColor(Color::WHITE),
+                    VolumeSliderLabel,
+                    Node { margin: UiRect::bottom(Val::Px(8.0)), ..default() },
+                ));
+                slider_parent.spawn((
+                    Node {
+                        width: Val::Px(350.0),
+                        height: Val::Px(30.0),
+                        border: UiRect::all(Val::Px(2.0)),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
+                    BorderColor::all(Color::srgb(0.5, 0.5, 0.5)),
+                    VolumeSliderBar,
+                    RelativeCursorPosition::default(), // Add this for cursor tracking!
+                    Interaction::default(), // Add this for mouse interaction!
+                ))
+                .with_children(|bar_parent| {
+                    bar_parent.spawn((
+                        Node {
+                            width: Val::Percent(settings.effects_volume * 100.0),
+                            height: Val::Percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.3, 0.6, 0.8)),
+                    ));
+                    bar_parent.spawn((
+                        Node {
+                            width: Val::Px(20.0),
+                            height: Val::Px(30.0),
+                            position_type: PositionType::Absolute,
+                            left: Val::Percent(settings.effects_volume * 100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.8, 0.8, 0.8)),
+                        BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
+                        VolumeSliderHandle,
+                    ));
+                });
+            });
+
+            // Music Volume Slider
+            parent.spawn((
+                Node {
+                    width: Val::Px(400.0),
+                    height: Val::Px(80.0),
+                    margin: UiRect::all(Val::Px(10.0)),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                MusicVolumeSlider,
+            ))
+            .with_children(|slider_parent| {
+                slider_parent.spawn((
+                    Text::new(format!("Music Volume: {}%", (settings.music_volume * 100.0) as i32)),
+                    TextFont { font_size: 24.0, ..default() },
+                    TextColor(Color::WHITE),
+                    VolumeSliderLabel,
+                    Node { margin: UiRect::bottom(Val::Px(8.0)), ..default() },
+                ));
+                slider_parent.spawn((
+                    Node {
+                        width: Val::Px(350.0),
+                        height: Val::Px(30.0),
+                        border: UiRect::all(Val::Px(2.0)),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
+                    BorderColor::all(Color::srgb(0.5, 0.5, 0.5)),
+                    VolumeSliderBar,
+                    RelativeCursorPosition::default(), // Add this for cursor tracking!
+                    Interaction::default(), // Add this for mouse interaction!
+                ))
+                .with_children(|bar_parent| {
+                    bar_parent.spawn((
+                        Node {
+                            width: Val::Percent(settings.music_volume * 100.0),
+                            height: Val::Percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.3, 0.6, 0.8)),
+                    ));
+                    bar_parent.spawn((
+                        Node {
+                            width: Val::Px(20.0),
+                            height: Val::Px(30.0),
+                            position_type: PositionType::Absolute,
+                            left: Val::Percent(settings.music_volume * 100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.8, 0.8, 0.8)),
+                        BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
+                        VolumeSliderHandle,
+                    ));
+                });
+            });
 
             // Dev Mode Toggle Button
             parent
@@ -347,6 +464,71 @@ pub fn handle_settings_buttons(
                 } else {
                     Color::WHITE
                 });
+            }
+        }
+    }
+}
+
+/// Handle volume slider interactions using RelativeCursorPosition
+pub fn handle_volume_sliders(
+    mut settings: ResMut<GameSettings>,
+    container_query: Query<(&Children, Option<&EffectsVolumeSlider>, Option<&MusicVolumeSlider>), Or<(With<EffectsVolumeSlider>, With<MusicVolumeSlider>)>>,
+    slider_bar_query: Query<(&Interaction, &RelativeCursorPosition, &Children), With<VolumeSliderBar>>,
+    mut label_query: Query<&mut Text, With<VolumeSliderLabel>>,
+    mut param_set: ParamSet<(
+        Query<&mut Node, (Without<VolumeSliderHandle>, Without<VolumeSliderBar>, Without<VolumeSliderLabel>)>,
+        Query<&mut Node, (With<VolumeSliderHandle>, Without<VolumeSliderBar>, Without<VolumeSliderLabel>)>,
+    )>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+) {
+    // Only respond when mouse is pressed
+    if !mouse_button.pressed(MouseButton::Left) {
+        return;
+    }
+
+    // Check each slider container
+    for (container_children, effects_marker, music_marker) in container_query.iter() {
+        // Find the slider bar child
+        for child in container_children.iter() {
+            if let Ok((interaction, relative_cursor, bar_children)) = slider_bar_query.get(child) {
+                // Check if mouse is over the slider bar and pressed
+                if matches!(interaction, Interaction::Pressed | Interaction::Hovered) {
+                    // Get the normalized cursor position (relative to the bar)
+                    if let Some(normalized_pos) = relative_cursor.normalized {
+                        // RelativeCursorPosition uses range (-0.5, -0.5) to (0.5, 0.5)
+                        // Convert to 0.0 to 1.0 range for volume
+                        let volume = (normalized_pos.x + 0.5).clamp(0.0, 1.0);
+
+                        // Update settings
+                        if effects_marker.is_some() {
+                            settings.set_effects_volume(volume);
+                            info!("Effects volume: {}%", (volume * 100.0) as i32);
+                        } else if music_marker.is_some() {
+                            settings.set_music_volume(volume);
+                            info!("Music volume: {}%", (volume * 100.0) as i32);
+                        }
+
+                        // Update label
+                        for label_child in container_children.iter() {
+                            if let Ok(mut text) = label_query.get_mut(label_child) {
+                                let label = if effects_marker.is_some() { "Effects Volume" } else { "Music Volume" };
+                                **text = format!("{}: {}%", label, (volume * 100.0) as i32);
+                            }
+                        }
+
+                        // Update filled bar and handle
+                        for bar_child in bar_children.iter() {
+                            // Update filled portion width
+                            if let Ok(mut filled_node) = param_set.p0().get_mut(bar_child) {
+                                filled_node.width = Val::Percent(volume * 100.0);
+                            }
+                            // Update handle position
+                            if let Ok(mut handle_node) = param_set.p1().get_mut(bar_child) {
+                                handle_node.left = Val::Percent(volume * 100.0);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

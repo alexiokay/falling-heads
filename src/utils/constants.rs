@@ -78,7 +78,7 @@ pub const EXPLOSION_VOLUME: f32 = 0.3;         // TNT explosion sounds
 // Laser
 pub const LASER_DURATION: f32 = 0.5;           // seconds
 pub const LASER_WIDTH: f32 = 320.0;
-pub const LASER_HEIGHT: f32 = 2000.0;
+pub const LASER_HEIGHT: f32 = 3000.0;          // Tall enough to cover entire screen from top to bottom
 
 // Spatial partitioning
 pub const SPATIAL_HASH_CHUNK_SIZE: f32 = 256.0;  // 4 blocks per spatial chunk

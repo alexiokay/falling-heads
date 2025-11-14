@@ -12,3 +12,9 @@ pub struct MagnetEffect {
     pub strength: f32,
     pub duration: Timer,
 }
+
+/// Component marking entities that are currently inside a cobweb
+#[derive(Component)]
+pub struct CobwebSlow {
+    pub slow_multiplier: f32,  // 0.25 = 75% slower
+}

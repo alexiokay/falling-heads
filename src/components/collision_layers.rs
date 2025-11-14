@@ -29,19 +29,20 @@ impl GameLayer {
     /// Get what this layer should collide with (filters)
     pub fn filters(self) -> LayerMask {
         match self {
-            // Blocks collide with all dynamic entities
+            // Blocks collide with all dynamic entities (via spatial hash, not Avian)
             GameLayer::Block => LayerMask::from([
                 GameLayer::Character,
                 GameLayer::Enemy,
                 GameLayer::Resource,
                 GameLayer::Tnt,
+                // RandomBox collides with blocks via spatial hash, not Avian
             ]),
 
             // Characters collide with blocks, enemies, and items
             GameLayer::Character => LayerMask::from([
                 GameLayer::Block,
                 GameLayer::Enemy,
-                GameLayer::Character,
+                GameLayer::Character,  // Characters collide with each other (includes RandomBox)
                 GameLayer::Tnt,
                 GameLayer::Arrow,
                 GameLayer::Snowball,

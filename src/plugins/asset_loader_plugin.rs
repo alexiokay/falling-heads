@@ -24,6 +24,7 @@ fn load_all_assets(
         tnt: asset_server.load("textures/effects/tnt/tnt_side.png"),
         nether_bg: asset_server.load("textures/blocks/nether/nether.png"),
         villager: asset_server.load("textures/entities/villager.png"),
+        randombox: asset_server.load("textures/effects/randombox/randombox.png"),
     };
     commands.insert_resource(textures);
 
@@ -61,6 +62,7 @@ fn load_all_assets(
         cactus_top: asset_server.load("textures/blocks/cactus/cactus_top.png"),
         cactus_side: asset_server.load("textures/blocks/cactus/cactus_side.png"),
         cactus_bottom: asset_server.load("textures/blocks/cactus/cactus_bottom.png"),
+        cobweb: asset_server.load("textures/blocks/coweb/cobweb.png"),
         snow: asset_server.load("textures/blocks/iceland/snow.png"),
         ice: asset_server.load("textures/blocks/iceland/ice.png"),
         packed_ice: asset_server.load("textures/blocks/iceland/packed_ice.png"),
@@ -192,6 +194,23 @@ fn load_all_assets(
     };
     commands.insert_resource(effect_textures);
 
+    // Load lootbox reward icons
+    let lootbox_icons = crate::resources::asset_handles::LootboxIcons {
+        monster_horde: asset_server.load("textures/ui/lootbox/monster_horde.png"),
+        // treasure_rain: asset_server.load("textures/ui/lootbox/treasure_rain.png"),  // REMOVED
+        travelers_arrive: asset_server.load("textures/ui/lootbox/travelers_arrive.png"),
+        elite_enemy: asset_server.load("textures/ui/lootbox/elite_enemy.png"),
+        mega_treasure: asset_server.load("textures/ui/lootbox/mega_treasure.png"),
+        magic_barrier: asset_server.load("textures/ui/lootbox/magic_barrier.png"),
+        arrow_barrage: asset_server.load("textures/ui/lootbox/arrow_barrage.png"),
+        thunder_strike: asset_server.load("textures/ui/lootbox/thunder_strike.png"),
+        tnt_rain: asset_server.load("textures/ui/lootbox/tnt_rain.png"),
+        laser_beam: asset_server.load("textures/ui/lootbox/laser_beam.png"),
+        magnet: asset_server.load("textures/ui/lootbox/magnet.png"),
+        nothing: asset_server.load("textures/ui/lootbox/nothing.png"),
+    };
+    commands.insert_resource(lootbox_icons);
+
     // Load hero sound effects
     let hero_sounds = crate::resources::asset_handles::HeroSounds {
         hit1: asset_server.load("audio/sfx/mobs/hero/hit1.ogg"),
@@ -255,6 +274,19 @@ fn load_all_assets(
         pumpkin_carve2: asset_server.load("audio/sfx/blocks/pumpkin/carve2.ogg"),
     };
     commands.insert_resource(block_sounds);
+
+    // Load biome background music tracks (OGG format - Bevy supports this by default)
+    let biome_music = crate::resources::biome_music::BiomeMusicTracks {
+        plains: asset_server.load("audio/music/biomes/plains.ogg"),
+        forest: asset_server.load("audio/music/biomes/forest.ogg"),
+        desert: asset_server.load("audio/music/biomes/desert.ogg"),
+        mountains: asset_server.load("audio/music/biomes/mountains.ogg"),
+        underground: asset_server.load("audio/music/biomes/underground.ogg"),
+        nether: asset_server.load("audio/music/biomes/nether.ogg"),
+        end: asset_server.load("audio/music/biomes/end.ogg"),
+        iceland: asset_server.load("audio/music/biomes/iceland.ogg"),
+    };
+    commands.insert_resource(biome_music);
 
     info!("✅ All assets loaded successfully!");
 }

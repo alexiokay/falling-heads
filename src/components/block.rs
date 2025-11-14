@@ -6,6 +6,10 @@ pub struct Block {
     pub max_health: u32,
 }
 
+/// Marker component for cobweb blocks
+#[derive(Component)]
+pub struct CobwebBlock;
+
 /// Trait for biome behavior - defines terrain generation and spawning rules
 pub trait BiomeBehavior {
     /// Get the primary terrain block for this biome
@@ -57,6 +61,7 @@ pub enum BlockType {
     DeadBush,
     Mushroom,
     Vines,
+    Cobweb,  // Slows down entities that touch it
 
     // Nether blocks
     Netherrack,
@@ -104,7 +109,7 @@ impl BiomeBehavior for BiomeType {
             BiomeType::Forest => &[BlockType::Wood, BlockType::Pumpkin],
             BiomeType::Desert => &[BlockType::Cactus, BlockType::DeadBush],
             BiomeType::Mountains => &[BlockType::Snow],
-            BiomeType::Underground => &[BlockType::Mushroom],
+            BiomeType::Underground => &[BlockType::Mushroom, BlockType::Cobweb],
             BiomeType::Nether => &[BlockType::SoulSand, BlockType::Glowstone],
             BiomeType::End => &[],
             BiomeType::Iceland => &[],  // Pure ice/snow (no decorative blocks)

@@ -7,6 +7,7 @@ use crate::resources::day_night_cycle::DayNightCycle;
 use crate::states::GameState;
 use crate::systems::pause_menu_system::*;
 use crate::systems::settings_menu_system::*;
+use crate::systems::biome_music_system::update_music_volume_in_settings;
 use crate::components::hero::Hero;
 
 pub struct UiPlugin;
@@ -69,6 +70,8 @@ impl Plugin for UiPlugin {
             .add_systems(Update, (
                 toggle_pause,
                 handle_settings_buttons,
+                handle_volume_sliders,
+                update_music_volume_in_settings, // Update music volume in real-time
             ).run_if(in_state(GameState::Settings)))
             .add_systems(OnEnter(GameState::Settings), setup_settings_menu)
             .add_systems(OnExit(GameState::Settings), cleanup_settings_menu);

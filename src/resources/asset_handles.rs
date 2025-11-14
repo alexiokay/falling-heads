@@ -6,6 +6,7 @@ pub struct GameTextures {
     pub tnt: Handle<Image>,
     pub nether_bg: Handle<Image>,
     pub villager: Handle<Image>,
+    pub randombox: Handle<Image>,
 }
 
 #[derive(Resource, Default)]
@@ -77,6 +78,7 @@ pub struct BlockTextures {
     pub cactus_top: Handle<Image>,
     pub cactus_side: Handle<Image>,
     pub cactus_bottom: Handle<Image>,
+    pub cobweb: Handle<Image>,
     // Iceland biome textures
     pub snow: Handle<Image>,
     pub ice: Handle<Image>,
@@ -115,6 +117,23 @@ pub struct ExplosionTextures {
 #[derive(Resource, Default)]
 pub struct EffectTextures {
     pub fire: Handle<Image>,
+}
+
+/// Lootbox reward icons
+#[derive(Resource, Default, Clone)]
+pub struct LootboxIcons {
+    pub monster_horde: Handle<Image>,
+    // pub treasure_rain: Handle<Image>,  // REMOVED
+    pub travelers_arrive: Handle<Image>,
+    pub elite_enemy: Handle<Image>,
+    pub mega_treasure: Handle<Image>,
+    pub magic_barrier: Handle<Image>,
+    pub arrow_barrage: Handle<Image>,
+    pub thunder_strike: Handle<Image>,
+    pub tnt_rain: Handle<Image>,
+    pub laser_beam: Handle<Image>,
+    pub magnet: Handle<Image>,
+    pub nothing: Handle<Image>,
 }
 
 #[derive(Resource, Default)]

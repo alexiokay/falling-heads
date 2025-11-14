@@ -208,6 +208,10 @@ pub fn generate_chunk(
                     // Sandstone uses custom UV-mapped mesh (no scaling needed, already 64x64x64)
                     sandstone_mesh.clone()
                 }
+                BlockType::Cobweb => {
+                    // Cobweb is a flat 64x64 rectangle (billboard facing forward)
+                    meshes.add(Rectangle::new(64.0, 64.0))
+                }
                 _ => {
                     // Uniform blocks use standard cube (scaled to 64x64x64)
                     transform.scale = Vec3::splat(64.0);
@@ -219,7 +223,7 @@ pub fn generate_chunk(
             let material = material_cache.get(block_type)
                 .expect("Material should be cached for all block types");
 
-            commands.spawn((
+            let mut entity_commands = commands.spawn((
                 Block {
                     health: 3,
                     max_health: 3,
@@ -231,6 +235,11 @@ pub fn generate_chunk(
                 MeshMaterial3d(material),
                 transform,
             ));
+
+            // Add CobwebBlock marker for cobweb blocks
+            if block_type == BlockType::Cobweb {
+                entity_commands.insert(crate::components::block::CobwebBlock);
+            }
         }
     }
 }
@@ -447,6 +456,7 @@ pub fn get_block_color(block_type: BlockType) -> Color {
         BlockType::DeadBush => Color::srgb(0.6, 0.5, 0.3),
         BlockType::Mushroom => Color::srgb(0.8, 0.3, 0.3),
         BlockType::Vines => Color::srgb(0.15, 0.5, 0.15),
+        BlockType::Cobweb => Color::srgb(0.9, 0.9, 0.9),  // Light gray/white
 
         // Nether blocks
         BlockType::Netherrack => Color::srgb(0.6, 0.2, 0.2),      // Dark red

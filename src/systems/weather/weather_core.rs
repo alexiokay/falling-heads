@@ -204,7 +204,13 @@ fn spawn_weather_particles(
 
     // Get actual window dimensions
     let (screen_width, screen_height) = if let Some(window) = windows.iter().next() {
-        (window.width(), window.height())
+        let w = window.width();
+        let h = window.height();
+        // Prevent zero dimensions that cause empty range panics
+        if w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        (w, h)
     } else {
         return;
     };

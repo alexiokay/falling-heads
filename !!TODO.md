@@ -1,0 +1,1 @@
+ think tehre is smth that friendly characters or hero between fiendly caharacters should be more likely to not  boucne beack normally but be ore pushed down towards blocks. so it under everybody ? or only some specific friendlt characters should do that? bcs palyer is a ball maybe diffrent characeters paly taht ball indiffrent way?b

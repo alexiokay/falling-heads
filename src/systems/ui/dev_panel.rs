@@ -146,8 +146,12 @@ fn setup_dev_panel(
                 (PowerCommandType::Arrow, "ARROW"),
                 (PowerCommandType::Laser, "LASER"),
                 (PowerCommandType::Mirror, "MIRROR"),
+                (PowerCommandType::Magnet, "MAGNET"),
                 (PowerCommandType::Villagers, "VILLAGERS"),
                 (PowerCommandType::Ghast, "GHAST"),
+                (PowerCommandType::Thunder, "THUNDER"),
+                (PowerCommandType::Lootbox, "LOOTBOX"),
+                (PowerCommandType::RandomBox, "RANDOMBOX"),
             ];
 
             for (power_type, label) in power_types {

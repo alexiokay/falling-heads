@@ -29,61 +29,83 @@ struct SnowOverlay;
 fn detect_snow_particle_collisions(
     mut commands: Commands,
     weather: Res<ActiveWeather>,
-    particle_query: Query<&Transform, With<WeatherParticle>>,
-    mut block_query: Query<(Entity, &Transform, Option<&mut SnowLayer>), (With<Block>, Without<WeatherParticle>)>,
-    // Check for blocks above to ensure snow only accumulates on exposed surfaces
-    block_check_query: Query<&Transform, (With<Block>, Without<WeatherParticle>)>,
+    time: Res<Time>,
+    hero_query: Query<&Transform, With<crate::components::hero::Hero>>,
+    mut block_query: Query<(Entity, &Transform, Option<&mut SnowLayer>), With<Block>>,
+    block_check_query: Query<&Transform, With<Block>>,
+    mut accumulation_timer: Local<f32>,
 ) {
     // Only accumulate during snow weather
-    if weather.weather_type != WeatherType::Snow || weather.intensity < 0.5 {
+    if weather.weather_type != WeatherType::Snow || weather.intensity < 0.3 {
         return;
     }
 
-    const BLOCK_SIZE: f32 = 128.0;  // Your actual block size
-    const COLLISION_THRESHOLD: f32 = BLOCK_SIZE / 2.0 + 50.0;  // Detect near top of block
-    const CHECK_DISTANCE: f32 = BLOCK_SIZE + 10.0;  // Distance to check above for air
+    const BLOCK_SIZE: f32 = 128.0;
+    const CHECK_DISTANCE: f32 = BLOCK_SIZE + 10.0;
+    const ACCUMULATION_INTERVAL: f32 = 3.0;  // Add snow every 3 seconds
+    const MAX_BLOCKS_PER_FRAME: usize = 100;  // Check more blocks per frame
+    const SCREEN_RANGE: f32 = 2000.0;  // Larger range to cover visible area
 
-    for particle_transform in particle_query.iter() {
-        let particle_pos = particle_transform.translation;
+    // Update accumulation timer
+    *accumulation_timer += time.delta_secs();
 
-        for (block_entity, block_transform, snow_layer_opt) in block_query.iter_mut() {
-            let block_pos = block_transform.translation;
+    // Only try to accumulate every interval to prevent too-fast growth
+    if *accumulation_timer < ACCUMULATION_INTERVAL {
+        return;
+    }
 
-            // Check if particle is near the top of this block
-            let dx = (particle_pos.x - block_pos.x).abs();
-            let dy = particle_pos.y - block_pos.y;
+    *accumulation_timer = 0.0;
 
-            // Particle must be:
-            // 1. Horizontally aligned with block (within block width)
-            // 2. Just above the top surface of block
-            if dx < BLOCK_SIZE / 2.0 && dy > 0.0 && dy < COLLISION_THRESHOLD {
-                // Check if there's a block directly above (if so, skip - no air exposure)
-                let mut has_block_above = false;
-                for check_transform in block_check_query.iter() {
-                    let check_pos = check_transform.translation;
-                    let check_dx = (check_pos.x - block_pos.x).abs();
-                    let check_dy = check_pos.y - block_pos.y;
+    // Get hero position for camera-relative checks
+    let Ok(hero_transform) = hero_query.single() else {
+        return;
+    };
+    let camera_pos = hero_transform.translation;
 
-                    // Check if there's a block directly above this one
-                    if check_dx < BLOCK_SIZE / 2.0
-                        && check_dy > CHECK_DISTANCE * 0.8
-                        && check_dy < CHECK_DISTANCE * 1.2 {
-                        has_block_above = true;
-                        break;
-                    }
-                }
+    // Collect nearby blocks first, then filter by exposure
+    let mut checked = 0;
+    for (block_entity, block_transform, snow_layer_opt) in block_query.iter_mut() {
+        let block_pos = block_transform.translation;
 
-                // Only add snow if there's air above
-                if !has_block_above {
-                    if let Some(mut snow_layer) = snow_layer_opt {
-                        snow_layer.add_snow();
-                    } else {
-                        // Add SnowLayer component to block
-                        let mut new_layer = SnowLayer::new();
-                        new_layer.add_snow();
-                        commands.entity(block_entity).insert(new_layer);
-                    }
-                }
+        // Skip blocks too far from camera
+        let distance = (block_pos - camera_pos).length();
+        if distance > SCREEN_RANGE {
+            continue;
+        }
+
+        // Check if there's a block DIRECTLY above (one block up)
+        // Only the immediately adjacent block should block snow
+        let mut has_block_above = false;
+        for check_transform in block_check_query.iter() {
+            let check_pos = check_transform.translation;
+
+            let dx = (check_pos.x - block_pos.x).abs();
+            let dy = check_pos.y - block_pos.y;
+
+            // Check if there's a block directly above (within one block height)
+            // Blocks are 128 units apart, so check for blocks 128 units above (±20 units tolerance)
+            if dx < BLOCK_SIZE * 0.6  // Same column (wider tolerance for alignment)
+                && dy > BLOCK_SIZE - 20.0  // Around 108-148 units above
+                && dy < BLOCK_SIZE + 20.0 {
+                has_block_above = true;
+                break;
+            }
+        }
+
+        // Only add snow if there's air above (exposed to sky)
+        if !has_block_above {
+            if let Some(mut snow_layer) = snow_layer_opt {
+                snow_layer.add_snow();
+            } else {
+                // Add SnowLayer component to block
+                let mut new_layer = SnowLayer::new();
+                new_layer.add_snow();
+                commands.entity(block_entity).insert(new_layer);
+            }
+
+            checked += 1;
+            if checked >= MAX_BLOCKS_PER_FRAME {
+                break;  // Stop after checking enough blocks
             }
         }
     }
@@ -93,57 +115,83 @@ fn detect_snow_particle_collisions(
 #[derive(Component)]
 struct SnowOverlayParent(Entity);
 
-/// Update visual snow overlays based on snow layer stage
+/// Update visual snow overlays as child entities (like damage overlays)
 fn update_snow_overlays(
     mut commands: Commands,
-    block_query: Query<(Entity, &Transform, &SnowLayer), (With<Block>, Changed<SnowLayer>)>,
-    overlay_query: Query<(Entity, &SnowOverlayParent), With<SnowOverlay>>,
-    asset_server: Res<AssetServer>,
+    block_query: Query<(Entity, &Transform, &SnowLayer, Option<&Children>), (With<Block>, Changed<SnowLayer>)>,
+    overlay_query: Query<&SnowOverlay>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    _block_textures: Res<BlockTextures>,
+    asset_server: Res<AssetServer>,
 ) {
-    for (block_entity, block_transform, snow_layer) in block_query.iter() {
-        // Remove existing overlay if any
-        for (overlay_entity, parent_ref) in overlay_query.iter() {
-            if parent_ref.0 == block_entity {
-                commands.entity(overlay_entity).despawn();
-            }
+    let mut spawned_count = 0;
+    let mut blocks_with_snow = 0;
+
+    for (block_entity, block_transform, snow_layer, children) in block_query.iter() {
+        if snow_layer.has_snow() {
+            blocks_with_snow += 1;
         }
 
-        // Add new overlay if snow exists
-        if snow_layer.has_snow() {
-            let alpha = snow_layer.get_alpha();
+        // Check if this block already has a snow overlay child
+        let has_overlay = if let Some(children) = children {
+            children.iter().any(|child| overlay_query.get(child).is_ok())
+        } else {
+            false
+        };
 
-            // Create snow overlay mesh (slightly larger than block to be visible on top)
-            let overlay_size = 130.0;
-            let overlay_mesh = meshes.add(Rectangle::new(overlay_size, overlay_size));
+        if snow_layer.has_snow() && !has_overlay {
+            // Load snow texture (white/ice texture)
+            let snow_texture = asset_server.load("textures/blocks/iceland/snow.png");
 
-            // Load snow texture
-            let snow_texture = asset_server.load("textures/blocks/snow.png");
+            // Determine overlay scale based on parent block's scale (same as damage overlay logic)
+            let overlay_scale = if block_transform.scale.x > 1.5 {
+                1.0  // Parent is already scaled (stone/coal)
+            } else {
+                64.0  // Parent not scaled (melon/wood)
+            };
 
-            let overlay_material = materials.add(StandardMaterial {
+            // Z offset - render in front of block
+            let z_offset = if overlay_scale > 1.5 {
+                32.51  // For scaled overlays
+            } else {
+                0.51   // For unscaled overlays
+            };
+
+            info!("❄️ Creating snow overlay: stage={}, parent_scale={:.1}, overlay_scale={:.1}, z_offset={:.2}",
+                snow_layer.stage, block_transform.scale.x, overlay_scale, z_offset);
+
+            // Create overlay mesh (1x1 rectangle, will be scaled)
+            let overlay_mesh = meshes.add(Rectangle::new(1.0, 1.0));
+
+            // Create snow material with alpha blending
+            let alpha = 0.7 + (snow_layer.stage as f32 / 4.0) * 0.3;
+            let snow_material = materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 1.0, 1.0, alpha),
                 base_color_texture: Some(snow_texture),
-                unlit: true,
                 alpha_mode: AlphaMode::Blend,
+                unlit: true,
                 ..default()
             });
 
-            // Position overlay slightly above block surface
-            let overlay_pos = Vec3::new(
-                block_transform.translation.x,
-                block_transform.translation.y,
-                block_transform.translation.z - 1.0,  // Slightly in front
-            );
-
-            // Spawn overlay with parent reference
-            commands.spawn((
+            // Spawn overlay as child entity
+            let overlay = commands.spawn((
                 SnowOverlay,
-                SnowOverlayParent(block_entity),
-                SpriteBundle3d::new(overlay_mesh, overlay_material, overlay_pos),
-            ));
+                Mesh3d(overlay_mesh),
+                MeshMaterial3d(snow_material),
+                Transform::from_translation(Vec3::new(0.0, 0.0, z_offset))  // POSITIVE z_offset (in front of block!)
+                    .with_scale(Vec3::splat(overlay_scale)),
+                Visibility::Visible,
+            )).id();
+
+            // Add as child to block
+            commands.entity(block_entity).add_child(overlay);
+
+            spawned_count += 1;
         }
+    }
+
+    if blocks_with_snow > 0 {
+        info!("❄️ Snow update: {} blocks with snow, {} new overlays spawned", blocks_with_snow, spawned_count);
     }
 }
 

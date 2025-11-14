@@ -1,11 +1,12 @@
 use bevy::prelude::*;
-use avian3d::prelude::LinearVelocity;
+use avian3d::prelude::{LinearVelocity, Collider};
 use crate::components::buff::{Buff, BuffType, Buffable, BuffBehavior};
 use crate::components::block::{BlockType, BiomeType};
 use crate::components::enemy::Health;
 use crate::components::damage_visual::MarkedForDeath;
 use crate::events::damage_events::EntityDamaged;
 use crate::states::GameState;
+use crate::utils::constants::HERO_SIZE;
 
 pub struct BuffPlugin;
 
@@ -15,6 +16,7 @@ impl Plugin for BuffPlugin {
             update_buffs,
             apply_buff_effects,
             apply_buff_visual_effects,
+            apply_buff_scale_effects,
         ).run_if(in_state(GameState::Playing)));
 
         info!("BuffPlugin loaded");
@@ -162,5 +164,40 @@ pub fn apply_block_buff(
 
     if let Some((buff_type, duration)) = buff {
         apply_buff(commands, entity, buff_type, duration, existing_buff);
+    }
+}
+
+/// Apply scale changes based on Grow buff (visual and collision)
+fn apply_buff_scale_effects(
+    mut commands: Commands,
+    mut with_buff_query: Query<(Entity, &Buff, &mut Transform, Option<&Collider>), (With<Buffable>, Without<MarkedForDeath>)>,
+    mut without_buff_query: Query<(Entity, &mut Transform, Option<&Collider>), (With<Buffable>, Without<Buff>, Without<MarkedForDeath>)>,
+) {
+    // Apply scale for entities WITH Grow buff
+    for (entity, buff, mut transform, collider_opt) in with_buff_query.iter_mut() {
+        if buff.buff_type == BuffType::Grow {
+            let scale_multiplier = buff.buff_type.scale_multiplier();
+            // Apply scale based on stacks: 1 stack = 1.2x, 2 stacks = 1.44x (1.2^2)
+            let total_scale = scale_multiplier.powi(buff.stacks as i32);
+            transform.scale = Vec3::splat(total_scale);
+
+            // Update collider size to match visual scale
+            if collider_opt.is_some() {
+                let scaled_size = HERO_SIZE * total_scale;
+                commands.entity(entity).insert(Collider::cuboid(scaled_size, scaled_size, scaled_size));
+            }
+        }
+    }
+
+    // Reset scale for entities WITHOUT any buff (buff expired)
+    for (entity, mut transform, collider_opt) in without_buff_query.iter_mut() {
+        if transform.scale != Vec3::ONE {
+            transform.scale = Vec3::ONE;
+
+            // Reset collider to normal size
+            if collider_opt.is_some() {
+                commands.entity(entity).insert(Collider::cuboid(HERO_SIZE, HERO_SIZE, HERO_SIZE));
+            }
+        }
     }
 }

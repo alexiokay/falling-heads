@@ -28,3 +28,5 @@ pub mod snow_layer;
 pub mod dev_panel;
 pub mod username_label;
 pub mod death_particle;
+pub mod collision_debug;
+pub mod lootbox;

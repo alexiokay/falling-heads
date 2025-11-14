@@ -14,6 +14,11 @@ pub trait BuffBehavior {
     /// Get movement speed multiplier
     fn velocity_multiplier(&self) -> f32;
 
+    /// Get scale multiplier per stack (1.0 = no change, 1.2 = 20% bigger)
+    fn scale_multiplier(&self) -> f32 {
+        1.0  // Default: no scale change
+    }
+
     /// Check if this is a positive buff (true) or debuff (false)
     fn is_beneficial(&self) -> bool {
         self.damage_per_tick() <= 0 && self.velocity_multiplier() >= 1.0
@@ -28,6 +33,7 @@ pub enum BuffType {
     Regeneration,
     Speed,
     Slowness,
+    Grow,  // Increases hero size by 20% per stack (max 2 stacks = 40% bigger)
 }
 
 #[derive(Component)]
@@ -51,9 +57,14 @@ impl Buff {
     /// Maximum stacks allowed per buff type
     pub const MAX_STACKS: u8 = 3;
 
-    /// Add a stack (up to MAX_STACKS) and refresh duration
+    /// Add a stack (up to MAX_STACKS or buff-specific max) and refresh duration
     pub fn add_stack(&mut self, duration_secs: f32) {
-        if self.stacks < Self::MAX_STACKS {
+        let max_stacks = match self.buff_type {
+            BuffType::Grow => 2,  // Grow can only stack 2 times (40% size increase max)
+            _ => Self::MAX_STACKS,
+        };
+
+        if self.stacks < max_stacks {
             self.stacks += 1;
         }
         // Refresh duration
@@ -75,6 +86,7 @@ impl BuffBehavior for BuffType {
             BuffType::Regeneration => "Regeneration",
             BuffType::Speed => "Speed",
             BuffType::Slowness => "Slowness",
+            BuffType::Grow => "Grow",
         }
     }
 
@@ -86,6 +98,7 @@ impl BuffBehavior for BuffType {
             BuffType::Regeneration => Color::srgba(1.0, 0.4, 0.8, 0.3),
             BuffType::Speed => Color::srgba(1.0, 1.0, 0.3, 0.3),
             BuffType::Slowness => Color::srgba(0.4, 0.4, 0.4, 0.4),
+            BuffType::Grow => Color::srgba(0.3, 1.0, 0.3, 0.3),  // Green glow
         }
     }
 
@@ -97,6 +110,7 @@ impl BuffBehavior for BuffType {
             BuffType::Regeneration => -1,
             BuffType::Speed => 0,
             BuffType::Slowness => 0,
+            BuffType::Grow => 0,
         }
     }
 
@@ -108,6 +122,14 @@ impl BuffBehavior for BuffType {
             BuffType::Regeneration => 1.0,
             BuffType::Speed => 1.5,
             BuffType::Slowness => 0.6,
+            BuffType::Grow => 1.3,  // 30% speed boost - giant strides!
+        }
+    }
+
+    fn scale_multiplier(&self) -> f32 {
+        match self {
+            BuffType::Grow => 1.2,  // 20% bigger per stack
+            _ => 1.0,
         }
     }
 }

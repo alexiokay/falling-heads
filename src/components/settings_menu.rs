@@ -20,3 +20,19 @@ pub struct FpsLimitButton;
 
 #[derive(Component)]
 pub struct ToggleButtonText;
+
+// Volume slider components
+#[derive(Component)]
+pub struct EffectsVolumeSlider;
+
+#[derive(Component)]
+pub struct MusicVolumeSlider;
+
+#[derive(Component)]
+pub struct VolumeSliderHandle;
+
+#[derive(Component)]
+pub struct VolumeSliderBar;
+
+#[derive(Component)]
+pub struct VolumeSliderLabel;

@@ -38,6 +38,11 @@ use systems::weather::snow_accumulation::SnowAccumulationPlugin;
 use systems::ui::heart_ui::HeartUIPlugin;
 use systems::ui::username_label::UsernameLabelPlugin;
 use systems::ui::dev_panel::DevPanelPlugin;
+use systems::ui::commands_panel::CommandsPanelPlugin;
+use systems::ui::xp_bar::XpBarUIPlugin;
+
+// Progression systems
+use systems::progression::experience::ExperiencePlugin;
 
 // Other systems
 use systems::projectile_system::ProjectilePlugin;
@@ -45,6 +50,10 @@ use systems::enemy_ai_system::EnemyAIPlugin;
 use systems::damage_visual_system::DamageVisualPlugin;
 use systems::block_damage_overlay_system::BlockDamageOverlayPlugin;
 use systems::death_particle_system::DeathParticlePlugin;
+use systems::collision_debug_system::CollisionDebugPlugin;
+use systems::random_events::RandomEventPlugin;
+use systems::lootbox_system::LootboxPlugin;
+use systems::randombox_system::RandomBoxPlugin;
 use resources::asset_handles::BlockTextures;
 use resources::material_cache::MaterialCache;
 use resources::mesh_cache::MeshCache;
@@ -61,7 +70,7 @@ fn main() {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Falling Heads - Minecraft Block Breaker".to_string(),
-                resolution: WindowResolution::new(1280, 720),
+                resolution: WindowResolution::new(720, 1280),
                 present_mode: PresentMode::AutoNoVsync, // Disable VSync for uncapped FPS and smooth movement
                 ..default()
             }),
@@ -100,14 +109,23 @@ fn main() {
             EnemyAIPlugin,
             HeartUIPlugin,
             UsernameLabelPlugin,
+            XpBarUIPlugin,
             DamageVisualPlugin,
             BlockDamageOverlayPlugin,
             WeatherSystemPlugin,
             FrozenPlugin,
+        ))
+        .add_plugins((
             DevPanelPlugin,
+            CommandsPanelPlugin,
             DeathParticlePlugin,
             SnowAccumulationPlugin,
             BurningVisualPlugin,
+            RandomEventPlugin,
+            CollisionDebugPlugin,
+            ExperiencePlugin,
+            LootboxPlugin,
+            RandomBoxPlugin,
         ))
         .init_resource::<MaterialCache>()
         .init_resource::<PerformanceTracker>()
@@ -280,11 +298,16 @@ fn initialize_material_cache(
     let cactus_bottom = images.get(&block_textures.cactus_bottom);
     let cactus_side = images.get(&block_textures.cactus_side);
 
+    let sandstone_top = images.get(&block_textures.sandstone_top);
+    let sandstone_bottom = images.get(&block_textures.sandstone_bottom);
+    let sandstone_side = images.get(&block_textures.sandstone);
+
     if pumpkin_top.is_none() || pumpkin_side.is_none() || pumpkin_front.is_none()
         || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none()
         || melon_top.is_none() || melon_side.is_none()
         || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none()
-        || cactus_top.is_none() || cactus_bottom.is_none() || cactus_side.is_none() {
+        || cactus_top.is_none() || cactus_bottom.is_none() || cactus_side.is_none()
+        || sandstone_top.is_none() || sandstone_bottom.is_none() || sandstone_side.is_none() {
         return; // Textures not loaded yet, wait for next frame
     }
 
@@ -324,11 +347,7 @@ fn initialize_material_cache(
         tnt_side.unwrap(),
     );
 
-    // Create sandstone atlas (top, bottom, side)
-    let sandstone_top = images.get(&block_textures.sandstone_top);
-    let sandstone_bottom = images.get(&block_textures.sandstone_bottom);
-    let sandstone_side = images.get(&block_textures.sandstone);
-
+    // Create sandstone atlas (top, bottom, side) - already loaded above
     let sandstone_atlas = crate::systems::atlas_generator::create_atlas_4x1(
         sandstone_top.unwrap(),
         sandstone_bottom.unwrap(),
@@ -368,7 +387,7 @@ fn initialize_material_cache(
     use crate::components::block::BlockType;
     use crate::systems::world_generation::get_block_color;
 
-    info!("Initializing material cache with {} block types...", 29);
+    info!("Initializing material cache with {} block types...", 30);
 
     // Create one material per block type
     let block_types = [
@@ -377,6 +396,7 @@ fn initialize_material_cache(
         BlockType::Gold, BlockType::Diamond, BlockType::Emerald, BlockType::Redstone,
         BlockType::Wood, BlockType::Leaves, BlockType::Pumpkin, BlockType::Melon,
         BlockType::Cactus, BlockType::DeadBush, BlockType::Mushroom, BlockType::Vines,
+        BlockType::Cobweb,
         BlockType::Netherrack, BlockType::Netherite, BlockType::AncientDebris,
         BlockType::SoulSand, BlockType::Glowstone, BlockType::EndStone,
         BlockType::Obsidian, BlockType::ChorusFruit, BlockType::Purpur,
@@ -581,6 +601,17 @@ fn initialize_material_cache(
                 materials.add(StandardMaterial {
                     base_color: Color::WHITE,
                     base_color_texture: Some(cactus_atlas_handle.clone()),
+                    unlit: true,
+                    alpha_mode: AlphaMode::Blend,
+                    cull_mode: None,
+                    double_sided: true,
+                    ..default()
+                })
+            }
+            BlockType::Cobweb => {
+                materials.add(StandardMaterial {
+                    base_color: Color::WHITE,
+                    base_color_texture: Some(block_textures.cobweb.clone()),
                     unlit: true,
                     alpha_mode: AlphaMode::Blend,
                     cull_mode: None,

@@ -464,11 +464,11 @@ fn check_fireball_collisions(
     const FIREBALL_PUSH_FORCE: f32 = 250.0;
     const FIREBALL_EXPLOSION_RADIUS: f32 = 100.0;  // Area damage radius
 
-    for (fireball_entity, fireball_transform, _fireball, _fireball_velocity) in fireball_query.iter_mut() {
+    for (fireball_entity, fireball_transform, fireball, _fireball_velocity) in fireball_query.iter_mut() {
         let fireball_pos = fireball_transform.translation;
         let mut should_explode = false;
 
-        // Check collision with blocks
+        // Check collision with blocks (always explodes on blocks regardless of team)
         let nearby_blocks = spatial_hash.query_nearby(fireball_pos.x, fireball_pos.y);
         for block_entity in nearby_blocks {
             if let Ok((_, block_transform)) = block_query.get(block_entity) {
@@ -480,15 +480,18 @@ fn check_fireball_collisions(
             }
         }
 
-        // Check collision with any entity (heroes, villagers, enemies)
-        for (hero_entity, hero_transform, _) in entities.p0().iter() {
-            if fireball_pos.distance(hero_transform.translation) < FIREBALL_HIT_RADIUS {
-                should_explode = true;
-                break;
+        // Check collision with heroes - only if enemy fireball (friendly fire prevention)
+        if !should_explode && fireball.team == crate::components::projectile::Team::Enemy {
+            for (_hero_entity, hero_transform, _) in entities.p0().iter() {
+                if fireball_pos.distance(hero_transform.translation) < FIREBALL_HIT_RADIUS {
+                    should_explode = true;
+                    break;
+                }
             }
         }
 
-        if !should_explode {
+        // Check collision with villagers - only if enemy fireball (friendly fire prevention)
+        if !should_explode && fireball.team == crate::components::projectile::Team::Enemy {
             for (_, villager_transform, _) in entities.p1().iter() {
                 if fireball_pos.distance(villager_transform.translation) < FIREBALL_HIT_RADIUS {
                     should_explode = true;
@@ -497,7 +500,8 @@ fn check_fireball_collisions(
             }
         }
 
-        if !should_explode {
+        // Check collision with enemies - only if friendly fireball (from reflected fireballs)
+        if !should_explode && fireball.team == crate::components::projectile::Team::Friendly {
             for (_, enemy_transform, _) in entities.p2().iter() {
                 if fireball_pos.distance(enemy_transform.translation) < FIREBALL_HIT_RADIUS {
                     should_explode = true;
@@ -518,53 +522,59 @@ fn check_fireball_collisions(
                 }
             }
 
-            // Damage and push all heroes in radius
-            for (hero_entity, hero_transform, mut hero_velocity) in entities.p0().iter_mut() {
-                let distance = fireball_pos.distance(hero_transform.translation);
-                if distance < FIREBALL_EXPLOSION_RADIUS {
-                    damage_events.write(EntityDamaged {
-                        entity: hero_entity,
-                        damage: 2,
-                    });
-                    commands.entity(hero_entity).insert(crate::components::buff::Buff::new(
-                        crate::components::buff::BuffType::Burning,
-                        5.0,
-                    ));
-                    let push_direction = (hero_transform.translation - fireball_pos).normalize();
-                    hero_velocity.x += push_direction.x * FIREBALL_PUSH_FORCE;
-                    hero_velocity.y += push_direction.y * FIREBALL_PUSH_FORCE;
+            // Damage and push all heroes in radius - only if enemy fireball
+            if fireball.team == crate::components::projectile::Team::Enemy {
+                for (hero_entity, hero_transform, mut hero_velocity) in entities.p0().iter_mut() {
+                    let distance = fireball_pos.distance(hero_transform.translation);
+                    if distance < FIREBALL_EXPLOSION_RADIUS {
+                        damage_events.write(EntityDamaged {
+                            entity: hero_entity,
+                            damage: 2,
+                        });
+                        commands.entity(hero_entity).insert(crate::components::buff::Buff::new(
+                            crate::components::buff::BuffType::Burning,
+                            5.0,
+                        ));
+                        let push_direction = (hero_transform.translation - fireball_pos).normalize();
+                        hero_velocity.x += push_direction.x * FIREBALL_PUSH_FORCE;
+                        hero_velocity.y += push_direction.y * FIREBALL_PUSH_FORCE;
+                    }
                 }
             }
 
-            // Damage and push all villagers in radius
-            for (villager_entity, villager_transform, mut villager_velocity) in entities.p1().iter_mut() {
-                let distance = fireball_pos.distance(villager_transform.translation);
-                if distance < FIREBALL_EXPLOSION_RADIUS {
-                    damage_events.write(EntityDamaged {
-                        entity: villager_entity,
-                        damage: 2,
-                    });
-                    commands.entity(villager_entity).insert(crate::components::buff::Buff::new(
-                        crate::components::buff::BuffType::Burning,
-                        5.0,
-                    ));
-                    let push_direction = (villager_transform.translation - fireball_pos).normalize();
-                    villager_velocity.x += push_direction.x * FIREBALL_PUSH_FORCE;
-                    villager_velocity.y += push_direction.y * FIREBALL_PUSH_FORCE;
+            // Damage and push all villagers in radius - only if enemy fireball
+            if fireball.team == crate::components::projectile::Team::Enemy {
+                for (villager_entity, villager_transform, mut villager_velocity) in entities.p1().iter_mut() {
+                    let distance = fireball_pos.distance(villager_transform.translation);
+                    if distance < FIREBALL_EXPLOSION_RADIUS {
+                        damage_events.write(EntityDamaged {
+                            entity: villager_entity,
+                            damage: 2,
+                        });
+                        commands.entity(villager_entity).insert(crate::components::buff::Buff::new(
+                            crate::components::buff::BuffType::Burning,
+                            5.0,
+                        ));
+                        let push_direction = (villager_transform.translation - fireball_pos).normalize();
+                        villager_velocity.x += push_direction.x * FIREBALL_PUSH_FORCE;
+                        villager_velocity.y += push_direction.y * FIREBALL_PUSH_FORCE;
+                    }
                 }
             }
 
-            // Damage and push all enemies in radius (friendly fire from ghast fireballs!)
-            for (enemy_entity, enemy_transform, mut enemy_velocity) in entities.p2().iter_mut() {
-                let distance = fireball_pos.distance(enemy_transform.translation);
-                if distance < FIREBALL_EXPLOSION_RADIUS {
-                    damage_events.write(EntityDamaged {
-                        entity: enemy_entity,
-                        damage: 2,
-                    });
-                    let push_direction = (enemy_transform.translation - fireball_pos).normalize();
-                    enemy_velocity.x += push_direction.x * FIREBALL_PUSH_FORCE;
-                    enemy_velocity.y += push_direction.y * FIREBALL_PUSH_FORCE;
+            // Damage and push all enemies in radius - only if friendly fireball (from reflected fireballs)
+            if fireball.team == crate::components::projectile::Team::Friendly {
+                for (enemy_entity, enemy_transform, mut enemy_velocity) in entities.p2().iter_mut() {
+                    let distance = fireball_pos.distance(enemy_transform.translation);
+                    if distance < FIREBALL_EXPLOSION_RADIUS {
+                        damage_events.write(EntityDamaged {
+                            entity: enemy_entity,
+                            damage: 2,
+                        });
+                        let push_direction = (enemy_transform.translation - fireball_pos).normalize();
+                        enemy_velocity.x += push_direction.x * FIREBALL_PUSH_FORCE;
+                        enemy_velocity.y += push_direction.y * FIREBALL_PUSH_FORCE;
+                    }
                 }
             }
 
