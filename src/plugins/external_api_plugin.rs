@@ -157,6 +157,7 @@ fn process_commands(
     mut queries: ParamSet<(
         Query<(Entity, &Transform, &crate::components::block::Block)>,
         Query<(Entity, &Transform, &crate::components::enemy::Health), Or<(With<Hero>, With<crate::components::villager::Villager>, With<crate::components::enemy::Enemy>)>>,
+        Query<&mut crate::components::buff::Buff>,
     )>,
     camera_query: Query<&Projection, With<Camera>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -375,6 +376,18 @@ fn process_commands(
                     info!("🎲 RANDOMBOX spawned by {} at {:?}!", command.username, final_pos);
                 }
             }
+            PowerCommandType::GrowBuff => {
+                // Apply Grow buff to hero (makes them bigger and faster)
+                if let Ok((hero_entity, _)) = hero_query.single() {
+                    use crate::systems::buffs::buff_core::apply_buff;
+                    use crate::components::buff::BuffType;
+
+                    let mut buff_query = queries.p2();
+                    let mut existing_buff = buff_query.get_mut(hero_entity).ok();
+                    apply_buff(&mut commands, hero_entity, BuffType::Grow, 10.0, existing_buff.as_deref_mut());
+                    info!("🔼 GROW buff activated by {}! Hero grows 20% bigger and 30% faster", command.username);
+                }
+            }
             _ => {
                 info!("⚡ Power {:?} activated by {} (not yet implemented)", command.command_type, command.username);
             }
@@ -472,6 +485,7 @@ fn spawn_thunder_strikes(
     queries: &mut ParamSet<(
         Query<(Entity, &Transform, &crate::components::block::Block)>,
         Query<(Entity, &Transform, &crate::components::enemy::Health), Or<(With<crate::components::hero::Hero>, With<crate::components::villager::Villager>, With<crate::components::enemy::Enemy>)>>,
+        Query<&mut crate::components::buff::Buff>,
     )>,
     camera_query: &Query<&Projection, With<Camera>>,
     meshes: &mut ResMut<Assets<Mesh>>,

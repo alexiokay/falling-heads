@@ -184,9 +184,10 @@ fn update_debug_border_positions(
     entity_transforms: Query<&Transform, Without<CollisionDebugBorder>>,
 ) {
     for (border, mut border_transform) in border_query.iter_mut() {
-        // Update border position to match parent
+        // Update border position and scale to match parent
         if let Ok(parent_transform) = entity_transforms.get(border.parent_entity) {
             border_transform.translation = parent_transform.translation;
+            border_transform.scale = parent_transform.scale;
         }
     }
 }
@@ -216,7 +217,10 @@ fn cleanup_debug_borders(
     for (border_entity, border) in border_query.iter() {
         // If parent doesn't exist anymore, despawn the border
         if entity_check.get(border.parent_entity).is_err() {
-            commands.entity(border_entity).despawn();
+            // Use try_despawn to avoid errors if entity was already despawned
+            if let Ok(mut entity_commands) = commands.get_entity(border_entity) {
+                entity_commands.despawn();
+            }
         }
     }
 }

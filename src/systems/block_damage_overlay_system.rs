@@ -164,8 +164,11 @@ fn cleanup_orphan_overlays(
     for (overlay_entity, child_of) in overlay_query.iter() {
         // If parent block doesn't exist anymore, despawn the orphan overlay
         if block_query.get(child_of.parent()).is_err() {
-            commands.entity(overlay_entity).despawn();
-            orphans_cleaned += 1;
+            // Use get_entity to avoid errors if already despawned
+            if let Ok(mut entity_commands) = commands.get_entity(overlay_entity) {
+                entity_commands.despawn();
+                orphans_cleaned += 1;
+            }
         }
     }
 

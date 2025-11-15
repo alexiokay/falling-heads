@@ -179,8 +179,8 @@ fn check_all_entity_block_collisions(
 
         let nearby_blocks = spatial_hash.query_nearby(pos.x, pos.y);
 
-        // Find the CLOSEST colliding block to prevent multi-block damage bug
-        let mut closest_collision: Option<(Entity, f32, Vec3, BlockType, ChunkMember)> = None;
+        // Collect ALL colliding blocks (not just closest) to support Grow buff multi-block damage
+        let mut colliding_blocks: Vec<(Entity, Vec3, BlockType, ChunkMember, f32, f32)> = Vec::new();
 
         for block_entity in nearby_blocks {
             let Ok((_, block_transform, block_type, chunk_member)) = block_query.get(block_entity) else {
@@ -198,43 +198,59 @@ fn check_all_entity_block_collisions(
             let overlap_y = entity_half + block_half - dy.abs();
 
             if overlap_x > 0.0 && overlap_y > 0.0 {
-                // Calculate distance to find closest block
-                let distance = (dx * dx + dy * dy).sqrt();
-
-                if closest_collision.is_none() || distance < closest_collision.as_ref().unwrap().1 {
-                    closest_collision = Some((block_entity, distance, block_pos, *block_type, *chunk_member));
-                }
+                // Store collision with overlap info for physics resolution
+                colliding_blocks.push((block_entity, block_pos, *block_type, *chunk_member, overlap_x, overlap_y));
             }
         }
 
-        // Only process collision with the CLOSEST block
-        if let Some((block_entity, _, block_pos, block_type, chunk_member)) = closest_collision {
-            // Skip collision with cobwebs - they're non-solid (slow effect handled separately)
+        // Process ALL colliding blocks (damage + buffs), but resolve physics with closest
+        // Find closest for physics resolution (prevents jittering)
+        let closest_idx = colliding_blocks.iter().enumerate()
+            .min_by(|(_, (_, pos1, _, _, _, _)), (_, (_, pos2, _, _, _, _))| {
+                let dist1 = (pos.x - pos1.x).powi(2) + (pos.y - pos1.y).powi(2);
+                let dist2 = (pos.x - pos2.x).powi(2) + (pos.y - pos2.y).powi(2);
+                dist1.partial_cmp(&dist2).unwrap()
+            })
+            .map(|(idx, _)| idx);
+
+        // Damage blocks intelligently:
+        // - If overlapping multiple blocks with SIGNIFICANT overlap (>3px), damage all
+        // - Otherwise, only damage the closest block (prevents accidental multi-block damage on bounce)
+        let significant_overlaps: Vec<_> = colliding_blocks.iter()
+            .filter(|(_, _, _, _, overlap_x, overlap_y)| {
+                // Significant overlap = overlapping by more than 3 pixels in both dimensions
+                // Brief bounces have 1-2px overlap, sustained contact has 3+ px
+                *overlap_x > 3.0 && *overlap_y > 3.0
+            })
+            .collect();
+
+        // Decide whether to damage all blocks or just closest
+        let blocks_to_damage: Vec<_> = if significant_overlaps.len() > 1 {
+            // Multiple significant overlaps = hero is big, damage all
+            significant_overlaps.into_iter().cloned().collect()
+        } else if let Some(closest_idx) = closest_idx {
+            // Normal size or single overlap = damage only closest
+            vec![colliding_blocks[closest_idx]]
+        } else {
+            vec![]
+        };
+
+        for (block_entity, _block_pos, block_type, chunk_member, _, _) in blocks_to_damage {
+            // Skip cobwebs for damage
             if block_type == BlockType::Cobweb {
                 continue;
             }
 
-            let entity_half = entity_size / 2.0;
-            let block_half = block_size / 2.0;
-
-            let dx = pos.x - block_pos.x;
-            let dy = pos.y - block_pos.y;
-
-            let overlap_x = entity_half + block_half - dx.abs();
-            let overlap_y = entity_half + block_half - dy.abs();
-
             // Only friendlies (not enemies, not randombox) damage blocks and get buffs
             if is_enemy.is_none() && is_randombox.is_none() {
-                // Check BOTH per-block AND per-attacker cooldown (prevents rapid multi-block damage)
-                if block_cooldown.can_damage(block_entity, current_time, BLOCK_DAMAGE_COOLDOWN)
-                    && block_cooldown.can_attacker_damage(entity, current_time, BLOCK_DAMAGE_COOLDOWN) {
+                // Check per-block cooldown
+                if block_cooldown.can_damage(block_entity, current_time, BLOCK_DAMAGE_COOLDOWN) {
                     damage_events.write(BlockDamaged {
                         entity: block_entity,
                         damage: 1,
                         remaining_health: 0,
                     });
                     block_cooldown.record_damage(block_entity, current_time);
-                    block_cooldown.record_attacker_damage(entity, current_time); // Track attacker cooldown
                 }
 
                 if let Some(chunk) = chunk_query.iter().find(|c| c.chunk_x == chunk_member.chunk_x && c.chunk_y == chunk_member.chunk_y) {
@@ -246,33 +262,44 @@ fn check_all_entity_block_collisions(
                     }
                 }
             }
+        }
 
-            // Collision resolution (SAME for all entities)
-            if overlap_x < overlap_y {
-                // Horizontal - bounce with same physics as vertical
-                let separation = overlap_x + 1.0;
-                if dx > 0.0 {
-                    transform.translation.x += separation;
-                } else {
-                    transform.translation.x -= separation;
-                }
-                // Apply restitution to horizontal bounces (same as vertical)
-                velocity.x = -velocity.x * restitution.coefficient;
-                // Clamp horizontal bounce to prevent infinite acceleration
-                velocity.x = velocity.x.clamp(-MAX_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
-            } else {
-                // Vertical
-                let separation = overlap_y + 1.0;
-                if dy > 0.0 {
-                    transform.translation.y += separation;
-                    if velocity.y < 0.0 {
-                        velocity.y = -velocity.y * restitution.coefficient;
-                        velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
+        // Physics resolution: Only resolve with CLOSEST block to prevent jittering
+        if let Some(closest_idx) = closest_idx {
+            let (_, block_pos, block_type, _, overlap_x, overlap_y) = colliding_blocks[closest_idx];
+
+            // Skip collision with cobwebs - they're non-solid (slow effect handled separately)
+            if block_type != BlockType::Cobweb {
+                let dx = pos.x - block_pos.x;
+                let dy = pos.y - block_pos.y;
+
+                // Collision resolution (SAME for all entities)
+                if overlap_x < overlap_y {
+                    // Horizontal - bounce with same physics as vertical
+                    let separation = overlap_x + 1.0;
+                    if dx > 0.0 {
+                        transform.translation.x += separation;
+                    } else {
+                        transform.translation.x -= separation;
                     }
+                    // Apply restitution to horizontal bounces (same as vertical)
+                    velocity.x = -velocity.x * restitution.coefficient;
+                    // Clamp horizontal bounce to prevent infinite acceleration
+                    velocity.x = velocity.x.clamp(-MAX_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
                 } else {
-                    transform.translation.y -= separation;
-                    if velocity.y > 0.0 {
-                        velocity.y = 0.0;
+                    // Vertical
+                    let separation = overlap_y + 1.0;
+                    if dy > 0.0 {
+                        transform.translation.y += separation;
+                        if velocity.y < 0.0 {
+                            velocity.y = -velocity.y * restitution.coefficient;
+                            velocity.y = velocity.y.clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY);
+                        }
+                    } else {
+                        transform.translation.y -= separation;
+                        if velocity.y > 0.0 {
+                            velocity.y = 0.0;
+                        }
                     }
                 }
             }
@@ -747,9 +774,9 @@ fn check_entity_collisions(
 /// Hero AI - automatic movement (same as villagers), can be overridden by player input
 fn hero_ai_movement(
     time: Res<Time>,
-    mut hero_query: Query<(&mut Hero, &mut LinearVelocity, Option<&crate::components::power_effect::SpeedModifier>, Option<&crate::components::frozen::FrozenStacks>)>,
+    mut hero_query: Query<(&mut Hero, &mut LinearVelocity, Option<&crate::components::power_effect::SpeedModifier>, Option<&crate::components::buff::Buff>, Option<&crate::components::frozen::FrozenStacks>)>,
 ) {
-    for (mut hero, mut velocity, speed_mod, frozen) in hero_query.iter_mut() {
+    for (mut hero, mut velocity, speed_mod, buff_opt, frozen) in hero_query.iter_mut() {
         // Skip AI movement if fully frozen
         if let Some(frozen_stacks) = frozen {
             if frozen_stacks.is_fully_frozen() {
@@ -760,8 +787,21 @@ fn hero_ai_movement(
         // Tick direction change timer
         hero.direction_change_timer.tick(time.delta());
 
-        // Check if we have turbo/speed boost active
-        let has_turbo = speed_mod.is_some();
+        // Calculate total speed multiplier from both SpeedModifier (powers) and Buff
+        let mut speed_multiplier = 1.0;
+
+        // Apply SpeedModifier from powers (e.g., !FAST command)
+        if let Some(modifier) = speed_mod {
+            speed_multiplier *= modifier.multiplier;
+        }
+
+        // Apply Buff velocity multiplier (e.g., Grow, Speed, Slowness buffs)
+        if let Some(buff) = buff_opt {
+            use crate::components::buff::BuffBehavior;
+            speed_multiplier *= buff.buff_type.velocity_multiplier();
+        }
+
+        let has_turbo = speed_multiplier > 1.0;
 
         // Only change direction when velocity is VERY LOW (nearly stationary)
         // Don't change direction when character has momentum from physics/player
@@ -773,10 +813,13 @@ fn hero_ai_movement(
         // 1. Nearly stationary (velocity < 50), OR
         // 2. Has turbo active (speed boost allows AI to help even when moving)
         if velocity.x.abs() < 50.0 || has_turbo {
-            velocity.x += hero.move_direction * VILLAGER_MOVE_SPEED * time.delta_secs();
+            let move_speed = VILLAGER_MOVE_SPEED * speed_multiplier;
+            let max_speed = VILLAGER_MAX_SPEED * speed_multiplier;
 
-            // Clamp to AI max speed
-            velocity.x = velocity.x.clamp(-VILLAGER_MAX_SPEED, VILLAGER_MAX_SPEED);
+            velocity.x += hero.move_direction * move_speed * time.delta_secs();
+
+            // Clamp to AI max speed (adjusted for speed multipliers)
+            velocity.x = velocity.x.clamp(-max_speed, max_speed);
         }
         // When velocity >= 50 and no turbo, AI doesn't touch it - full physics/player control
     }

@@ -71,6 +71,7 @@ pub enum PowerCommandType {
     Thunder,   // Spawn multiple lightning strikes that damage random nearby blocks
     Lootbox,   // Spawn a lootbox near hero
     RandomBox, // Spawn a bouncing randombox that triggers random events
+    GrowBuff,  // Apply Grow buff to hero (20% bigger per stack, max 2)
 }
 
 impl PowerBehavior for PowerCommandType {
@@ -92,6 +93,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Thunder => "THUNDER",
             PowerCommandType::Lootbox => "LOOTBOX",
             PowerCommandType::RandomBox => "RANDOMBOX",
+            PowerCommandType::GrowBuff => "GROW",
         }
     }
 
@@ -113,6 +115,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Thunder => "Spawn lightning strikes that damage random nearby blocks",
             PowerCommandType::Lootbox => "Trigger random lootbox reward instantly",
             PowerCommandType::RandomBox => "Spawn a bouncing randombox that triggers random events",
+            PowerCommandType::GrowBuff => "Make hero 20% bigger and 30% faster (stacks up to 2x)",
         }
     }
 
@@ -129,6 +132,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Dragon => 30.0,  // Long cooldown for boss spawn
             PowerCommandType::Thunder => 10.0, // Medium cooldown for area damage
             PowerCommandType::Lootbox => 5.0,  // Short cooldown for lootbox spawn
+            PowerCommandType::GrowBuff => 12.0,  // Medium cooldown for buff
             _ => 0.0,
         }
     }
@@ -138,7 +142,7 @@ impl PowerBehavior for PowerCommandType {
             PowerCommandType::Tnt | PowerCommandType::Arrow | PowerCommandType::Laser | PowerCommandType::Bolt | PowerCommandType::Thunder => {
                 PowerCategory::Offensive
             }
-            PowerCommandType::Fast | PowerCommandType::Slow => PowerCategory::Movement,
+            PowerCommandType::Fast | PowerCommandType::Slow | PowerCommandType::GrowBuff => PowerCategory::Movement,
             PowerCommandType::Mirror | PowerCommandType::Box => PowerCategory::Defensive,
             PowerCommandType::Villagers | PowerCommandType::Ghast | PowerCommandType::Dragon => PowerCategory::Summoning,
             PowerCommandType::Magnet | PowerCommandType::Fuss | PowerCommandType::Lootbox | PowerCommandType::RandomBox => PowerCategory::Utility,

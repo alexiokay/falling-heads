@@ -152,6 +152,7 @@ fn setup_dev_panel(
                 (PowerCommandType::Thunder, "THUNDER"),
                 (PowerCommandType::Lootbox, "LOOTBOX"),
                 (PowerCommandType::RandomBox, "RANDOMBOX"),
+                (PowerCommandType::GrowBuff, "GROW"),
             ];
 
             for (power_type, label) in power_types {

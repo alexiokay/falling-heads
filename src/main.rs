@@ -131,6 +131,7 @@ fn main() {
         .init_resource::<PerformanceTracker>()
         .init_resource::<WorldConfig>()
         .init_resource::<resources::command_queue::CommandQueue>()
+        .init_resource::<resources::world_seed::WorldSeed>()
         .insert_resource(settings)
         .add_systems(Startup, setup)
         .add_systems(Update, initialize_mesh_cache)

@@ -192,19 +192,30 @@ fn spawn_villagers(
 /// Hero moves automatically like villagers, but player can override/boost with A/D keys
 fn hero_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut LinearVelocity, &mut Hero, Option<&SpeedModifier>), With<Hero>>,
+    mut query: Query<(&mut LinearVelocity, &mut Hero, Option<&SpeedModifier>, Option<&crate::components::buff::Buff>), With<Hero>>,
     time: Res<Time>,
 ) {
-    let Ok((mut velocity, mut hero, speed_mod)) = query.single_mut() else {
+    let Ok((mut velocity, mut hero, speed_mod, buff_opt)) = query.single_mut() else {
         return;
     };
 
     let mut acceleration = 800.0;  // Stronger player override acceleration (was 500)
 
-    // Apply speed modifier if present
+    // Calculate total speed multiplier from both SpeedModifier (powers) and Buff
+    let mut speed_multiplier = 1.0;
+
+    // Apply SpeedModifier from powers (e.g., !FAST command)
     if let Some(modifier) = speed_mod {
-        acceleration *= modifier.multiplier;
+        speed_multiplier *= modifier.multiplier;
     }
+
+    // Apply Buff velocity multiplier (e.g., Grow, Speed, Slowness buffs)
+    if let Some(buff) = buff_opt {
+        use crate::components::buff::BuffBehavior;
+        speed_multiplier *= buff.buff_type.velocity_multiplier();
+    }
+
+    acceleration *= speed_multiplier;
 
     // ADD to velocity (preserves automatic AI movement + physics)
     if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft) {
@@ -216,7 +227,8 @@ fn hero_movement(
     }
 
     // Cap max horizontal velocity (higher than AI clamp so player can boost past it)
-    velocity.x = velocity.x.clamp(-600.0, 600.0);
+    let max_velocity = 600.0 * speed_multiplier;
+    velocity.x = velocity.x.clamp(-max_velocity, max_velocity);
 }
 
 fn handle_block_damage(

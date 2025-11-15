@@ -15,3 +15,4 @@ pub mod day_night_cycle;
 pub mod action_center;
 pub mod biome_music;
 pub mod lootbox_state;
+pub mod world_seed;

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
+use noise::{NoiseFn, Perlin, Simplex};
 use crate::components::block::{Block, BlockType, BiomeType, BiomeBehavior};
 use crate::components::chunk::{Chunk, ChunkMember, LoadedChunks, CHUNK_SIZE, world_to_chunk_coords};
 use crate::components::hero::Hero;
@@ -29,6 +30,7 @@ pub fn generate_chunks_around_hero(
     mesh_cache: Option<Res<MeshCache>>,
     enemy_textures: Option<Res<crate::resources::asset_handles::EnemyTextures>>,
     spawn_area: Res<crate::plugins::gameplay_plugin::SpawnArea>,
+    world_seed: Res<crate::resources::world_seed::WorldSeed>,
 ) {
     // Wait for caches to be initialized before spawning blocks
     // MaterialCache now includes atlas generation, so when materials are ready, atlases are too
@@ -52,7 +54,7 @@ pub fn generate_chunks_around_hero(
     for chunk_x in (hero_chunk_x - chunk_radius)..=(hero_chunk_x + chunk_radius) {
         for chunk_y in (hero_chunk_y - chunk_radius)..=(hero_chunk_y + chunk_radius) {
             if !loaded_chunks.is_loaded(chunk_x, chunk_y) {
-                generate_chunk(&mut commands, &mut meshes, &mut materials, chunk_x, chunk_y, &block_textures, &material_cache, &mesh_cache, &enemy_textures, &spawn_area);
+                generate_chunk(&mut commands, &mut meshes, &mut materials, chunk_x, chunk_y, &block_textures, &material_cache, &mesh_cache, &enemy_textures, &spawn_area, &world_seed);
                 loaded_chunks.add(chunk_x, chunk_y);
             }
         }
@@ -125,6 +127,7 @@ pub fn generate_chunk(
     mesh_cache: &MeshCache,
     enemy_textures: &crate::resources::asset_handles::EnemyTextures,
     spawn_area: &crate::plugins::gameplay_plugin::SpawnArea,
+    world_seed: &crate::resources::world_seed::WorldSeed,
 ) {
     let mut rng = rand::thread_rng();
 
@@ -139,7 +142,7 @@ pub fn generate_chunk(
     });
 
     // Spawn enemies based on biome
-    spawn_chunk_enemies(commands, meshes, materials, chunk_x, chunk_y, biome, &mesh_cache, enemy_textures, &mut rng);
+    spawn_chunk_enemies(commands, meshes, materials, chunk_x, chunk_y, biome, &mesh_cache, enemy_textures, &mut rng, world_seed);
 
     // Use shared cube mesh from cache - CRITICAL PERFORMANCE FIX
     let cube_mesh = mesh_cache.block_mesh.clone();
@@ -166,8 +169,32 @@ pub fn generate_chunk(
             }
 
             // Cave generation check (biome-specific)
-            if should_generate_cave(world_block_x, world_block_y, biome) {
-                continue; // Skip this block, it's part of a cave
+            let is_cave = should_generate_cave(world_block_x, world_block_y, biome, world_seed);
+
+            if is_cave {
+                // Try to spawn cave decorations (stalactites, columns, etc) in empty cave spaces
+                if let Some(decoration_type) = get_cave_decoration(world_block_x, world_block_y, biome, world_seed) {
+                    // Spawn decoration block at this position
+                    let world_z = -10.0;
+                    let mut transform = Transform::from_xyz(world_x, world_y, world_z);
+                    transform.scale = Vec3::splat(64.0);
+
+                    let material = material_cache.get(decoration_type)
+                        .expect("Material should be cached for all block types");
+
+                    commands.spawn((
+                        Block {
+                            health: 2,  // Decorations are more fragile
+                            max_health: 2,
+                        },
+                        decoration_type,
+                        ChunkMember { chunk_x, chunk_y },
+                        Mesh3d(cube_mesh.clone()),
+                        MeshMaterial3d(material),
+                        transform,
+                    ));
+                }
+                continue; // Skip normal block, it's part of a cave
             }
 
             // Determine block type
@@ -244,138 +271,250 @@ pub fn generate_chunk(
     }
 }
 
-/// Check if a block should be a cave (empty space) - Corridor-based caves with biome-specific shapes
-fn should_generate_cave(block_x: i32, block_y: i32, biome: BiomeType) -> bool {
-    let x = block_x as f32;
-    let y = block_y as f32;
+/// Get cave decoration block type if this position should have decorations
+/// Returns None if no decoration, Some(BlockType) for stalactites, columns, ore veins, etc.
+fn get_cave_decoration(block_x: i32, block_y: i32, biome: BiomeType, world_seed: &crate::resources::world_seed::WorldSeed) -> Option<BlockType> {
+    let x = block_x as f64;
+    let y = block_y as f64;
 
-    // Biome-specific corridor patterns
-    match biome {
-        BiomeType::Nether => {
-            // Nether: Vertical wavy corridors (lava tubes)
-            let corridor_center = ((y * 0.015).sin() * 20.0) as i32;
-            let distance_from_corridor = (x as i32 - corridor_center).abs();
-            let corridor_width = 2 + ((y * 0.05).cos().abs() * 2.0) as i32; // 2-4 blocks wide
+    let simplex = Simplex::new(world_seed.simplex_seed());
+    let perlin = Perlin::new(world_seed.perlin_seed());
 
-            // Multiple parallel vertical corridors
-            let is_vertical_corridor = distance_from_corridor < corridor_width;
+    // Check if adjacent blocks form ceiling/floor (for stalactites/stalagmites)
+    let has_ceiling_above = !should_generate_cave(block_x, block_y + 1, biome, world_seed);
+    let has_floor_below = !should_generate_cave(block_x, block_y - 1, biome, world_seed);
 
-            // Add some small pocket rooms
-            let pocket_noise = ((x * 0.12).sin() * (y * 0.1).cos()).abs();
-            let is_pocket = pocket_noise < 0.08;
-
-            is_vertical_corridor || is_pocket
-        },
-
-        BiomeType::End => {
-            // End: Straight diagonal corridors (crystalline geometry)
-            let diagonal1 = ((x + y) % 100.0).abs();
-            let diagonal2 = ((x - y) % 100.0).abs();
-            let is_diagonal = diagonal1 < 3.0 || diagonal2 < 3.0;
-
-            // Very sparse - only show corridors sometimes
-            let sparse_check = ((x / 80.0).sin() * (y / 80.0).cos()).abs() > 0.6;
-
-            is_diagonal && sparse_check
-        },
-
-        BiomeType::Underground => {
-            // Underground: Winding horizontal and vertical corridors (classic dungeon)
-            // Horizontal corridors
-            let h_corridor_center = ((x * 0.012).sin() * 15.0) as i32;
-            let h_distance = (y as i32 - h_corridor_center).abs();
-            let is_h_corridor = h_distance < 2; // 2-3 blocks tall
-
-            // Vertical corridors
-            let v_corridor_center = ((y * 0.01).cos() * 15.0) as i32;
-            let v_distance = (x as i32 - v_corridor_center).abs();
-            let is_v_corridor = v_distance < 2; // 2-3 blocks wide
-
-            // Larger rooms at intersections
-            let room_noise = ((x * 0.08).sin() * (y * 0.09).cos()).abs();
-            let is_room = room_noise < 0.12;
-
-            is_h_corridor || is_v_corridor || is_room
-        },
-
-        BiomeType::Mountains => {
-            // Mountains: Horizontal mining-shaft corridors at different heights
-            let shaft_height_1 = ((x * 0.008).sin() * 10.0) as i32;
-            let shaft_height_2 = ((x * 0.015 + 100.0).cos() * 12.0) as i32 + 30;
-
-            let dist1 = (y as i32 - shaft_height_1).abs();
-            let dist2 = (y as i32 - shaft_height_2).abs();
-
-            let is_shaft = dist1 < 2 || dist2 < 2; // 2-3 blocks tall horizontal shafts
-
-            // Small caverns
-            let cavern_noise = ((x * 0.1).sin() * (y * 0.11).cos()).abs();
-            let is_cavern = cavern_noise < 0.09;
-
-            is_shaft || is_cavern
-        },
-
-        BiomeType::Iceland => {
-            // Iceland: Jagged irregular corridors (ice cracks)
-            let crack_center = ((x * 0.02).sin() * 8.0) as i32;
-            let distance_from_crack = (y as i32 - crack_center).abs();
-
-            // Thin jagged corridors (1-2 blocks)
-            let crack_width = 1 + ((x * 0.1).cos().abs() * 1.0) as i32;
-            let is_crack = distance_from_crack < crack_width;
-
-            // Very small pockets
-            let pocket_noise = ((x * 0.15).sin() * (y * 0.16).cos()).abs();
-            let is_pocket = pocket_noise < 0.07;
-
-            is_crack || is_pocket
-        },
-
-        BiomeType::Desert => {
-            // Desert: Sparse horizontal sandstone corridors (tomb-like)
-            let tomb_center = ((x * 0.01).cos() * 12.0) as i32;
-            let distance_from_tomb = (y as i32 - tomb_center).abs();
-
-            // Sparse distribution
-            let sparse = ((x / 120.0).fract() * (y / 80.0).fract()).abs() > 0.7;
-            let is_corridor = distance_from_tomb < 2 && sparse;
-
-            // Small tomb rooms
-            let room_noise = ((x * 0.11).sin() * (y * 0.12).cos()).abs();
-            let is_tomb_room = room_noise < 0.08 && sparse;
-
-            is_corridor || is_tomb_room
-        },
-
-        BiomeType::Forest => {
-            // Forest: Twisting organic root corridors (irregular and curved)
-            let root_center_1 = ((x * 0.018).sin() * 10.0) as i32;
-            let root_center_2 = ((y * 0.016).cos() * 10.0) as i32;
-
-            let dist_h = (y as i32 - root_center_1).abs();
-            let dist_v = (x as i32 - root_center_2).abs();
-
-            // Thin twisting corridors (1-2 blocks)
-            let is_root = dist_h < 2 || dist_v < 2;
-
-            // Root cavities (small rooms)
-            let cavity_noise = ((x * 0.13).sin() * (y * 0.14).cos()).abs();
-            let is_cavity = cavity_noise < 0.1;
-
-            is_root || is_cavity
-        },
-
-        BiomeType::Plains => {
-            // Plains: Rare shallow horizontal burrows
-            let burrow_center = ((x * 0.009).sin() * 8.0) as i32;
-            let distance = (y as i32 - burrow_center).abs();
-
-            // Very sparse
-            let sparse = ((x / 150.0).fract()).abs() > 0.85;
-
-            distance < 2 && sparse
-        },
+    // Stalactites (hang from ceiling)
+    if has_ceiling_above {
+        let stalactite_noise = simplex.get([x * 0.2, y * 0.2, 5000.0]);
+        if stalactite_noise > 0.75 {
+            return Some(match biome {
+                BiomeType::Iceland => BlockType::Snow,  // Icicles
+                BiomeType::Nether => BlockType::Netherrack,  // Lava drips
+                BiomeType::End => BlockType::Obsidian,  // Void crystals
+                BiomeType::Desert => BlockType::Sandstone,  // Sandstone formations
+                _ => BlockType::Stone,  // Stone stalactites
+            });
+        }
     }
+
+    // Stalagmites (grow from floor)
+    if has_floor_below {
+        let stalagmite_noise = simplex.get([x * 0.2, y * 0.2, 6000.0]);
+        if stalagmite_noise > 0.75 {
+            return Some(match biome {
+                BiomeType::Iceland => BlockType::Snow,  // Ice spikes
+                BiomeType::Nether => BlockType::Glowstone,  // Glowing formations
+                BiomeType::End => BlockType::Purpur,  // End pillars
+                _ => BlockType::Stone,  // Stone stalagmites
+            });
+        }
+    }
+
+    // Columns (stalactite meets stalagmite)
+    if has_ceiling_above && has_floor_below {
+        let column_noise = perlin.get([x * 0.15, y * 0.15, 7000.0]);
+        if column_noise > 0.8 {
+            return Some(match biome {
+                BiomeType::Mountains => BlockType::Stone,
+                BiomeType::Underground => BlockType::Stone,
+                BiomeType::Iceland => BlockType::Snow,
+                BiomeType::Nether => BlockType::Netherrack,
+                _ => BlockType::Stone,
+            });
+        }
+    }
+
+    // Ore veins in cave walls (richer ore deposits exposed)
+    let ore_vein_noise = simplex.get([x * 0.25, y * 0.25, 8000.0]);
+    if ore_vein_noise > 0.82 {
+        let ores = biome.ore_blocks();
+        if !ores.is_empty() {
+            // Bias towards rarer ores in caves (reward exploration)
+            let rare_ore_index = if ores.len() > 2 {
+                ores.len() - 1  // Pick rarest ore
+            } else if ores.len() > 1 {
+                1  // Pick second ore
+            } else {
+                0  // Pick only ore
+            };
+            return Some(ores[rare_ore_index]);
+        }
+    }
+
+    // Glowing mushrooms/crystals in dark caves
+    if matches!(biome, BiomeType::Underground | BiomeType::Forest | BiomeType::Nether) {
+        let glow_noise = simplex.get([x * 0.3, y * 0.3, 9000.0]);
+        if glow_noise > 0.85 {
+            return Some(match biome {
+                BiomeType::Nether => BlockType::Glowstone,
+                BiomeType::Forest => BlockType::Mushroom,
+                _ => BlockType::Redstone,  // Glowing redstone ore
+            });
+        }
+    }
+
+    // Cobwebs in forest/underground caves
+    if matches!(biome, BiomeType::Forest | BiomeType::Underground) {
+        let web_noise = simplex.get([x * 0.4, y * 0.4, 10000.0]);
+        if web_noise > 0.88 {
+            return Some(BlockType::Cobweb);
+        }
+    }
+
+    None  // No decoration at this position
+}
+
+/// Check if a block should be a cave (empty space) - Natural caves using Perlin noise, worm carving, and multi-layer approach
+fn should_generate_cave(block_x: i32, block_y: i32, biome: BiomeType, world_seed: &crate::resources::world_seed::WorldSeed) -> bool {
+    let x = block_x as f64;
+    let y = block_y as f64;
+
+    // Create noise generators with random seed for unique worlds
+    let perlin = Perlin::new(world_seed.perlin_seed());
+    let simplex = Simplex::new(world_seed.simplex_seed());
+
+    // === DEPTH-BASED CAVE DENSITY (Proposal 2) ===
+    // Caves get more common deeper underground
+    let depth = (-block_y).max(0) as f64;
+    let depth_factor = (depth / 500.0).min(1.0); // 0.0 at surface, 1.0 at depth 500+
+
+    // === LAYER 1: LARGE CAVERNS (3D Perlin noise for vast chambers) ===
+    let cavern_scale = match biome {
+        BiomeType::Nether => 0.015,  // Huge lava chambers
+        BiomeType::Forest => 0.04,   // Small twisty caves
+        _ => 0.02,  // Medium sized features
+    };
+
+    let cavern_noise = perlin.get([x * cavern_scale, y * cavern_scale, 0.0]);
+
+    // Base thresholds - RAISED for smaller caves (Proposal 5)
+    let base_cavern_threshold = match biome {
+        BiomeType::Nether => 0.6,           // Was 0.35 (65% cave) → Now 0.6 (40% cave)
+        BiomeType::Underground => 0.65,     // Was 0.4 (60%) → Now 0.65 (35%)
+        BiomeType::Mountains => 0.7,        // Was 0.4 (60%) → Now 0.7 (30%)
+        BiomeType::Forest => 0.68,          // Was 0.75 (25%) → Now 0.68 (32% for more root caves)
+        BiomeType::Desert => 0.8,           // Was 0.55 (45%) → Now 0.8 (20%)
+        BiomeType::Plains => 0.85,          // Was 0.65 (35%) → Now 0.85 (15%)
+        BiomeType::Iceland => 0.85,         // Was 0.6 (40%) → Now 0.85 (15%)
+        BiomeType::End => 0.65,             // Was 0.8 (20%) → Now 0.65 (35% for more caves)
+    };
+
+    // Adjust threshold based on depth (easier to carve at depth)
+    let cavern_threshold = base_cavern_threshold - (depth_factor * 0.3);
+
+    // === BIOME-SPECIFIC LAYER ENABLE/DISABLE (Proposal 1) ===
+    let enable_large_caverns = !matches!(biome, BiomeType::Iceland | BiomeType::Plains);
+    let is_large_cavern = enable_large_caverns && cavern_noise > cavern_threshold;
+
+    // === LAYER 2: MEDIUM TUNNELS (Worm-based carving simulation) ===
+    // Biome-specific number of worms (Proposal 1)
+    let num_worms = match biome {
+        BiomeType::Desert => 1,      // 1 worm for tomb corridors (mixed with rectangular rooms)
+        BiomeType::End => 1,         // 1 worm for some organic tunnels mixed with geometry
+        BiomeType::Plains => 1,      // Simple burrow
+        _ => 2,                      // Most biomes get 2 worms (Forest, Underground, Nether, Mountains, Iceland)
+    };
+
+    let enable_worm_tunnels = num_worms > 0;
+    let mut is_medium_tunnel = false;
+
+    if enable_worm_tunnels {
+        // Simulate "worms" that carve paths through terrain using noise to create winding tunnels
+        let worm_scale = 0.05;
+
+        // Variable tunnel width based on noise (creates narrow squeezes and wide passages)
+        let width_variation = (simplex.get([x * 0.03, y * 0.03, 500.0]) + 1.0) * 0.5; // 0.0 to 1.0
+
+        // Tunnel width - same for both horizontal and vertical (balanced exploration)
+        let tunnel_width = match biome {
+            BiomeType::Nether => 3.0 + width_variation * 5.0,  // 3-8 blocks (lava tubes)
+            BiomeType::Underground => 2.0 + width_variation * 4.0,  // 2-6 blocks
+            BiomeType::Mountains => 2.0 + width_variation * 3.0,  // 2-5 blocks (mine shafts)
+            BiomeType::Forest => 1.5 + width_variation * 2.5,  // 1.5-4 blocks (root caves)
+            BiomeType::Iceland => 1.0 + width_variation * 2.0,  // 1-3 blocks (ice cracks)
+            BiomeType::Plains => 1.5 + width_variation * 2.0,  // 1.5-3.5 blocks (burrows)
+            BiomeType::End => 2.0 + width_variation * 2.5,  // 2-4.5 blocks (void tunnels)
+            _ => 2.0 + width_variation * 3.0,
+        };
+
+        // === HORIZONTAL Worm 1 (always active - varies Y based on X) ===
+        // Biome-independent for cross-biome connectivity
+        let worm_h1_y = simplex.get([x * worm_scale, 5000.0, 0.0]) * 20.0;
+        let dist_worm_h1 = ((y - worm_h1_y).powi(2)).sqrt();
+        is_medium_tunnel = dist_worm_h1 < tunnel_width;
+
+        // === VERTICAL Worm 1 (always active - varies X based on Y) ===
+        let worm_v1_x = simplex.get([y * worm_scale, 1000.0, 0.0]) * 15.0;
+        let dist_worm_v1 = ((x - worm_v1_x).powi(2)).sqrt();
+        is_medium_tunnel = is_medium_tunnel || dist_worm_v1 < tunnel_width;
+
+        // === Additional worms if num_worms >= 2 (1 horizontal + 1 vertical for balance) ===
+        if num_worms >= 2 {
+            // HORIZONTAL Worm 2
+            let worm_h2_y = simplex.get([x * worm_scale * 0.8, 6000.0, 0.0]) * 18.0;
+            let dist_worm_h2 = ((y - worm_h2_y).powi(2)).sqrt();
+            is_medium_tunnel = is_medium_tunnel || dist_worm_h2 < tunnel_width;
+
+            // VERTICAL Worm 2
+            let worm_v2_x = simplex.get([y * worm_scale * 0.7, 2000.0, 0.0]) * 20.0;
+            let dist_worm_v2 = ((x - worm_v2_x).powi(2)).sqrt();
+            is_medium_tunnel = is_medium_tunnel || dist_worm_v2 < tunnel_width;
+        }
+    }
+
+    // === LAYER 3: SMALL CREVICES (High-frequency noise for fine detail) ===
+    // Emphasize in Iceland and Mountains, disable in Plains/Desert/Nether
+    let enable_small_crevices = matches!(biome, BiomeType::Iceland | BiomeType::End | BiomeType::Mountains | BiomeType::Forest);
+    let mut is_small_crevice = false;
+
+    if enable_small_crevices {
+        let detail_scale = 0.15;
+        let crevice_noise = simplex.get([x * detail_scale, y * detail_scale, 4000.0]);
+        let crevice_threshold = match biome {
+            BiomeType::Iceland => 0.7,  // Lots of cracks in ice
+            BiomeType::End => 0.72,  // Crystalline fractures
+            BiomeType::Mountains => 0.75,  // Rocky crevices
+            BiomeType::Forest => 0.8,  // Some root cracks
+            _ => 0.85,  // Minimal small cracks
+        };
+        is_small_crevice = crevice_noise > crevice_threshold;
+    }
+
+    // === LAYER 4: BIOME-SPECIFIC FEATURES ===
+    let biome_feature = match biome {
+        BiomeType::Nether => {
+            // Vertical lava tubes using directional noise
+            let vertical_noise = perlin.get([x * 0.03, 0.0, y * 0.08]);
+            vertical_noise > 0.5
+        },
+        BiomeType::End => {
+            // Diagonal void corridors (crystalline geometry)
+            let diagonal_noise = simplex.get([(x + y) * 0.04, (x - y) * 0.04, 0.0]);
+            diagonal_noise > 0.4  // Was 0.6 → Now 0.4 (more diagonal caves)
+        },
+        BiomeType::Forest => {
+            // Organic root-like branching
+            let branch_noise = perlin.get([x * 0.06, y * 0.05, 1000.0]);
+            branch_noise > 0.65
+        },
+        BiomeType::Desert => {
+            // Rectangular tomb chambers
+            let tomb_x = ((x / 50.0).fract() - 0.5).abs();
+            let tomb_y = ((y / 40.0).fract() - 0.5).abs();
+            tomb_x < 0.3 && tomb_y < 0.3 && simplex.get([x * 0.01, y * 0.01, 0.0]) > 0.4
+        },
+        BiomeType::Iceland => {
+            // Jagged ice fractures using absolute noise
+            let fracture = simplex.get([x * 0.08, y * 0.08, 0.0]).abs();
+            fracture < 0.15
+        },
+        _ => false,
+    };
+
+    // === COMBINE ALL LAYERS ===
+    // Cave exists if ANY layer creates an opening (OR logic for natural variation)
+    is_large_cavern || is_medium_tunnel || is_small_crevice || biome_feature
 }
 
 /// Determine block type based on biome and position
@@ -484,6 +623,7 @@ fn spawn_chunk_enemies(
     mesh_cache: &MeshCache,
     enemy_textures: &crate::resources::asset_handles::EnemyTextures,
     rng: &mut impl Rng,
+    world_seed: &crate::resources::world_seed::WorldSeed,
 ) {
     let spawn_rate = biome.enemy_spawn_rate();
     let enemy_types = biome.enemy_types();
@@ -507,7 +647,7 @@ fn spawn_chunk_enemies(
                 let world_block_y = chunk_y * CHUNK_SIZE + local_y;
 
                 // Check if this position is a cave (empty space)
-                if should_generate_cave(world_block_x, world_block_y, biome) {
+                if should_generate_cave(world_block_x, world_block_y, biome, world_seed) {
                     spawn_pos = Some((world_block_x, world_block_y));
                     break;
                 }

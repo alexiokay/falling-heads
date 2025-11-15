@@ -664,6 +664,7 @@ fn barrier_reflect_projectiles(
     barrier_query: Query<(Entity, &Transform, &crate::components::projectile::MagicBarrier)>,
     mut arrow_query: Query<(&Transform, &mut LinearVelocity, &mut Arrow)>,
     mut fireball_query: Query<(&Transform, &mut LinearVelocity, &mut crate::components::projectile::Fireball), Without<Arrow>>,
+    mut snowball_query: Query<(&Transform, &mut LinearVelocity, &mut crate::components::projectile::Snowball), (Without<Arrow>, Without<crate::components::projectile::Fireball>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
@@ -761,6 +762,48 @@ fn barrier_reflect_projectiles(
                     spawn_barrier_impact(&mut commands, barrier_entity, fireball_pos, barrier_center, projectile_angle, &mut meshes, &mut materials, &asset_server);
 
                     info!("🪞 Fireball reflected at {:.0} speed! Distance={:.1}, New team: {:?}", current_speed, distance, fireball.team);
+                }
+            }
+        }
+
+        // Reflect snowballs - use inside-radius detection
+        for (snowball_transform, mut snowball_velocity, mut snowball) in snowball_query.iter_mut() {
+            let snowball_pos = snowball_transform.translation;
+            let dx = snowball_pos.x - barrier_center.x;
+            let dy = snowball_pos.y - barrier_center.y;
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            // Detect if snowball is inside or very close to barrier edge
+            // Snowballs are ~32 units, so detect within radius + 64 to catch fast movement
+            if distance < barrier.radius + 64.0 {
+                // Check if moving towards center (only reflect once)
+                let to_center_x = barrier_center.x - snowball_pos.x;
+                let to_center_y = barrier_center.y - snowball_pos.y;
+                let dot_product = snowball_velocity.x * to_center_x + snowball_velocity.y * to_center_y;
+
+                // Only reflect if moving towards center (positive dot product)
+                if dot_product > 0.0 {
+                    // Calculate projectile direction (where it's coming from)
+                    let projectile_angle = snowball_velocity.y.atan2(snowball_velocity.x);
+
+                    // Calculate reflection angle (away from barrier center)
+                    let bounce_angle = dy.atan2(dx);
+
+                    // Preserve snowball's speed
+                    let current_speed = (snowball_velocity.x.powi(2) + snowball_velocity.y.powi(2)).sqrt();
+                    snowball_velocity.x = bounce_angle.cos() * current_speed;
+                    snowball_velocity.y = bounce_angle.sin() * current_speed;
+
+                    // Switch team
+                    snowball.team = match snowball.team {
+                        Team::Enemy => Team::Friendly,
+                        Team::Friendly => Team::Enemy,
+                    };
+
+                    // Spawn impact effect at collision point with projectile direction
+                    spawn_barrier_impact(&mut commands, barrier_entity, snowball_pos, barrier_center, projectile_angle, &mut meshes, &mut materials, &asset_server);
+
+                    info!("🪞 Snowball reflected at {:.0} speed! Distance={:.1}, New team: {:?}", current_speed, distance, snowball.team);
                 }
             }
         }
