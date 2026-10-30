@@ -1,1 +1,18 @@
 /target
+/builds
+# Run output: logs, smoke-test screenshots and the local settings copy
+/logs
+*.log
+/mineheads-*.png
+/graphics-settings.json
+/game-settings.json
+# Python tool caches
+__pycache__/
+# NVIDIA Streamline SDK: only the headers the build needs and the license are
+# kept. Download the full SDK (DLLs) from https://github.com/NVIDIA-RTX/Streamline
+# release v2.14.16 into vendor/Streamline-2.14.16/.
+/vendor/Streamline-2.14.16/*
+!/vendor/Streamline-2.14.16/include/
+!/vendor/Streamline-2.14.16/license.txt
+# Local machine settings
+/.claude/settings.local.json

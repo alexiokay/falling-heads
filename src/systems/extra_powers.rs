@@ -1,0 +1,1201 @@
+//! Chat powers added in October 2026: FEATHER, ANVIL, GOLEM, PEARL, QUAKE,
+//! SHRINK, WIND, BLACKHOLE, ICEAGE, BEES, BOLT and FUSS. Each reacts to
+//! `PowerActivated` (API, dev panel) and runs while the world runs (`InGame`).
+use crate::components::block::{Block, BlockType};
+use crate::components::buff::Buffable;
+use crate::components::bundles::avian_physics;
+use crate::components::enemy::{Enemy, Flying, Health};
+use crate::components::hero::Hero;
+use crate::components::resource::Resource as Drop;
+use crate::components::villager::Villager;
+use crate::events::block_events::{BlockDamaged, BlockDestroyed};
+use crate::events::damage_events::EntityDamaged;
+use crate::events::power_events::PowerActivated;
+use crate::resources::command_queue::PowerCommandType as P;
+use crate::resources::spatial_hash::SpatialHash;
+use crate::systems::audio::effects::SoundAt;
+use crate::systems::world_portals::PowerNotice;
+use avian3d::prelude::{GravityScale, LinearVelocity, Position};
+use bevy::prelude::*;
+use rand::RngExt;
+use std::collections::HashSet;
+
+pub struct ExtraPowersPlugin;
+
+impl Plugin for ExtraPowersPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Fuss>()
+            .init_resource::<Wind>()
+            .init_resource::<IceAge>()
+            .add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (
+                    (
+                        start_simple,
+                        start_spawned,
+                        start_pearl,
+                        start_quake,
+                        start_bolt,
+                    ),
+                    (
+                        feather_gravity,
+                        fall_anvils,
+                        golem_ai.after(crate::plugins::physics_plugin::PhysicsSet::AI),
+                        blow_wind,
+                        black_holes,
+                        ice_age,
+                        bees,
+                        fuss,
+                        fade_fx,
+                    ),
+                )
+                    .chain()
+                    .run_if(in_state(crate::states::InGame)),
+            );
+    }
+}
+
+// ---------------------------------------------------------------- shared art
+
+#[derive(Resource)]
+struct Art {
+    quad: Handle<Mesh>,
+    cube: Handle<Mesh>,
+    anvil: Handle<StandardMaterial>,
+    golem_face: Handle<Mesh>,
+    golem: Handle<StandardMaterial>,
+    bee_face: Handle<Mesh>,
+    bee: Handle<StandardMaterial>,
+    hole: Handle<StandardMaterial>,
+    sounds: Sounds,
+}
+
+struct Sounds {
+    anvil: Handle<AudioSource>,
+    golem_hit: Handle<AudioSource>,
+    golem_summon: Handle<AudioSource>,
+    bee_loop: Handle<AudioSource>,
+    bee_sting: Handle<AudioSource>,
+    pearl: Handle<AudioSource>,
+    quake: Handle<AudioSource>,
+    wind: Handle<AudioSource>,
+    hole: Handle<AudioSource>,
+    hole_pop: Handle<AudioSource>,
+    ice: Handle<AudioSource>,
+    bolt: Handle<AudioSource>,
+    fuss: Handle<AudioSource>,
+    feather: Handle<AudioSource>,
+    shrink: Handle<AudioSource>,
+}
+
+/// A 64x64 quad showing one rectangle of a creature skin (u0,v0)..(u1,v1).
+fn face_quad(size: Vec2, uv: [f32; 4]) -> Mesh {
+    let [u0, v0, u1, v1] = uv;
+    Mesh::from(Rectangle::new(size.x, size.y)).with_inserted_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        vec![[u1, v0], [u0, v0], [u0, v1], [u1, v1]],
+    )
+}
+
+fn setup(
+    mut commands: Commands,
+    server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let mut texture = |path: &str, blend: bool| {
+        materials.add(StandardMaterial {
+            base_color_texture: Some(
+                server
+                    .load_builder()
+                    .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
+                        s.sampler = bevy::image::ImageSampler::nearest()
+                    })
+                    .load(path.to_string()),
+            ),
+            unlit: true,
+            alpha_mode: if blend {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Mask(0.5)
+            },
+            ..default()
+        })
+    };
+    let anvil = texture("textures/powers/anvil_side.png", false);
+    let golem = texture("textures/powers/iron_golem.png", false);
+    let bee = texture("textures/powers/bee.png", false);
+    let hole = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.04, 0.0, 0.08),
+        emissive: LinearRgba::rgb(1.2, 0.2, 2.4),
+        unlit: true,
+        ..default()
+    });
+    let sound = |name: &str| server.load(format!("audio/powers/{name}.ogg"));
+    commands.insert_resource(Art {
+        quad: meshes.add(Rectangle::new(1.0, 1.0)),
+        cube: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+        anvil,
+        // Iron golem skin is 128 units square: head front at (8,8)-(16,18).
+        golem_face: meshes.add(face_quad(
+            Vec2::new(64.0, 80.0),
+            [0.0625, 0.0625, 0.125, 0.140625],
+        )),
+        golem,
+        // Bee skin is 64 units square: body front at (10,10)-(17,17).
+        bee_face: meshes.add(face_quad(
+            Vec2::splat(30.0),
+            [0.15625, 0.15625, 0.265625, 0.265625],
+        )),
+        bee,
+        hole,
+        sounds: Sounds {
+            anvil: sound("anvil_land"),
+            golem_hit: sound("golem_hit"),
+            golem_summon: sound("golem_summon"),
+            bee_loop: sound("bee_loop"),
+            bee_sting: sound("bee_sting"),
+            pearl: sound("pearl_teleport"),
+            quake: sound("quake"),
+            wind: sound("wind"),
+            hole: sound("black_hole"),
+            hole_pop: sound("black_hole_pop"),
+            ice: sound("ice_age"),
+            bolt: sound("bolt"),
+            fuss: sound("fuss"),
+            feather: sound("feather"),
+            shrink: sound("shrink"),
+        },
+    });
+}
+
+fn play(commands: &mut Commands, clip: &Handle<AudioSource>, at: Vec3, volume: f32, speed: f32) {
+    commands.spawn((
+        AudioPlayer::new(clip.clone()),
+        PlaybackSettings::DESPAWN
+            .with_volume(bevy::audio::Volume::Linear(volume))
+            .with_speed(speed),
+        SoundAt(at.xy()),
+    ));
+}
+
+fn announce(notice: &mut PowerNotice, text: String) {
+    notice.text = text;
+    notice.remaining = 3.5;
+}
+
+fn by(name: &str, user: &str) -> String {
+    format!("{name}! (from {user})")
+}
+
+/// Short-lived visual: fades out, optionally drifting and spinning.
+#[derive(Component)]
+struct Fx {
+    life: f32,
+    max: f32,
+    velocity: Vec3,
+    spin: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_fx(
+    commands: &mut Commands,
+    materials: &mut Assets<StandardMaterial>,
+    mesh: &Handle<Mesh>,
+    color: Color,
+    at: Vec3,
+    size: Vec2,
+    rotation: f32,
+    velocity: Vec3,
+    life: f32,
+) {
+    let material = materials.add(StandardMaterial {
+        base_color: color,
+        emissive: color.to_linear() * 2.0,
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+    commands.spawn((
+        Fx {
+            life,
+            max: life,
+            velocity,
+            spin: 0.0,
+        },
+        Mesh3d(mesh.clone()),
+        MeshMaterial3d(material),
+        Transform::from_translation(at)
+            .with_rotation(Quat::from_rotation_z(rotation))
+            .with_scale(size.extend(1.0)),
+        bevy::light::NotShadowCaster,
+    ));
+}
+
+fn fade_fx(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut fx: Query<(
+        Entity,
+        &mut Fx,
+        &mut Transform,
+        &MeshMaterial3d<StandardMaterial>,
+    )>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut f, mut t, material) in &mut fx {
+        f.life -= dt;
+        if f.life <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        t.translation += f.velocity * dt;
+        t.rotate_z(f.spin * dt);
+        if let Some(mut m) = materials.get_mut(&material.0) {
+            m.base_color.set_alpha((f.life / f.max).clamp(0.0, 1.0));
+        }
+    }
+}
+
+// --------------------------------------------------------- timed effects
+
+/// FEATHER: low gravity until `until`; `base` is restored afterwards.
+#[derive(Component)]
+pub struct Feather {
+    until: f32,
+    base: f32,
+}
+
+/// SHRINK: half-size head until `until` (scaling lives in buff_core).
+#[derive(Component)]
+pub struct Shrunk {
+    pub until: f32,
+}
+
+#[derive(Resource, Default)]
+struct Wind {
+    until: f32,
+    direction: f32,
+}
+
+#[derive(Resource, Default)]
+pub struct IceAge {
+    until: f32,
+    next_grip: f32,
+}
+
+impl IceAge {
+    /// Whether the ice age is on: terrain landings then keep heads on ice.
+    pub fn active(&self, now: f32) -> bool {
+        now < self.until
+    }
+}
+
+/// FUSS: mirrored hero controls until `until` (read by `hero_movement`).
+#[derive(Resource, Default)]
+pub struct Fuss {
+    pub until: f32,
+    pub active: bool,
+}
+
+impl Fuss {
+    /// -1 while controls are mirrored, otherwise 1.
+    pub fn steer_sign(&self, now: f32) -> f32 {
+        if now < self.until { -1.0 } else { 1.0 }
+    }
+}
+
+const FEATHER_GRAVITY: f32 = 0.35;
+const FEATHER_SECONDS: f32 = 8.0;
+const SHRINK_SECONDS: f32 = 10.0;
+const WIND_SECONDS: f32 = 3.0;
+const ICE_AGE_SECONDS: f32 = 15.0;
+const FUSS_SECONDS: f32 = 5.0;
+
+type Heads = Or<(With<Hero>, With<Villager>)>;
+type Actors = Or<(With<Hero>, With<Villager>, With<Enemy>)>;
+
+/// FEATHER, SHRINK, WIND, ICEAGE and FUSS: timers and one-off kicks.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn start_simple(
+    mut commands: Commands,
+    mut powers: MessageReader<PowerActivated>,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut notice: ResMut<PowerNotice>,
+    mut wind: ResMut<Wind>,
+    mut ice: ResMut<IceAge>,
+    mut fuss_state: ResMut<Fuss>,
+    actors: Query<
+        (
+            Entity,
+            &Transform,
+            Option<&GravityScale>,
+            Option<&Feather>,
+            Has<Hero>,
+        ),
+        (Actors, Without<Flying>),
+    >,
+    friends: Query<Entity, Heads>,
+    mut weather: ResMut<crate::components::weather::ActiveWeather>,
+    modes: Option<Res<crate::systems::game_modes::GameModes>>,
+) {
+    let now = time.elapsed_secs();
+    let hero_at = actors
+        .iter()
+        .find(|a| a.4)
+        .map_or(Vec3::ZERO, |a| a.1.translation);
+    for power in powers.read() {
+        let user = &power.command.username;
+        match power.command.command_type {
+            P::Feather => {
+                for (e, _, gravity, feather, _) in &actors {
+                    let base = feather.map_or(gravity.map_or(1.5, |g| g.0), |f| f.base);
+                    commands.entity(e).try_insert(Feather {
+                        until: now + FEATHER_SECONDS,
+                        base,
+                    });
+                }
+                play(&mut commands, &art.sounds.feather, hero_at, 0.6, 1.0);
+                announce(&mut notice, by("FEATHER: low gravity", user));
+            }
+            P::Shrink => {
+                for e in &friends {
+                    commands.entity(e).try_insert(Shrunk {
+                        until: now + SHRINK_SECONDS,
+                    });
+                }
+                play(&mut commands, &art.sounds.shrink, hero_at, 0.8, 1.4);
+                announce(&mut notice, by("SHRINK: tiny heads", user));
+            }
+            P::Wind => {
+                wind.until = now + WIND_SECONDS;
+                wind.direction = if rand::rng().random_bool(0.5) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                play(&mut commands, &art.sounds.wind, hero_at, 0.8, 0.9);
+                announce(&mut notice, by("WIND", user));
+            }
+            P::IceAge => {
+                ice.until = now + ICE_AGE_SECONDS;
+                ice.next_grip = 0.0;
+                if crate::systems::game_modes::is_on(
+                    modes.as_deref(),
+                    crate::systems::game_modes::GameMode::Weather,
+                ) {
+                    weather.weather_type = crate::components::weather::WeatherType::Snow;
+                    weather.intensity = 0.85;
+                    weather.duration_remaining = ICE_AGE_SECONDS;
+                }
+                play(&mut commands, &art.sounds.ice, hero_at, 0.7, 0.8);
+                announce(&mut notice, by("ICE AGE: slippery floors", user));
+            }
+            P::Fuss => {
+                fuss_state.until = now + FUSS_SECONDS;
+                play(&mut commands, &art.sounds.fuss, hero_at, 0.6, 1.0);
+                announce(&mut notice, by("FUSS: controls mirrored", user));
+            }
+            _ => {}
+        }
+    }
+}
+
+fn feather_gravity(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut actors: Query<(Entity, &Feather, &mut GravityScale)>,
+) {
+    let now = time.elapsed_secs();
+    for (e, feather, mut gravity) in &mut actors {
+        if now >= feather.until {
+            gravity.0 = feather.base;
+            commands.entity(e).remove::<Feather>();
+        } else if gravity.0 != feather.base * FEATHER_GRAVITY {
+            gravity.0 = feather.base * FEATHER_GRAVITY;
+        }
+    }
+}
+
+fn blow_wind(
+    time: Res<Time>,
+    wind: Res<Wind>,
+    art: Res<Art>,
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut actors: Query<&mut LinearVelocity, (Actors, Without<Flying>)>,
+    cameras: Query<&GlobalTransform, With<Camera3d>>,
+) {
+    let now = time.elapsed_secs();
+    if now >= wind.until {
+        return;
+    }
+    let dt = time.delta_secs();
+    let target = wind.direction * 480.0;
+    for mut v in &mut actors {
+        v.x += (target - v.x) * (dt * 3.0).min(1.0);
+    }
+    // Streaks across the view show the gust.
+    if let Some(camera) = cameras.iter().next() {
+        let mut rng = rand::rng();
+        if rng.random_bool(0.6) {
+            let c = camera.translation();
+            let at = Vec3::new(
+                c.x - wind.direction * 700.0,
+                c.y + rng.random_range(-600.0..600.0),
+                60.0,
+            );
+            spawn_fx(
+                &mut commands,
+                &mut materials,
+                &art.quad,
+                Color::srgba(0.9, 0.95, 1.0, 0.6),
+                at,
+                Vec2::new(rng.random_range(60.0..140.0), 3.0),
+                0.0,
+                Vec3::X * wind.direction * 1800.0,
+                0.8,
+            );
+        }
+    }
+}
+
+fn ice_age(
+    time: Res<Time<Virtual>>,
+    mut ice: ResMut<IceAge>,
+    mut commands: Commands,
+    heads: Query<Entity, Heads>,
+) {
+    let now = time.elapsed_secs();
+    if now >= ice.until || now < ice.next_grip {
+        return;
+    }
+    // Ice grip lasts 1 s; refresh it twice a second while the ice age lasts.
+    ice.next_grip = now + 0.5;
+    for e in &heads {
+        commands
+            .entity(e)
+            .try_insert(crate::components::surface_grip::SurfaceGrip::ice(now));
+    }
+}
+
+fn fuss(
+    time: Res<Time>,
+    mut state: ResMut<Fuss>,
+    mut heroes: Query<&mut Hero>,
+    mut villagers: Query<&mut Villager>,
+) {
+    let active = time.elapsed_secs() < state.until;
+    if active != state.active {
+        // AI heads turn around when the fuss starts and again when it ends.
+        state.active = active;
+        for mut hero in &mut heroes {
+            hero.move_direction = -hero.move_direction;
+        }
+        for mut villager in &mut villagers {
+            villager.move_direction = -villager.move_direction;
+        }
+    }
+}
+
+// ------------------------------------------------- ANVIL, GOLEM, HOLE, BEES
+
+#[derive(Component)]
+struct Anvil {
+    velocity: f32,
+    broken: u8,
+    fallen: f32,
+    hit: HashSet<Entity>,
+    landed: Option<f32>,
+}
+
+#[derive(Component)]
+struct Golem {
+    until: f32,
+    punch_ready: f32,
+}
+
+#[derive(Component)]
+struct BlackHole {
+    pop_at: f32,
+}
+
+#[derive(Component)]
+struct Bee {
+    target: Entity,
+    until: f32,
+    sting_ready: f32,
+    dazed_until: f32,
+    phase: f32,
+}
+
+const ANVIL_MAX_BLOCKS: u8 = 6;
+const GOLEM_SECONDS: f32 = 30.0;
+const HOLE_SECONDS: f32 = 4.0;
+const HOLE_RADIUS: f32 = 600.0;
+const BEE_SECONDS: f32 = 12.0;
+
+#[allow(clippy::too_many_arguments)]
+fn start_spawned(
+    mut commands: Commands,
+    mut powers: MessageReader<PowerActivated>,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut notice: ResMut<PowerNotice>,
+    hero: Query<&Transform, With<Hero>>,
+    friends: Query<Entity, Heads>,
+) {
+    let Ok(hero) = hero.single() else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let at = hero.translation;
+    let mut rng = rand::rng();
+    for power in powers.read() {
+        let user = &power.command.username;
+        match power.command.command_type {
+            P::Anvil => {
+                for dx in [-160.0, 0.0, 160.0] {
+                    commands.spawn((
+                        Anvil {
+                            velocity: 300.0,
+                            broken: 0,
+                            fallen: 0.0,
+                            hit: HashSet::new(),
+                            landed: None,
+                        },
+                        Mesh3d(art.cube.clone()),
+                        MeshMaterial3d(art.anvil.clone()),
+                        Transform::from_translation(Vec3::new(at.x + dx, at.y + 650.0, 20.0))
+                            .with_scale(Vec3::new(60.0, 44.0, 60.0)),
+                    ));
+                }
+                announce(&mut notice, by("ANVIL", user));
+            }
+            P::Golem => {
+                let p = Vec3::new(at.x + 90.0, at.y + 60.0, at.z);
+                commands.spawn((
+                    Villager {
+                        ai_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+                        move_direction: 1.0,
+                        direction_change_timer: Timer::from_seconds(99.0, TimerMode::Repeating),
+                    },
+                    Golem {
+                        until: now + GOLEM_SECONDS,
+                        punch_ready: now,
+                    },
+                    Health::new(20),
+                    Buffable,
+                    avian_physics::character(),
+                    Mesh3d(art.golem_face.clone()),
+                    MeshMaterial3d(art.golem.clone()),
+                    Transform::from_translation(p).with_scale(Vec3::splat(1.2)),
+                ));
+                play(&mut commands, &art.sounds.golem_summon, p, 0.8, 1.0);
+                announce(&mut notice, by("IRON GOLEM joins", user));
+            }
+            P::BlackHole => {
+                let side = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
+                let p = Vec3::new(at.x + side * 280.0, at.y + 140.0, 40.0);
+                commands.spawn((
+                    BlackHole {
+                        pop_at: now + HOLE_SECONDS,
+                    },
+                    Mesh3d(art.cube.clone()),
+                    MeshMaterial3d(art.hole.clone()),
+                    Transform::from_translation(p).with_scale(Vec3::splat(70.0)),
+                ));
+                play(&mut commands, &art.sounds.hole, p, 0.8, 0.7);
+                announce(&mut notice, by("BLACK HOLE", user));
+            }
+            P::Bees => {
+                let targets: Vec<Entity> = friends.iter().collect();
+                if targets.is_empty() {
+                    continue;
+                }
+                let target = targets[rng.random_range(0..targets.len())];
+                for i in 0..6 {
+                    let angle = i as f32 * std::f32::consts::TAU / 6.0;
+                    commands.spawn((
+                        Bee {
+                            target,
+                            until: now + BEE_SECONDS,
+                            sting_ready: now + 1.0,
+                            dazed_until: 0.0,
+                            phase: angle,
+                        },
+                        Mesh3d(art.bee_face.clone()),
+                        MeshMaterial3d(art.bee.clone()),
+                        Transform::from_translation(
+                            at + Vec3::new(angle.cos() * 400.0, 300.0 + angle.sin() * 120.0, 50.0),
+                        ),
+                    ));
+                }
+                play(&mut commands, &art.sounds.bee_loop, at, 0.7, 1.0);
+                announce(&mut notice, by("BEES", user));
+            }
+            _ => {}
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn fall_anvils(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<Art>,
+    grid: Res<SpatialHash>,
+    mut anvils: Query<(Entity, &mut Anvil, &mut Transform)>,
+    blocks: Query<
+        (
+            &Transform,
+            &BlockType,
+            Option<&crate::systems::biome_content::Tile>,
+        ),
+        (With<Block>, Without<Anvil>),
+    >,
+    mut actors: Query<
+        (Entity, &Transform, &mut LinearVelocity, Has<Enemy>),
+        (Actors, Without<Anvil>),
+    >,
+    mut destroyed: MessageWriter<BlockDestroyed>,
+    mut damage: MessageWriter<EntityDamaged>,
+    mut broken: Local<HashSet<Entity>>,
+) {
+    broken.clear();
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    for (e, mut anvil, mut t) in &mut anvils {
+        if let Some(landed) = anvil.landed {
+            if now - landed > 1.0 {
+                commands.entity(e).despawn();
+            }
+            continue;
+        }
+        anvil.velocity = (anvil.velocity + 1400.0 * dt).min(1100.0);
+        let step = anvil.velocity * dt;
+        t.translation.y -= step;
+        anvil.fallen += step;
+        let p = t.translation;
+        // Smash blocks it falls into, up to a limit, through the normal path.
+        let reach = Vec2::new(30.0, 22.0) + Vec2::splat(32.0);
+        for block in grid.rect_iter(p.xy() - reach, p.xy() + reach) {
+            if anvil.broken >= ANVIL_MAX_BLOCKS {
+                break;
+            }
+            let Ok((bt, kind, tile)) = blocks.get(block) else {
+                continue;
+            };
+            let d = (bt.translation - p).xy().abs();
+            if d.x < 62.0 && d.y < 54.0 {
+                crate::plugins::gameplay_plugin::break_block(
+                    &mut commands,
+                    &mut destroyed,
+                    &mut broken,
+                    block,
+                    *kind,
+                    bt.translation,
+                    tile.copied(),
+                );
+                anvil.broken += 1;
+            }
+        }
+        // Bonk whoever is under it.
+        for (actor, at, mut v, enemy) in &mut actors {
+            if (at.translation - p)
+                .xy()
+                .abs()
+                .cmplt(Vec2::new(62.0, 56.0))
+                .all()
+                && anvil.hit.insert(actor)
+            {
+                v.y = v.y.min(-450.0);
+                if enemy {
+                    damage.write(EntityDamaged {
+                        entity: actor,
+                        damage: 2,
+                    });
+                }
+            }
+        }
+        if anvil.broken >= ANVIL_MAX_BLOCKS || anvil.fallen > 1600.0 {
+            anvil.landed = Some(now);
+            play(&mut commands, &art.sounds.anvil, p, 0.7, 1.0);
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn golem_ai(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut golems: Query<(Entity, &mut Golem, &Transform, &mut LinearVelocity), Without<Enemy>>,
+    mut enemies: Query<(Entity, &Transform, &mut LinearVelocity), (With<Enemy>, Without<Golem>)>,
+    hero: Query<&Transform, (With<Hero>, Without<Golem>)>,
+    mut damage: MessageWriter<EntityDamaged>,
+) {
+    let now = time.elapsed_secs();
+    let hero = hero.single().ok().map(|t| t.translation);
+    for (e, mut golem, t, mut v) in &mut golems {
+        if now >= golem.until {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let p = t.translation;
+        let nearest = enemies
+            .iter()
+            .filter(|(_, et, _)| et.translation.distance(p) < 420.0)
+            .min_by(|a, b| {
+                a.1.translation
+                    .distance_squared(p)
+                    .total_cmp(&b.1.translation.distance_squared(p))
+            })
+            .map(|(id, et, _)| (id, et.translation));
+        // Walk to the nearest enemy, otherwise stay near the hero.
+        let goal = nearest.map(|n| n.1).or(hero);
+        if let Some(goal) = goal {
+            let dx = goal.x - p.x;
+            if dx.abs() > 50.0 {
+                v.x = dx.signum() * 240.0;
+            }
+        }
+        if let Some((target, at)) = nearest
+            && at.distance(p) < 100.0
+            && now >= golem.punch_ready
+        {
+            golem.punch_ready = now + 1.0;
+            damage.write(EntityDamaged {
+                entity: target,
+                damage: 2,
+            });
+            if let Ok((_, _, mut ev)) = enemies.get_mut(target) {
+                let away = (at - p).x.signum();
+                ev.x = away * 520.0;
+                ev.y = 380.0;
+            }
+            play(&mut commands, &art.sounds.golem_hit, p, 0.8, 1.0);
+        }
+    }
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+fn black_holes(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut holes: Query<(Entity, &BlackHole, &mut Transform)>,
+    mut bodies: Query<
+        (&Transform, &mut LinearVelocity),
+        (
+            Or<(With<Hero>, With<Villager>, With<Enemy>, With<Drop>)>,
+            Without<BlackHole>,
+        ),
+    >,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    let mut rng = rand::rng();
+    for (e, hole, mut t) in &mut holes {
+        let center = t.translation;
+        if now >= hole.pop_at {
+            for (bt, mut v) in &mut bodies {
+                let d = bt.translation - center;
+                if d.length() < HOLE_RADIUS {
+                    let away = d.xy().normalize_or(Vec2::Y);
+                    v.x = away.x * 550.0;
+                    v.y = away.y * 550.0 + 250.0;
+                }
+            }
+            play(&mut commands, &art.sounds.hole_pop, center, 0.9, 0.8);
+            for i in 0..16 {
+                let a = i as f32 * std::f32::consts::TAU / 16.0;
+                spawn_fx(
+                    &mut commands,
+                    &mut materials,
+                    &art.quad,
+                    Color::srgba(0.7, 0.3, 1.0, 0.9),
+                    center,
+                    Vec2::splat(14.0),
+                    a,
+                    Vec3::new(a.cos(), a.sin(), 0.0) * 700.0,
+                    0.6,
+                );
+            }
+            commands.entity(e).despawn();
+            continue;
+        }
+        // Pull everything nearby towards the centre.
+        for (bt, mut v) in &mut bodies {
+            let d = center - bt.translation;
+            let distance = d.length();
+            if distance < HOLE_RADIUS && distance > 1.0 {
+                let pull = d.xy().normalize() * 1100.0 * dt;
+                v.x = (v.x + pull.x).clamp(-650.0, 650.0);
+                v.y = (v.y + pull.y).clamp(-650.0, 650.0);
+            }
+        }
+        // Spin and pulse; swirl particles drawn in.
+        t.rotate_z(dt * 4.0);
+        let pulse = 70.0 + (now * 9.0).sin() * 8.0;
+        t.scale = Vec3::splat(pulse);
+        if rng.random_bool(0.5) {
+            let a = rng.random_range(0.0..std::f32::consts::TAU);
+            let from = center + Vec3::new(a.cos(), a.sin(), 0.0) * 320.0;
+            spawn_fx(
+                &mut commands,
+                &mut materials,
+                &art.quad,
+                Color::srgba(0.6, 0.2, 1.0, 0.8),
+                from,
+                Vec2::splat(10.0),
+                a,
+                (center - from) * 1.8,
+                0.5,
+            );
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn bees(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut swarm: Query<(Entity, &mut Bee, &mut Transform)>,
+    targets: Query<(&Transform, &LinearVelocity), (Heads, Without<Bee>)>,
+    mut damage: MessageWriter<EntityDamaged>,
+) {
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    for (e, mut bee, mut t) in &mut swarm {
+        let Ok((target, target_v)) = targets.get(bee.target) else {
+            commands.entity(e).despawn();
+            continue;
+        };
+        if now >= bee.until {
+            commands.entity(e).despawn();
+            continue;
+        }
+        // A big bounce shakes the swarm off for a moment.
+        if target_v.y > 380.0 {
+            bee.dazed_until = now + 1.2;
+        }
+        bee.phase += dt * 7.0;
+        let wobble = Vec3::new(bee.phase.cos() * 40.0, (bee.phase * 1.7).sin() * 30.0, 0.0);
+        let goal = if now < bee.dazed_until {
+            t.translation + Vec3::Y * 60.0 + wobble
+        } else {
+            target.translation + wobble
+        };
+        let speed = if now < bee.dazed_until { 120.0 } else { 420.0 };
+        let step = (goal - t.translation).xy().clamp_length_max(speed * dt);
+        t.translation += step.extend(0.0);
+        t.translation.z = 50.0;
+        // Wings: quick flap.
+        t.scale = Vec3::new(1.0, 1.0 + (now * 40.0).sin() * 0.12, 1.0);
+        if now >= bee.sting_ready
+            && now >= bee.dazed_until
+            && t.translation.xy().distance(target.translation.xy()) < 40.0
+        {
+            bee.sting_ready = now + 1.5;
+            damage.write(EntityDamaged {
+                entity: bee.target,
+                damage: 1,
+            });
+            play(
+                &mut commands,
+                &art.sounds.bee_sting,
+                t.translation,
+                0.6,
+                1.0,
+            );
+        }
+    }
+}
+
+// ------------------------------------------------------ PEARL, QUAKE, BOLT
+
+/// Free spot for the pearl: no block within a head's reach of `p`.
+fn spot_is_free(grid: &SpatialHash, blocks: &Query<&Transform, With<Block>>, p: Vec2) -> bool {
+    grid.rect_iter(p - Vec2::splat(72.0), p + Vec2::splat(72.0))
+        .filter_map(|e| blocks.get(e).ok())
+        .all(|b| (b.translation.xy() - p).abs().max_element() >= 70.0)
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn start_pearl(
+    mut commands: Commands,
+    mut powers: MessageReader<PowerActivated>,
+    art: Res<Art>,
+    grid: Res<SpatialHash>,
+    blocks: Query<&Transform, With<Block>>,
+    mut hero: Query<
+        (&mut Transform, &mut Position, &mut LinearVelocity),
+        (With<Hero>, Without<Block>),
+    >,
+    mut notice: ResMut<PowerNotice>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for power in powers.read() {
+        if power.command.command_type != P::Pearl {
+            continue;
+        }
+        let Ok((mut t, mut position, mut v)) = hero.single_mut() else {
+            continue;
+        };
+        let from = t.translation;
+        let mut rng = rand::rng();
+        let spot = (0..40)
+            .map(|_| {
+                let a = rng.random_range(0.0..std::f32::consts::TAU);
+                let r = rng.random_range(192.0..640.0);
+                from.xy() + Vec2::new(a.cos(), a.sin()) * r
+            })
+            .find(|p| spot_is_free(&grid, &blocks, *p));
+        let Some(to) = spot else {
+            announce(&mut notice, "PEARL found no free spot".into());
+            continue;
+        };
+        let to = to.extend(from.z);
+        t.translation = to;
+        position.0 = to;
+        v.0 = Vec3::ZERO;
+        for i in 0..12 {
+            let p = from.lerp(to, i as f32 / 11.0) + Vec3::Z * 40.0;
+            spawn_fx(
+                &mut commands,
+                &mut materials,
+                &art.quad,
+                Color::srgba(0.75, 0.3, 1.0, 0.85),
+                p,
+                Vec2::splat(18.0),
+                i as f32,
+                Vec3::Y * 30.0,
+                0.7,
+            );
+        }
+        play(&mut commands, &art.sounds.pearl, to, 0.8, 1.0);
+        announce(&mut notice, by("ENDER PEARL", &power.command.username));
+    }
+}
+
+fn is_ore(kind: BlockType) -> bool {
+    matches!(
+        kind,
+        BlockType::Coal
+            | BlockType::Iron
+            | BlockType::Gold
+            | BlockType::Diamond
+            | BlockType::Emerald
+            | BlockType::Redstone
+    )
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn start_quake(
+    mut commands: Commands,
+    mut powers: MessageReader<PowerActivated>,
+    art: Res<Art>,
+    grid: Res<SpatialHash>,
+    blocks: Query<
+        (
+            &Transform,
+            &BlockType,
+            Option<&crate::systems::biome_content::Tile>,
+        ),
+        With<Block>,
+    >,
+    mut actors: Query<
+        (&Transform, &mut LinearVelocity, Has<Hero>),
+        (Actors, Without<Block>, Without<Flying>),
+    >,
+    mut destroyed: MessageWriter<BlockDestroyed>,
+    mut damaged: MessageWriter<BlockDamaged>,
+    mut notice: ResMut<PowerNotice>,
+) {
+    for power in powers.read() {
+        if power.command.command_type != P::Quake {
+            continue;
+        }
+        let Some(center) = actors.iter().find(|a| a.2).map(|a| a.0.translation) else {
+            continue;
+        };
+        const RADIUS: f32 = 320.0;
+        let mut broken = HashSet::new();
+        let reach = Vec2::splat(RADIUS);
+        for block in grid.rect_iter(center.xy() - reach, center.xy() + reach) {
+            let Ok((t, kind, tile)) = blocks.get(block) else {
+                continue;
+            };
+            if t.translation.xy().distance(center.xy()) > RADIUS {
+                continue;
+            }
+            if is_ore(*kind) {
+                // Ores shake loose as drops.
+                crate::plugins::gameplay_plugin::break_block(
+                    &mut commands,
+                    &mut destroyed,
+                    &mut broken,
+                    block,
+                    *kind,
+                    t.translation,
+                    tile.copied(),
+                );
+            } else {
+                damaged.write(BlockDamaged {
+                    entity: block,
+                    damage: 1,
+                    remaining_health: 0,
+                });
+            }
+        }
+        for (_, mut v, _) in &mut actors {
+            v.y = v.y.max(320.0);
+        }
+        play(&mut commands, &art.sounds.quake, center, 0.9, 0.55);
+        announce(&mut notice, by("EARTHQUAKE", &power.command.username));
+    }
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn start_bolt(
+    mut commands: Commands,
+    mut powers: MessageReader<PowerActivated>,
+    art: Res<Art>,
+    hero: Query<&Transform, With<Hero>>,
+    enemies: Query<(Entity, &Transform, &Health), (With<Enemy>, Without<Hero>)>,
+    mut damage: MessageWriter<EntityDamaged>,
+    mut notice: ResMut<PowerNotice>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for power in powers.read() {
+        if power.command.command_type != P::Bolt {
+            continue;
+        }
+        let Ok(hero) = hero.single() else {
+            continue;
+        };
+        let Some((target, at)) = pick_bolt_target(
+            hero.translation,
+            enemies
+                .iter()
+                .map(|(e, t, h)| (e, t.translation, h.max, h.current)),
+        ) else {
+            announce(&mut notice, "BOLT: no enemy in range".into());
+            continue;
+        };
+        damage.write(EntityDamaged {
+            entity: target,
+            damage: 4,
+        });
+        // Zigzag bolt from the sky down to the target.
+        let mut rng = rand::rng();
+        let mut top = at + Vec3::new(rng.random_range(-60.0..60.0), 900.0, 70.0);
+        for i in 0..10 {
+            let bottom = if i == 9 {
+                at + Vec3::Z * 70.0
+            } else {
+                at.lerp(top, 1.0 - (i + 1) as f32 / 10.0)
+                    + Vec3::new(rng.random_range(-45.0..45.0), 0.0, 70.0)
+            };
+            let mid = (top + bottom) / 2.0;
+            let d = bottom - top;
+            spawn_fx(
+                &mut commands,
+                &mut materials,
+                &art.quad,
+                Color::srgba(0.85, 0.9, 1.0, 1.0),
+                mid,
+                Vec2::new(d.xy().length(), 7.0),
+                d.y.atan2(d.x),
+                Vec3::ZERO,
+                0.35,
+            );
+            top = bottom;
+        }
+        play(&mut commands, &art.sounds.bolt, at, 0.9, 1.0);
+        announce(&mut notice, by("LIGHTNING BOLT", &power.command.username));
+    }
+}
+
+/// BOLT target: the enemy with the most max health within 900 of the hero
+/// (ties: the nearest), skipping ones already dead.
+fn pick_bolt_target(
+    hero: Vec3,
+    enemies: impl Iterator<Item = (Entity, Vec3, u32, u32)>,
+) -> Option<(Entity, Vec3)> {
+    enemies
+        .filter(|(_, p, _, current)| *current > 0 && p.distance(hero) < 900.0)
+        .max_by(|a, b| {
+            a.2.cmp(&b.2)
+                .then(b.1.distance(hero).total_cmp(&a.1.distance(hero)))
+        })
+        .map(|(e, p, _, _)| (e, p))
+}
+
+/// Live power objects, for the `--powers-test` probe.
+#[cfg(feature = "probes")]
+pub(crate) struct PowerCounts {
+    pub anvils: usize,
+    pub golems: usize,
+    pub holes: usize,
+    pub bees: usize,
+    pub fx: usize,
+}
+
+#[cfg(feature = "probes")]
+pub(crate) fn power_counts(w: &mut World) -> PowerCounts {
+    PowerCounts {
+        anvils: w.query::<&Anvil>().iter(w).count(),
+        golems: w.query::<&Golem>().iter(w).count(),
+        holes: w.query::<&BlackHole>().iter(w).count(),
+        bees: w.query::<&Bee>().iter(w).count(),
+        fx: w.query::<&Fx>().iter(w).count(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bolt_hits_the_toughest_enemy_in_range_nearest_on_ties() {
+        let hero = Vec3::ZERO;
+        let a = Entity::from_raw_u32(1).unwrap();
+        let b = Entity::from_raw_u32(2).unwrap();
+        let c = Entity::from_raw_u32(3).unwrap();
+        let d = Entity::from_raw_u32(4).unwrap();
+        let enemies = vec![
+            (a, Vec3::new(100.0, 0.0, 0.0), 4, 4),
+            (b, Vec3::new(500.0, 0.0, 0.0), 10, 10),
+            (c, Vec3::new(300.0, 0.0, 0.0), 10, 10),
+            (d, Vec3::new(2000.0, 0.0, 0.0), 50, 50), // out of range
+        ];
+        assert_eq!(
+            pick_bolt_target(hero, enemies.into_iter()).map(|t| t.0),
+            Some(c)
+        );
+        assert!(pick_bolt_target(hero, std::iter::empty()).is_none());
+    }
+
+    #[test]
+    fn fuss_mirrors_controls_only_while_active() {
+        let fuss = Fuss {
+            until: 5.0,
+            active: true,
+        };
+        assert_eq!(fuss.steer_sign(1.0), -1.0);
+        assert_eq!(fuss.steer_sign(6.0), 1.0);
+    }
+
+    #[test]
+    fn only_ores_shake_loose_in_a_quake() {
+        assert!(is_ore(BlockType::Diamond));
+        assert!(!is_ore(BlockType::Stone));
+    }
+}

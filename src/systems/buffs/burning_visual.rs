@@ -1,17 +1,23 @@
-use bevy::prelude::*;
 use crate::components::buff::{Buff, BuffType};
 use crate::components::bundles::SpriteBundle3d;
 use crate::resources::asset_handles::EffectTextures;
+use bevy::prelude::*;
 
 pub struct BurningVisualPlugin;
 
 impl Plugin for BurningVisualPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (
-            add_fire_overlay_to_burning_entities,
-            update_fire_overlay_animation,
-            remove_fire_overlay_when_buff_ends,
-        ));
+        app.add_systems(
+            PostUpdate,
+            (
+                add_fire_overlay_to_burning_entities,
+                update_fire_overlay_animation,
+                remove_fire_overlay_when_buff_ends,
+            )
+                .chain()
+                .after(crate::systems::biome_teleport::finish_biome_teleport)
+                .before(TransformSystems::Propagate),
+        );
 
         info!("BurningVisualPlugin loaded");
     }
@@ -37,15 +43,17 @@ fn add_fire_overlay_to_burning_entities(
 ) {
     for (entity, transform) in burning_query.iter() {
         // Check if entity has Burning buff
-        let has_burning = buff_query.iter_many([entity])
-            .any(|buff| buff.buff_type == BuffType::Burning);
+        let has_burning = buff_query
+            .iter_many([entity])
+            .any(|buff| buff.is_ok_and(|buff| buff.buff_type == BuffType::Burning));
 
         if !has_burning {
             continue;
         }
 
         // Check if fire overlay already exists for this entity
-        let already_has_overlay = existing_overlays.iter()
+        let already_has_overlay = existing_overlays
+            .iter()
             .any(|overlay| overlay.parent_entity == entity);
 
         if already_has_overlay {
@@ -56,16 +64,15 @@ fn add_fire_overlay_to_burning_entities(
         // Sprite sheet has 8 frames vertically stacked, each frame is 1/8 of the texture height
         // Size matches entity size (64x64)
         let fire_mesh = meshes.add(
-            Mesh::from(Rectangle::new(64.0, 64.0))
-                .with_inserted_attribute(
-                    Mesh::ATTRIBUTE_UV_0,
-                    vec![
-                        [0.0, 0.0],      // Bottom-left
-                        [1.0, 0.0],      // Bottom-right
-                        [1.0, 0.125],    // Top-right (1/8 of texture)
-                        [0.0, 0.125],    // Top-left (1/8 of texture)
-                    ]
-                )
+            Mesh::from(Rectangle::new(64.0, 64.0)).with_inserted_attribute(
+                Mesh::ATTRIBUTE_UV_0,
+                vec![
+                    [0.0, 0.0],   // Bottom-left
+                    [1.0, 0.0],   // Bottom-right
+                    [1.0, 0.125], // Top-right (1/8 of texture)
+                    [0.0, 0.125], // Top-left (1/8 of texture)
+                ],
+            ),
         );
 
         let fire_material = materials.add(StandardMaterial {
@@ -90,6 +97,7 @@ fn add_fire_overlay_to_burning_entities(
                 current_frame: 0,
             },
             SpriteBundle3d::new(fire_mesh, fire_material, fire_pos),
+            bevy::light::NotShadowCaster,
         ));
     }
 }
@@ -97,7 +105,7 @@ fn add_fire_overlay_to_burning_entities(
 /// Animate fire overlay (8-frame sprite sheet animation)
 fn update_fire_overlay_animation(
     time: Res<Time>,
-    entity_query: Query<&Transform, Without<FireOverlay>>,
+    entity_query: Query<(&Transform, Option<&Mesh3d>), Without<FireOverlay>>,
     mut fire_query: Query<(&mut FireOverlay, &mut Transform, &Mesh3d), Without<Buff>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -105,10 +113,11 @@ fn update_fire_overlay_animation(
         fire.animation_timer.tick(time.delta());
 
         // Update position to follow parent entity
-        if let Ok(parent_transform) = entity_query.get(fire.parent_entity) {
-            fire_transform.translation.x = parent_transform.translation.x;
-            fire_transform.translation.y = parent_transform.translation.y;
-            fire_transform.translation.z = parent_transform.translation.z + 2.0; // In FRONT (higher Z = in front)
+        if let Ok((parent_transform, face_mesh)) = entity_query.get(fire.parent_entity) {
+            let face = crate::systems::head_geometry::bounds(&meshes, face_mesh);
+            *fire_transform =
+                crate::systems::head_geometry::overlay_transform(face, parent_transform);
+            fire_transform.translation.z += crate::systems::actor_depth::FIRE_OVERLAY;
 
             // Advance animation frame
             if fire.animation_timer.just_finished() {
@@ -120,15 +129,15 @@ fn update_fire_overlay_animation(
                 let v_start = fire.current_frame as f32 * frame_height;
                 let v_end = v_start + frame_height;
 
-                if let Some(mesh) = meshes.get_mut(&mesh_handle.0) {
+                if let Some(mut mesh) = meshes.get_mut(&mesh_handle.0) {
                     mesh.insert_attribute(
                         Mesh::ATTRIBUTE_UV_0,
                         vec![
-                            [0.0, v_start],      // Bottom-left
-                            [1.0, v_start],      // Bottom-right
-                            [1.0, v_end],        // Top-right
-                            [0.0, v_end],        // Top-left
-                        ]
+                            [0.0, v_start], // Bottom-left
+                            [1.0, v_start], // Bottom-right
+                            [1.0, v_end],   // Top-right
+                            [0.0, v_end],   // Top-left
+                        ],
                     );
                 }
             }
@@ -151,8 +160,9 @@ fn remove_fire_overlay_when_buff_ends(
         }
 
         // Check if parent still has Burning buff
-        let still_burning = buff_query.iter_many([fire_overlay.parent_entity])
-            .any(|buff| buff.buff_type == BuffType::Burning);
+        let still_burning = buff_query
+            .iter_many([fire_overlay.parent_entity])
+            .any(|buff| buff.is_ok_and(|buff| buff.buff_type == BuffType::Burning));
 
         if !still_burning {
             commands.entity(fire_entity).despawn();

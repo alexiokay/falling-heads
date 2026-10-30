@@ -4,5 +4,5 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct HealthBar {
     pub target_entity: Entity,
-    pub offset_y: f32,  // Vertical offset from entity
+    pub offset_y: f32, // Vertical offset from entity
 }

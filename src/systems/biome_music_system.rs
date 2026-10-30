@@ -1,9 +1,9 @@
-use bevy::prelude::*;
-use bevy::asset::{Assets, LoadState};
 use crate::components::hero::Hero;
 use crate::resources::biome_music::{BiomeMusicPlayer, BiomeMusicTracks};
 use crate::resources::settings::GameSettings;
 use crate::utils::biome_utils::determine_biome_at_position;
+use bevy::asset::{Assets, LoadState};
+use bevy::prelude::*;
 
 const FADE_DURATION: f32 = 1.0; // 1 second crossfade
 
@@ -25,16 +25,17 @@ pub fn update_biome_music(
     };
 
     // Determine current biome based on hero position
-    let current_biome = determine_biome_at_position(
-        hero_transform.translation.x,
-        hero_transform.translation.y,
-    );
+    let current_biome =
+        determine_biome_at_position(hero_transform.translation.x, hero_transform.translation.y);
 
     // Check if biome has changed (or if this is the first biome detection)
     let biome_changed = music_player.current_biome != Some(current_biome);
 
     if biome_changed {
-        info!("🎵 Biome changed from {:?} to {:?}", music_player.current_biome, current_biome);
+        info!(
+            "🎵 Biome changed from {:?} to {:?}",
+            music_player.current_biome, current_biome
+        );
     }
 
     // Handle fade-out for old music
@@ -84,34 +85,48 @@ pub fn update_biome_music(
                 // Asset is loaded - check if it's actually valid audio
                 if audio_assets.get(track.id()).is_some() {
                     // Spawn new music - asset is valid
-                    let new_music_entity = commands.spawn((
-                        AudioPlayer::new(track.clone()),
-                        PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(settings.get_music_volume())),
-                    )).id();
+                    let new_music_entity = commands
+                        .spawn((
+                            crate::systems::audio::effects::MusicAudio,
+                            AudioPlayer::new(track.clone()),
+                            PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(
+                                settings.get_music_volume(),
+                            )),
+                        ))
+                        .id();
 
                     // Update music player state
                     music_player.current_biome = Some(current_biome);
                     music_player.music_entity = Some(new_music_entity);
                 } else {
                     // Asset handle exists but audio is invalid
-                    warn!("⚠️ Music file for biome {:?} is invalid or in unsupported format. Use .ogg files!", current_biome);
+                    warn!(
+                        "⚠️ Music file for biome {:?} is invalid or in unsupported format. Use .ogg files!",
+                        current_biome
+                    );
                     music_player.current_biome = Some(current_biome);
                 }
-            },
+            }
             Some(LoadState::Failed(_)) => {
                 // Asset failed to load
-                warn!("⚠️ Failed to load music for biome {:?}. Check if file exists at assets/audio/music/biomes/", current_biome);
+                warn!(
+                    "⚠️ Failed to load music for biome {:?}. Check if file exists at assets/audio/music/biomes/",
+                    current_biome
+                );
                 music_player.current_biome = Some(current_biome);
-            },
+            }
             Some(LoadState::Loading) => {
                 // Still loading - wait for next frame
                 info!("⏳ Loading music for biome {:?}...", current_biome);
-            },
+            }
             Some(LoadState::NotLoaded) | None => {
                 // Not loaded yet - wait
-                warn!("⚠️ Music for biome {:?} not loaded. Check assets/audio/music/biomes/", current_biome);
+                warn!(
+                    "⚠️ Music for biome {:?} not loaded. Check assets/audio/music/biomes/",
+                    current_biome
+                );
                 music_player.current_biome = Some(current_biome);
-            },
+            }
         }
     }
 

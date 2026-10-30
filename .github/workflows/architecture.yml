@@ -1,0 +1,14 @@
+name: MineHeads architecture checks
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    # The native SDK and patched crates require this prepared Windows runner.
+    runs-on: [self-hosted, Windows, X64, mineheads-sdk]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Format, lint, tests and native build
+        shell: pwsh
+        run: ./tools/Check-MineHeadsArchitecture.ps1 -Build

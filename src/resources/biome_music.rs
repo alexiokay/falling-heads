@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::components::block::BiomeType;
+use bevy::prelude::*;
 
 /// Resource tracking current playing biome music
 #[derive(Resource)]

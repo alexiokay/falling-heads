@@ -1,6 +1,10 @@
-use bevy::prelude::*;
 use crate::components::pause_menu::*;
 use crate::states::GameState;
+use bevy::prelude::*;
+use bevy::{
+    picking::{Pickable, hover::PickingInteraction},
+    ui_widgets::Button,
+};
 
 pub fn toggle_pause(
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -28,15 +32,17 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.8)),
+            BackgroundColor(Color::srgba(0.015, 0.02, 0.03, 0.45)),
+            GlobalZIndex(200),
             PauseMenuRoot,
         ))
         .with_children(|parent| {
             // Title
             parent.spawn((
+                Pickable::IGNORE,
                 Text::new("PAUSED"),
                 TextFont {
-                    font_size: 80.0,
+                    font_size: FontSize::Px(80.0),
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -50,6 +56,7 @@ pub fn setup_pause_menu(mut commands: Commands) {
             parent
                 .spawn((
                     Button,
+                    PickingInteraction::default(),
                     Node {
                         width: Val::Px(200.0),
                         height: Val::Px(65.0),
@@ -63,9 +70,10 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 ))
                 .with_children(|parent| {
                     parent.spawn((
+                        Pickable::IGNORE,
                         Text::new("Resume"),
                         TextFont {
-                            font_size: 32.0,
+                            font_size: FontSize::Px(32.0),
                             ..default()
                         },
                         TextColor(Color::WHITE),
@@ -76,6 +84,7 @@ pub fn setup_pause_menu(mut commands: Commands) {
             parent
                 .spawn((
                     Button,
+                    PickingInteraction::default(),
                     Node {
                         width: Val::Px(200.0),
                         height: Val::Px(65.0),
@@ -89,9 +98,10 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 ))
                 .with_children(|parent| {
                     parent.spawn((
+                        Pickable::IGNORE,
                         Text::new("Settings"),
                         TextFont {
-                            font_size: 32.0,
+                            font_size: FontSize::Px(32.0),
                             ..default()
                         },
                         TextColor(Color::WHITE),
@@ -102,6 +112,7 @@ pub fn setup_pause_menu(mut commands: Commands) {
             parent
                 .spawn((
                     Button,
+                    PickingInteraction::default(),
                     Node {
                         width: Val::Px(200.0),
                         height: Val::Px(65.0),
@@ -115,9 +126,10 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 ))
                 .with_children(|parent| {
                     parent.spawn((
+                        Pickable::IGNORE,
                         Text::new("Quit"),
                         TextFont {
-                            font_size: 32.0,
+                            font_size: FontSize::Px(32.0),
                             ..default()
                         },
                         TextColor(Color::WHITE),
@@ -134,15 +146,21 @@ pub fn cleanup_pause_menu(mut commands: Commands, query: Query<Entity, With<Paus
 
 pub fn handle_menu_buttons(
     mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, Option<&ResumeButton>, Option<&SettingsButton>, Option<&QuitButton>),
-        Changed<Interaction>,
+        (
+            &PickingInteraction,
+            &mut BackgroundColor,
+            Option<&ResumeButton>,
+            Option<&SettingsButton>,
+            Option<&QuitButton>,
+        ),
+        (Changed<PickingInteraction>, With<Button>),
     >,
     mut next_state: ResMut<NextState<GameState>>,
     mut exit: MessageWriter<bevy::app::AppExit>,
 ) {
     for (interaction, mut color, resume, settings, quit) in &mut interaction_query {
         match *interaction {
-            Interaction::Pressed => {
+            PickingInteraction::Pressed => {
                 if resume.is_some() {
                     next_state.set(GameState::Playing);
                 } else if settings.is_some() {
@@ -151,10 +169,10 @@ pub fn handle_menu_buttons(
                     exit.write(bevy::app::AppExit::Success);
                 }
             }
-            Interaction::Hovered => {
+            PickingInteraction::Hovered => {
                 *color = BackgroundColor(Color::srgb(0.7, 0.7, 0.7));
             }
-            Interaction::None => {
+            PickingInteraction::None => {
                 if resume.is_some() {
                     *color = BackgroundColor(Color::srgb(0.2, 0.6, 0.2));
                 } else if settings.is_some() {
@@ -164,5 +182,41 @@ pub fn handle_menu_buttons(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn hovering_menu_backdrop_must_not_paint_it_opaque() {
+        let mut app = App::new();
+        app.insert_resource(NextState::<GameState>::default())
+            .add_message::<AppExit>()
+            .add_systems(Update, handle_menu_buttons);
+        let color = Color::srgba(0.015, 0.02, 0.03, 0.45);
+        let root = app
+            .world_mut()
+            .spawn((
+                PauseMenuRoot,
+                PickingInteraction::Hovered,
+                BackgroundColor(color),
+            ))
+            .id();
+        let button = app
+            .world_mut()
+            .spawn((
+                Button,
+                ResumeButton,
+                PickingInteraction::Hovered,
+                BackgroundColor(Color::BLACK),
+            ))
+            .id();
+        app.update();
+        assert_eq!(app.world().get::<BackgroundColor>(root).unwrap().0, color);
+        assert_eq!(
+            app.world().get::<BackgroundColor>(button).unwrap().0,
+            Color::srgb(0.7, 0.7, 0.7)
+        );
     }
 }

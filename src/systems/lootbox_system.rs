@@ -1,22 +1,11 @@
 use bevy::prelude::*;
-use avian3d::prelude::*;
-use rand::Rng;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::components::{
     hero::Hero,
-    lootbox::{Lootbox, LootboxReward, LootboxUI, RouletteSpinner},
-    block::Block,
-    bundles::SpriteBundle3d,
-    collision_layers::GameLayer,
+    lootbox::{LootboxReward, LootboxUI, RouletteSpinner},
 };
-use crate::resources::{
-    asset_handles::BlockTextures,
-    spatial_hash::SpatialHash,
-};
-use crate::states::GameState;
-use crate::utils::constants::*;
-use crate::systems::random_events::{RandomEventType, EventNotification};
+use crate::systems::random_events::{EventNotification, RandomEventType};
 
 /// Global flag to track if a lootbox is currently active (for preventing multiple simultaneous lootboxes)
 static LOOTBOX_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -24,82 +13,6 @@ static LOOTBOX_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Component wrapper for cleanup timer
 #[derive(Component)]
 struct CleanupTimer(Timer);
-
-const LOOTBOX_SIZE: f32 = 64.0;
-const LOOTBOX_INTERACTION_RANGE: f32 = 100.0;
-const ITEM_WIDTH: f32 = 150.0;
-const ITEM_HEIGHT: f32 = 100.0;
-
-
-/// Check if a position is valid for lootbox (has space around it)
-fn is_valid_lootbox_position(
-    pos: Vec3,
-    spatial_hash: &SpatialHash,
-    block_query: &Query<&Transform, With<Block>>,
-) -> bool {
-    // Check if the position itself is free
-    let nearby = spatial_hash.query_nearby(pos.x, pos.y);
-
-    for entity in nearby {
-        if let Ok(block_transform) = block_query.get(entity) {
-            let distance = pos.distance(block_transform.translation);
-            if distance < BLOCK_SIZE {
-                return false; // Too close to a block
-            }
-        }
-    }
-
-    // Check sides and top are free (mini cave requirement)
-    let check_positions = vec![
-        Vec3::new(pos.x - BLOCK_SIZE, pos.y, pos.z), // Left
-        Vec3::new(pos.x + BLOCK_SIZE, pos.y, pos.z), // Right
-        Vec3::new(pos.x, pos.y + BLOCK_SIZE, pos.z), // Top
-    ];
-
-    for check_pos in check_positions {
-        let nearby = spatial_hash.query_nearby(check_pos.x, check_pos.y);
-        for entity in nearby {
-            if let Ok(block_transform) = block_query.get(entity) {
-                let distance = check_pos.distance(block_transform.translation);
-                if distance < BLOCK_SIZE * 0.5 {
-                    return false; // Not enough space
-                }
-            }
-        }
-    }
-
-    true
-}
-
-/// Spawn a single lootbox
-pub fn spawn_single_lootbox(
-    commands: &mut Commands,
-    position: Vec3,
-    block_textures: &BlockTextures,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-) {
-    let material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.8, 0.6, 0.2), // Golden color
-        base_color_texture: Some(block_textures.gold_block.clone()),
-        unlit: true,
-        alpha_mode: AlphaMode::Blend,
-        cull_mode: None,
-        ..default()
-    });
-
-    commands.spawn((
-        Lootbox::new(),
-        SpriteBundle3d::new(
-            meshes.add(Rectangle::new(LOOTBOX_SIZE, LOOTBOX_SIZE)),
-            material,
-            position,
-        ),
-        // NO collision components - these are just UI triggers, not physics objects!
-        // Detection handled by distance check in lootbox_system.rs
-    ));
-}
-
 
 /// Spawn roulette UI for command (loads icons from world)
 pub fn spawn_roulette_ui_for_command(
@@ -119,6 +32,7 @@ pub fn spawn_roulette_ui_for_command(
     use crate::resources::asset_handles::LootboxIcons;
 
     let fallback_icons = LootboxIcons {
+        teleport: asset_server.load("textures/blocks/nether/obsidian.png"),
         monster_horde: asset_server.load("textures/ui/lootbox/monster_horde.png"),
         // treasure_rain: asset_server.load("textures/ui/lootbox/treasure_rain.png"),  // REMOVED
         travelers_arrive: asset_server.load("textures/ui/lootbox/travelers_arrive.png"),
@@ -137,25 +51,15 @@ pub fn spawn_roulette_ui_for_command(
     true // Successfully spawned
 }
 
-/// Spawn the roulette UI (regular version with icons parameter)
-pub fn spawn_roulette_ui_public(
-    commands: &mut Commands,
-    selected_reward: LootboxReward,
-    _asset_server: &AssetServer,
-    lootbox_icons: &crate::resources::asset_handles::LootboxIcons,
-) {
-    spawn_roulette_ui_internal(commands, selected_reward, lootbox_icons);
-}
-
 /// Internal implementation of roulette UI spawning
 fn spawn_roulette_ui_internal(
     commands: &mut Commands,
     selected_reward: LootboxReward,
     lootbox_icons: &crate::resources::asset_handles::LootboxIcons,
 ) {
-    use rand::Rng;
+    use rand::RngExt;
     use rand::seq::SliceRandom;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let all_possible_rewards = LootboxReward::all_rewards();
 
@@ -176,13 +80,19 @@ fn spawn_roulette_ui_internal(
     display_rewards.shuffle(&mut rng);
 
     // Find where selected_reward ended up after shuffle
-    let selected_index = display_rewards.iter().position(|r| *r == selected_reward).unwrap_or(0);
+    let selected_index = display_rewards
+        .iter()
+        .position(|r| *r == selected_reward)
+        .unwrap_or(0);
 
-    info!("🎰 Lootbox spinning for reward: {:?} (index {} in 6 items)", selected_reward, selected_index);
+    info!(
+        "🎰 Lootbox spinning for reward: {:?} (index {} in 6 items)",
+        selected_reward, selected_index
+    );
 
     // Calculate total distance to travel with multiple loops
     // Add some randomness to number of loops (3-5) to make it less predictable
-    let num_loops = rng.gen_range(3..=5);
+    let num_loops = rng.random_range(3..=5);
     let total_items = 6; // Always 6 items displayed
     let target_item_count = (num_loops * total_items) + selected_index;
 
@@ -190,7 +100,10 @@ fn spawn_roulette_ui_internal(
     // With quadratic deceleration: distance ≈ initial_speed * time * 0.667
     let target_speed = (target_item_count as f32) / 2.0; // items per second
 
-    info!("🎰 Will make {} loops through {} items, target {} items, speed {:.1} items/sec", num_loops, total_items, target_item_count, target_speed);
+    info!(
+        "🎰 Will make {} loops through {} items, target {} items, speed {:.1} items/sec",
+        num_loops, total_items, target_item_count, target_speed
+    );
 
     // Create UI container
     let ui_entity = commands
@@ -228,15 +141,13 @@ fn spawn_roulette_ui_internal(
 
     // Create fixed items container - 6 items displayed in a row
     let items_container = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceEvenly,
-                align_items: AlignItems::Center,
-                width: Val::Percent(100.0),
-                ..default()
-            },
-        ))
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceEvenly,
+            align_items: AlignItems::Center,
+            width: Val::Percent(100.0),
+            ..default()
+        },))
         .id();
 
     // Spawn the 6 fixed items and collect their entities
@@ -250,11 +161,11 @@ fn spawn_roulette_ui_internal(
                     height: Val::Px(100.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),  // Border on parent
+                    border: UiRect::all(Val::Px(2.0)), // Border on parent
                     ..default()
                 },
-                BorderColor::all(Color::WHITE),  // White border initially
-                BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),  // Dark background
+                BorderColor::all(Color::WHITE), // White border initially
+                BackgroundColor(Color::srgb(0.15, 0.15, 0.15)), // Dark background
             ))
             .with_children(|parent| {
                 // Image as a child so border shows
@@ -278,7 +189,7 @@ fn spawn_roulette_ui_internal(
                     },
                     Text::new(reward.name()),
                     TextFont {
-                        font_size: 12.0,
+                        font_size: FontSize::Px(12.0),
                         ..default()
                     },
                     TextColor(Color::WHITE),
@@ -293,7 +204,8 @@ fn spawn_roulette_ui_internal(
     commands.entity(border_entity).add_child(items_container);
 
     // Store the spinner component with the items container (not as a separate border)
-    let mut spinner = RouletteSpinner::new_with_speed(display_rewards.clone(), selected_index, target_speed);
+    let mut spinner =
+        RouletteSpinner::new_with_speed(display_rewards.clone(), selected_index, target_speed);
     spinner.item_entities = item_entities; // Store the item entities
 
     // Attach spinner to the items container so we can track it
@@ -306,7 +218,10 @@ fn spawn_roulette_ui_internal(
 pub fn update_roulette_spinner(
     mut commands: Commands,
     mut spinner_query: Query<(Entity, &mut RouletteSpinner)>,
-    mut item_query: Query<(&mut BorderColor, &mut Node), With<crate::components::lootbox::RouletteItem>>,
+    mut item_query: Query<
+        (&mut BorderColor, &mut Node),
+        With<crate::components::lootbox::RouletteItem>,
+    >,
     hero_query: Query<&Transform, With<Hero>>,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
@@ -318,19 +233,21 @@ pub fn update_roulette_spinner(
 
         spinner.spin_timer.tick(time.delta());
 
-        // Calculate deceleration - slow down over time
+        // Quadratic slowdown: speed(f) = spin_speed * (1 - f²). Offset is its exact
+        // integral, so frame drops can't make the highlight drift off the reward.
         let progress = spinner.spin_timer.fraction();
-        let speed_multiplier = 1.0 - (progress * progress); // Quadratic slowdown
-
-        // Increment current offset (represents position through the animation)
-        // Speed is in "items per second", so this counts through items
-        spinner.current_offset += spinner.spin_speed * speed_multiplier * time.delta_secs();
+        let duration = spinner.spin_timer.duration().as_secs_f32();
+        spinner.current_offset =
+            spinner.spin_speed * duration * (progress - progress * progress * progress / 3.0);
 
         let total_items = spinner.items.len();
 
-        // Calculate which item is currently selected (cycle 0-5)
-        // Use round() instead of truncate to get closest item
-        let current_item_index = (spinner.current_offset.round() as usize) % total_items;
+        // Item under the highlight; the final frame always shows the granted reward
+        let current_item_index = if spinner.spin_timer.is_finished() {
+            spinner.selected_index
+        } else {
+            (spinner.current_offset.round() as usize) % total_items
+        };
 
         // Play tick sound when moving to a new item
         if current_item_index != spinner.last_item_index {
@@ -368,7 +285,9 @@ pub fn update_roulette_spinner(
             trigger_lootbox_reward(&mut commands, reward, &hero_query);
 
             // Schedule UI cleanup after 2 seconds
-            commands.entity(spinner_entity).insert(CleanupTimer(Timer::from_seconds(2.0, TimerMode::Once)));
+            commands
+                .entity(spinner_entity)
+                .insert(CleanupTimer(Timer::from_seconds(2.0, TimerMode::Once)));
         }
     }
 }
@@ -403,9 +322,19 @@ fn trigger_lootbox_reward(
         return;
     };
 
-    let hero_pos = hero_transform.translation;
+    let _hero_pos = hero_transform.translation;
 
     match reward {
+        LootboxReward::Teleport => {
+            commands.queue(|world: &mut World| {
+                world.write_message(crate::events::power_events::PowerActivated {
+                    command: crate::resources::command_queue::PowerCommand::new(
+                        crate::resources::command_queue::PowerCommandType::Teleport,
+                        "Lootbox".into(),
+                    ),
+                });
+            });
+        }
         LootboxReward::MonsterHorde => {
             // Trigger monster horde event
             commands.spawn(EventNotification {
@@ -452,78 +381,96 @@ fn trigger_lootbox_reward(
         }
         LootboxReward::MagicBarrier => {
             // Trigger magic barrier power
+            use crate::plugins::external_api_plugin::get_command_queue;
             use crate::resources::command_queue::PowerCommand;
             use crate::resources::command_queue::PowerCommandType;
-            use crate::plugins::external_api_plugin::get_command_queue;
 
             if let Some(queue) = get_command_queue() {
                 if let Ok(mut q) = queue.lock() {
-                    q.push_back(PowerCommand::new(PowerCommandType::Mirror, "Lootbox".to_string()));
+                    q.push_back(PowerCommand::new(
+                        PowerCommandType::Mirror,
+                        "Lootbox".to_string(),
+                    ));
                 }
             }
             info!("Lootbox triggered Magic Barrier!");
         }
         LootboxReward::ArrowBarrage => {
             // Trigger arrow barrage power
+            use crate::plugins::external_api_plugin::get_command_queue;
             use crate::resources::command_queue::PowerCommand;
             use crate::resources::command_queue::PowerCommandType;
-            use crate::plugins::external_api_plugin::get_command_queue;
 
             if let Some(queue) = get_command_queue() {
                 if let Ok(mut q) = queue.lock() {
-                    q.push_back(PowerCommand::new(PowerCommandType::Arrow, "Lootbox".to_string()));
+                    q.push_back(PowerCommand::new(
+                        PowerCommandType::Arrow,
+                        "Lootbox".to_string(),
+                    ));
                 }
             }
             info!("Lootbox triggered Arrow Barrage!");
         }
         LootboxReward::ThunderStrike => {
             // Trigger thunder strike power
+            use crate::plugins::external_api_plugin::get_command_queue;
             use crate::resources::command_queue::PowerCommand;
             use crate::resources::command_queue::PowerCommandType;
-            use crate::plugins::external_api_plugin::get_command_queue;
 
             if let Some(queue) = get_command_queue() {
                 if let Ok(mut q) = queue.lock() {
-                    q.push_back(PowerCommand::new(PowerCommandType::Thunder, "Lootbox".to_string()));
+                    q.push_back(PowerCommand::new(
+                        PowerCommandType::Thunder,
+                        "Lootbox".to_string(),
+                    ));
                 }
             }
             info!("Lootbox triggered Thunder Strike!");
         }
         LootboxReward::TntRain => {
             // Trigger TNT rain power
+            use crate::plugins::external_api_plugin::get_command_queue;
             use crate::resources::command_queue::PowerCommand;
             use crate::resources::command_queue::PowerCommandType;
-            use crate::plugins::external_api_plugin::get_command_queue;
 
             if let Some(queue) = get_command_queue() {
                 if let Ok(mut q) = queue.lock() {
-                    q.push_back(PowerCommand::new(PowerCommandType::Tnt, "Lootbox".to_string()));
+                    q.push_back(PowerCommand::new(
+                        PowerCommandType::Tnt,
+                        "Lootbox".to_string(),
+                    ));
                 }
             }
             info!("Lootbox triggered TNT Rain!");
         }
         LootboxReward::LaserBeam => {
             // Trigger laser beam power
+            use crate::plugins::external_api_plugin::get_command_queue;
             use crate::resources::command_queue::PowerCommand;
             use crate::resources::command_queue::PowerCommandType;
-            use crate::plugins::external_api_plugin::get_command_queue;
 
             if let Some(queue) = get_command_queue() {
                 if let Ok(mut q) = queue.lock() {
-                    q.push_back(PowerCommand::new(PowerCommandType::Laser, "Lootbox".to_string()));
+                    q.push_back(PowerCommand::new(
+                        PowerCommandType::Laser,
+                        "Lootbox".to_string(),
+                    ));
                 }
             }
             info!("Lootbox triggered Laser Beam!");
         }
         LootboxReward::Magnet => {
             // Trigger magnet power
+            use crate::plugins::external_api_plugin::get_command_queue;
             use crate::resources::command_queue::PowerCommand;
             use crate::resources::command_queue::PowerCommandType;
-            use crate::plugins::external_api_plugin::get_command_queue;
 
             if let Some(queue) = get_command_queue() {
                 if let Ok(mut q) = queue.lock() {
-                    q.push_back(PowerCommand::new(PowerCommandType::Magnet, "Lootbox".to_string()));
+                    q.push_back(PowerCommand::new(
+                        PowerCommandType::Magnet,
+                        "Lootbox".to_string(),
+                    ));
                 }
             }
             info!("Lootbox triggered Magnet!");
@@ -543,13 +490,9 @@ impl Plugin for LootboxPlugin {
         // They are UI-only events triggered by commands/dev panel
         // app.add_systems(OnEnter(GameState::Playing), spawn_lootboxes_in_world)
         app.add_systems(
-                Update,
-                (
-                    update_roulette_spinner,
-                    cleanup_roulette_ui,
-                )
-                    .run_if(in_state(GameState::Playing)),
-            );
+            Update,
+            (update_roulette_spinner, cleanup_roulette_ui).run_if(in_state(crate::states::InGame)),
+        );
 
         info!("LootboxPlugin loaded");
     }

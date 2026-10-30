@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::resources::command_queue::PowerCommand;
+use bevy::prelude::*;
 
 #[derive(Message)]
 pub struct PowerActivated {

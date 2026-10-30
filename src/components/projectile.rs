@@ -1,36 +1,11 @@
-use bevy::prelude::*;
 use crate::utils::constants::ARROW_LIFETIME;
+use bevy::prelude::*;
 
 /// Team affiliation for friendly fire prevention
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Team {
-    Friendly,  // Hero + Villagers
-    Enemy,     // Skeletons, Zombies, etc.
-}
-
-/// Trait for all projectile types - defines common behavior
-pub trait ProjectileBehavior {
-    /// Get the team that fired this projectile
-    fn team(&self) -> Team;
-
-    /// Get damage dealt on hit
-    fn damage(&self) -> u32;
-
-    /// Check if projectile should despawn (lifetime expired)
-    fn should_despawn(&self) -> bool;
-
-    /// Update projectile state (timers, etc.)
-    fn update(&mut self, delta: f32);
-
-    /// Get push force applied on hit
-    fn push_force(&self) -> f32 {
-        0.0  // Default: no push
-    }
-
-    /// Called when projectile hits a target
-    fn on_hit(&mut self, _target: Entity) {
-        // Default: no special behavior
-    }
+    Friendly, // Hero + Villagers
+    Enemy,    // Skeletons, Zombies, etc.
 }
 
 #[derive(Component)]
@@ -38,8 +13,8 @@ pub struct Arrow {
     pub damage: u32,
     pub lifetime: Timer,
     pub stuck_to: Option<Entity>, // Entity this arrow is stuck to
-    pub team: Team,  // Which team shot this arrow
-    pub reflected: bool,  // True if already reflected by barrier (prevent multiple reflections)
+    pub team: Team,               // Which team shot this arrow
+    pub reflected: bool, // True if already reflected by barrier (prevent multiple reflections)
 }
 
 impl Arrow {
@@ -48,7 +23,7 @@ impl Arrow {
             damage,
             lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
             stuck_to: None,
-            team: Team::Enemy,  // Default to enemy (for backwards compatibility with skeletons)
+            team: Team::Enemy, // Default to enemy (for backwards compatibility with skeletons)
             reflected: false,
         }
     }
@@ -58,45 +33,9 @@ impl Arrow {
             damage,
             lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
             stuck_to: None,
-            team: Team::Friendly,  // Friendly arrow (from hero power)
+            team: Team::Friendly, // Friendly arrow (from hero power)
             reflected: false,
         }
-    }
-
-    pub fn new_with_team(damage: u32, team: Team) -> Self {
-        Self {
-            damage,
-            lifetime: Timer::from_seconds(ARROW_LIFETIME, TimerMode::Once),
-            stuck_to: None,
-            team,
-            reflected: false,
-        }
-    }
-}
-
-impl ProjectileBehavior for Arrow {
-    fn team(&self) -> Team {
-        self.team
-    }
-
-    fn damage(&self) -> u32 {
-        self.damage
-    }
-
-    fn should_despawn(&self) -> bool {
-        self.lifetime.is_finished()
-    }
-
-    fn update(&mut self, delta: f32) {
-        self.lifetime.tick(std::time::Duration::from_secs_f32(delta));
-    }
-
-    fn push_force(&self) -> f32 {
-        150.0  // Arrows have moderate push
-    }
-
-    fn on_hit(&mut self, target: Entity) {
-        self.stuck_to = Some(target);
     }
 }
 
@@ -104,7 +43,6 @@ impl ProjectileBehavior for Arrow {
 #[derive(Component)]
 pub struct StuckArrow {
     pub despawn_timer: Timer,
-    pub offset: Vec3, // Offset from the entity it's stuck to
     pub stuck_to_entity: Entity, // Which entity this arrow is stuck to
 }
 
@@ -112,26 +50,18 @@ pub struct StuckArrow {
 pub struct Laser {
     pub timer: Timer,
     pub width: f32,
-    pub id: Entity,  // Unique ID for this laser instance
+    pub id: Entity, // Unique ID for this laser instance
 }
 
-/// Particle that flows down the laser beam
+/// Marker for laser burst beams (rotated beams that need directional collision)
 #[derive(Component)]
-pub struct LaserParticle {
-    pub velocity: f32,  // Speed moving downward
-    pub lifetime: Timer,
-}
-
-/// Marks the core beam mesh and links it to a specific laser
-#[derive(Component)]
-pub struct LaserCore {
-    pub laser_id: Entity,  // Which laser this beam belongs to
-}
-
-/// Marks the outer glow mesh and links it to a specific laser
-#[derive(Component)]
-pub struct LaserGlow {
-    pub laser_id: Entity,  // Which laser this beam belongs to
+pub struct LaserBurstBeam {
+    pub length: f32,           // Current length of the beam for collision detection
+    pub follow_entity: Entity, // Entity to follow (hero)
+    pub angle: f32,            // Angle offset from the entity
+    pub growth_timer: Timer,   // Timer for growth animation (0 to 1)
+    pub target_length: f32,    // Final length to reach
+    pub target_width: f32,     // Final width to reach
 }
 
 #[derive(Component)]
@@ -139,7 +69,7 @@ pub struct Fireball {
     pub damage: u32,
     pub lifetime: Timer,
     pub team: Team,
-    pub reflected: bool,  // True if already reflected by barrier (prevent multiple reflections)
+    pub reflected: bool, // True if already reflected by barrier (prevent multiple reflections)
 }
 
 impl Fireball {
@@ -147,31 +77,9 @@ impl Fireball {
         Self {
             damage,
             lifetime: Timer::from_seconds(6.0, TimerMode::Once), // 6 second lifetime
-            team: Team::Enemy,  // Ghasts/Dragons shoot enemy fireballs
+            team: Team::Enemy, // Ghasts/Dragons shoot enemy fireballs
             reflected: false,
         }
-    }
-}
-
-impl ProjectileBehavior for Fireball {
-    fn team(&self) -> Team {
-        self.team
-    }
-
-    fn damage(&self) -> u32 {
-        self.damage
-    }
-
-    fn should_despawn(&self) -> bool {
-        self.lifetime.is_finished()
-    }
-
-    fn update(&mut self, delta: f32) {
-        self.lifetime.tick(std::time::Duration::from_secs_f32(delta));
-    }
-
-    fn push_force(&self) -> f32 {
-        200.0  // Fireballs have strong push
     }
 }
 
@@ -185,30 +93,8 @@ impl Snowball {
     pub fn new() -> Self {
         Self {
             lifetime: Timer::from_seconds(5.0, TimerMode::Once),
-            team: Team::Enemy,  // Yeti throws enemy snowballs
+            team: Team::Enemy, // Yeti throws enemy snowballs
         }
-    }
-}
-
-impl ProjectileBehavior for Snowball {
-    fn team(&self) -> Team {
-        self.team
-    }
-
-    fn damage(&self) -> u32 {
-        0  // Snowballs do no damage
-    }
-
-    fn should_despawn(&self) -> bool {
-        self.lifetime.is_finished()
-    }
-
-    fn update(&mut self, delta: f32) {
-        self.lifetime.tick(std::time::Duration::from_secs_f32(delta));
-    }
-
-    fn push_force(&self) -> f32 {
-        50.0  // Small push effect
     }
 }
 
@@ -216,30 +102,12 @@ impl ProjectileBehavior for Snowball {
 pub struct MagicBarrier {
     pub lifetime: Timer,
     pub radius: f32,
-    pub owner_entity: Entity,  // Entity this barrier is protecting (hero)
-    pub animation_timer: Timer,
-    pub current_frame: usize,
+    pub owner_entity: Entity,
 }
-
-/// Stores preloaded texture handles for barrier animation
-#[derive(Component)]
-pub struct BarrierAnimationFrames {
-    pub frames: Vec<Handle<Image>>,
-}
-
-/// Visual impact effect when barrier reflects a projectile
+/// Visual impact lifetime; animation lives in the energy material.
 #[derive(Component)]
 pub struct BarrierImpact {
     pub lifetime: Timer,
-    pub initial_alpha: f32,
-    pub animation_timer: Timer,
-    pub current_frame: usize,
-}
-
-/// Stores preloaded texture handles for impact animation
-#[derive(Component)]
-pub struct ImpactAnimationFrames {
-    pub frames: Vec<Handle<Image>>,
 }
 
 /// Magnetic field that attracts resources to the hero

@@ -216,3 +216,21 @@ function triggerPower(action) {
 ---
 
 **Next:** We'll add BOLT, GHAST, BOX, MAGNET, and FUSS powers!
+
+## Portal power
+
+`TELEPORT` queues travel to the next biome in the eight-biome cycle. It is available as a developer power button and a 5% lootbox reward, and uses the same charge/reveal and safe-landing validation as world portals. A shared 20-second travel cooldown prevents repeated requests. Runtime rejection displays a recharge/in-progress notice. An HTTP success only confirms queueing.
+
+PowerShell example:
+
+```powershell
+Invoke-RestMethod -Uri 'http://127.0.0.1:3029/command' -Method Post -ContentType 'application/json' -Body '{"action":"TELEPORT","username":"player"}'
+```
+
+Generated obsidian portals require their nearby pressure plate. The visible wire pulse activates the opening for up to twelve seconds; entering for 0.35 seconds starts travel. Breaking the frame disables it on the next circuit tick. See BIOME_DEVELOPMENT_PLAN.md for implemented scope and proposed mechanisms.
+
+### Finite liquid powers
+
+`POST http://127.0.0.1:3029/command` accepts `WATERBUCKET` and `LAVABUCKET`, with the existing `username` field. Example body: `{"action":"WATERBUCKET","username":"Viewer"}`. Dev Controls also exposes WATER BUCKET and LAVA BUCKET buttons.
+
+Both share an eight-second cooldown and pour up to sixteen volume units (two full grid cells) into compatible clear cells beside the hero. They cannot inject fluid into solid terrain or overwrite the other liquid. These are finite deposits, not infinite springs. Status text reports recharge or no clear space. Bucket lootbox rewards are not enabled in this revision.

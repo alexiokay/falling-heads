@@ -2,25 +2,36 @@
 name = "falling-heads"
 version = "0.2.5"
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.97.1"
+
+[features]
+# Test and probe launch modes (--ui-smoke-test, --visual-smoke-test and the
+# probes it runs, --diagnostics-test-*). On by default so tools/ keep working;
+# build a player release with `cargo build --release --no-default-features`.
+default = ["probes"]
+probes = []
 
 [dependencies]
-bevy = { version = "0.17.1", features = ["jpeg", "bevy_dev_tools"] }
-avian3d = { path = "../avian/crates/avian3d" }
-rand = "0.8"
+# Same winit as bevy_winit; only used to set the window icon (no extra features).
+winit = { version = "0.30", default-features = false }
+bevy = { version = "0.20.0", features = ["jpeg", "bevy_dev_tools", "audio", "vorbis", "bevy_ui_widgets", "dlss", "bevy_solari"] }
+avian3d = "0.8.0"
+rand = "0.10.3"
 noise = "0.9"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-ron = "0.8"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
+
+wgpu-hal = { version = "30.0.1", features = ["vulkan"] }
+ash = "0.38.0"
+dlss_wgpu = "6.0.0"
+wgpu = { version = "30.0.1", default-features = false, features = ["vulkan", "wgsl"] }
 
 # External API
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.7.1", features = ["cors"] }
 
-[dev-dependencies]
-criterion = "0.5"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
@@ -32,8 +43,10 @@ opt-level = 1
 opt-level = 3
 
 [profile.release]
-lto = true
-codegen-units = 1
+# Keep symbols for installed-game crash diagnostics. Benchmark before switching distribution.
+debug = 2
+lto = "thin"
+codegen-units = 16
 
 # Optimize for size in the wasm-release profile to reduce load times and bandwidth usage on web.
 [profile.wasm-release]
@@ -44,3 +57,14 @@ inherits = "release"
 opt-level = "s"
 # Strip all debugging information from the binary to slightly reduce file size.
 strip = "debuginfo"
+
+[build-dependencies]
+cc = "1.9.0"
+
+[patch.crates-io]
+bevy_anti_alias = { path = "vendor/bevy_anti_alias" }
+wgpu-hal = { path = "vendor/wgpu-hal" }
+dlss_wgpu = { path = "vendor/dlss_wgpu" }
+bevy_pbr = { path = "vendor/bevy_pbr" }
+
+bevy_solari = { path = "vendor/bevy_solari" }

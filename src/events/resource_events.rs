@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::components::resource::ResourceType;
+use bevy::prelude::*;
 
 #[derive(Message)]
 pub struct ResourceCollected {

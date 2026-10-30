@@ -1,0 +1,328 @@
+{
+  "pack": "C:\\Users\\alexispace\\curseforge\\minecraft\\Instances\\server anieli\\resourcepacks\\Faithful 64x - Release 14.zip",
+  "metadata": {
+    "pack": {
+      "description": "The go-to 64x texture pack for Minecraft. By HARYA_ and many others.",
+      "min_format": 79,
+      "max_format": 100
+    }
+  },
+  "matches": [
+    {
+      "game": "assets/textures/blocks/desert/sandstone/sandstone_bottom.png",
+      "pack": "assets/minecraft/optifine/ctm/sandstone/0.png"
+    },
+    {
+      "game": "assets/textures/blocks/desert/sandstone/sandstone_bottom.png",
+      "pack": "assets/minecraft/optifine/ctm/sandstone/1.png"
+    },
+    {
+      "game": "assets/textures/blocks/desert/sandstone/sandstone.png",
+      "pack": "assets/minecraft/optifine/ctm/sandstone/2.png"
+    },
+    {
+      "game": "assets/textures/blocks/desert/sandstone/sandstone.png",
+      "pack": "assets/minecraft/optifine/ctm/sandstone/3.png"
+    },
+    {
+      "game": "assets/textures/effects/buffs/campfire_fire.png",
+      "pack": "assets/minecraft/textures/block/campfire_fire.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/pumpkin/pumpkin_front.png",
+      "pack": "assets/minecraft/textures/block/carved_pumpkin.png"
+    },
+    {
+      "game": "assets/textures/blocks/coweb/cobweb.png",
+      "pack": "assets/minecraft/textures/block/cobweb.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/crimson_nylium_side.png",
+      "pack": "assets/minecraft/textures/block/crimson_nylium_side.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_0.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_0.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_1.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_1.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_2.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_2.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_3.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_3.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_4.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_4.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_5.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_5.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_6.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_6.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_7.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_7.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_8.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_8.png"
+    },
+    {
+      "game": "assets/textures/effects/destroy/destroy_stage_9.png",
+      "pack": "assets/minecraft/textures/block/destroy_stage_9.png"
+    },
+    {
+      "game": "assets/textures/blocks/general/dirt.png",
+      "pack": "assets/minecraft/textures/block/dirt.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/obsidian.png",
+      "pack": "assets/minecraft/textures/block/enchanting_table_bottom.png"
+    },
+    {
+      "game": "assets/textures/blocks/iceland/ice.png",
+      "pack": "assets/minecraft/textures/block/ice.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/melon/melon_side.png",
+      "pack": "assets/minecraft/textures/block/melon_side.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/melon/melon_top.png",
+      "pack": "assets/minecraft/textures/block/melon_top.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/nether.png",
+      "pack": "assets/minecraft/textures/block/netherrack.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/netherrack.png",
+      "pack": "assets/minecraft/textures/block/netherrack.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/oak_leaves.png",
+      "pack": "assets/minecraft/textures/block/oak_leaves.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/oak_log/oak_log.png",
+      "pack": "assets/minecraft/textures/block/oak_log.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/obsidian.png",
+      "pack": "assets/minecraft/textures/block/obsidian.png"
+    },
+    {
+      "game": "assets/textures/blocks/iceland/packed_ice.png",
+      "pack": "assets/minecraft/textures/block/packed_ice.png"
+    },
+    {
+      "game": "assets/textures/effects/powder_snow.png",
+      "pack": "assets/minecraft/textures/block/powder_snow.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/pumpkin/pumpkin_side.png",
+      "pack": "assets/minecraft/textures/block/pumpkin_side.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/pumpkin/pumpkin_top.png",
+      "pack": "assets/minecraft/textures/block/pumpkin_top.png"
+    },
+    {
+      "game": "assets/textures/blocks/general/red_mushroom.png",
+      "pack": "assets/minecraft/textures/block/red_mushroom.png"
+    },
+    {
+      "game": "assets/textures/blocks/desert/sand.png",
+      "pack": "assets/minecraft/textures/block/sand.png"
+    },
+    {
+      "game": "assets/textures/blocks/desert/sandstone/sandstone_bottom.png",
+      "pack": "assets/minecraft/textures/block/sandstone_bottom.png"
+    },
+    {
+      "game": "assets/textures/blocks/iceland/snow.png",
+      "pack": "assets/minecraft/textures/block/snow.png"
+    },
+    {
+      "game": "assets/textures/effects/soul_campfire_fire.png",
+      "pack": "assets/minecraft/textures/block/soul_campfire_fire.png"
+    },
+    {
+      "game": "assets/textures/effects/tnt/tnt_bottom.png",
+      "pack": "assets/minecraft/textures/block/tnt_bottom.png"
+    },
+    {
+      "game": "assets/textures/effects/tnt/tnt_top.png",
+      "pack": "assets/minecraft/textures/block/tnt_top.png"
+    },
+    {
+      "game": "assets/textures/entities/enemy/ghast/happy_ghast.png",
+      "pack": "assets/minecraft/textures/entity/ghast/happy_ghast.png"
+    },
+    {
+      "game": "assets/textures/effects/rain.png",
+      "pack": "assets/minecraft/textures/environment/rain.png"
+    },
+    {
+      "game": "assets/textures/effects/snow.png",
+      "pack": "assets/minecraft/textures/environment/snow.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/nether.png",
+      "pack": "assets/minecraft/textures/gui/advancements/backgrounds/nether.png"
+    },
+    {
+      "game": "assets/textures/blocks/nether/netherrack.png",
+      "pack": "assets/minecraft/textures/gui/advancements/backgrounds/nether.png"
+    },
+    {
+      "game": "assets/textures/effects/exp/level_1.png",
+      "pack": "assets/minecraft/textures/gui/sprites/container/enchanting_table/level_1.png"
+    },
+    {
+      "game": "assets/textures/effects/exp/level_2.png",
+      "pack": "assets/minecraft/textures/gui/sprites/container/enchanting_table/level_2.png"
+    },
+    {
+      "game": "assets/textures/effects/exp/level_3.png",
+      "pack": "assets/minecraft/textures/gui/sprites/container/enchanting_table/level_3.png"
+    },
+    {
+      "game": "assets/textures/effects/exp/experience_bar_current.png",
+      "pack": "assets/minecraft/textures/gui/sprites/container/villager/experience_bar_current.png"
+    },
+    {
+      "game": "assets/textures/effects/heart/container.png",
+      "pack": "assets/minecraft/textures/gui/sprites/hud/heart/container.png"
+    },
+    {
+      "game": "assets/textures/effects/heart/container.png",
+      "pack": "assets/minecraft/textures/gui/sprites/hud/heart/container_hardcore.png"
+    },
+    {
+      "game": "assets/textures/effects/heart/full.png",
+      "pack": "assets/minecraft/textures/gui/sprites/hud/heart/full.png"
+    },
+    {
+      "game": "assets/textures/effects/heart/half.png",
+      "pack": "assets/minecraft/textures/gui/sprites/hud/heart/half.png"
+    },
+    {
+      "game": "assets/textures/effects/heart/container.png",
+      "pack": "assets/minecraft/textures/gui/sprites/hud/heart/vehicle_container.png"
+    },
+    {
+      "game": "assets/textures/resources/emerald.png",
+      "pack": "assets/minecraft/textures/item/emerald.png"
+    },
+    {
+      "game": "assets/textures/resources/gold_ingot.png",
+      "pack": "assets/minecraft/textures/item/gold_ingot.png"
+    },
+    {
+      "game": "assets/textures/resources/iron_ingot.png",
+      "pack": "assets/minecraft/textures/item/iron_ingot.png"
+    },
+    {
+      "game": "assets/textures/resources/netherite_ingot.png",
+      "pack": "assets/minecraft/textures/item/netherite_ingot.png"
+    },
+    {
+      "game": "assets/textures/resources/redstone.png",
+      "pack": "assets/minecraft/textures/item/redstone.png"
+    },
+    {
+      "game": "assets/textures/projectiles/snowball.png",
+      "pack": "assets/minecraft/textures/item/snowball.png"
+    },
+    {
+      "game": "assets/textures/effects/freeze/powder_snow_outline.png",
+      "pack": "assets/minecraft/textures/misc/powder_snow_outline.png"
+    },
+    {
+      "game": "assets/textures/blocks/forest/pumpkin/pumpkinblur.png",
+      "pack": "assets/minecraft/textures/misc/pumpkinblur.png"
+    },
+    {
+      "game": "assets/textures/effects/buffs/poison.png",
+      "pack": "assets/minecraft/textures/mob_effect/poison.png"
+    },
+    {
+      "game": "assets/textures/effects/buffs/water_breathing.png",
+      "pack": "assets/minecraft/textures/mob_effect/water_breathing.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_0.png",
+      "pack": "assets/minecraft/textures/particle/explosion_0.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_1.png",
+      "pack": "assets/minecraft/textures/particle/explosion_1.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_10.png",
+      "pack": "assets/minecraft/textures/particle/explosion_10.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_11.png",
+      "pack": "assets/minecraft/textures/particle/explosion_11.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_12.png",
+      "pack": "assets/minecraft/textures/particle/explosion_12.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_13.png",
+      "pack": "assets/minecraft/textures/particle/explosion_13.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_14.png",
+      "pack": "assets/minecraft/textures/particle/explosion_14.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_15.png",
+      "pack": "assets/minecraft/textures/particle/explosion_15.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_2.png",
+      "pack": "assets/minecraft/textures/particle/explosion_2.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_3.png",
+      "pack": "assets/minecraft/textures/particle/explosion_3.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_4.png",
+      "pack": "assets/minecraft/textures/particle/explosion_4.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_5.png",
+      "pack": "assets/minecraft/textures/particle/explosion_5.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_6.png",
+      "pack": "assets/minecraft/textures/particle/explosion_6.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_7.png",
+      "pack": "assets/minecraft/textures/particle/explosion_7.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_8.png",
+      "pack": "assets/minecraft/textures/particle/explosion_8.png"
+    },
+    {
+      "game": "assets/textures/effects/explosion/explosion_9.png",
+      "pack": "assets/minecraft/textures/particle/explosion_9.png"
+    }
+  ]
+}

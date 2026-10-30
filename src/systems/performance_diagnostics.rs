@@ -1,15 +1,15 @@
-use bevy::prelude::*;
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
-use crate::components::block::Block;
-use crate::components::enemy::Enemy;
 use crate::components::background::Background;
-use crate::components::resource::Resource;
+use crate::components::block::Block;
+use crate::components::chunk::Chunk;
 use crate::components::damage_overlay::BlockDamageOverlay;
-use crate::components::villager::Villager;
+use crate::components::enemy::Enemy;
+use crate::components::explosive::Tnt;
 use crate::components::hero::Hero;
 use crate::components::projectile::Arrow;
-use crate::components::explosive::Tnt;
-use crate::components::chunk::Chunk;
+use crate::components::resource::Resource;
+use crate::components::villager::Villager;
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::prelude::*;
 
 #[derive(Resource)]
 pub struct PerformanceTracker {
@@ -38,11 +38,7 @@ pub fn log_performance_metrics(
     villagers: Query<&Villager>,
     heroes: Query<&Hero>,
     // World entities (use ParamSet for arrows, tnt, chunks)
-    mut world_entities: ParamSet<(
-        Query<&Arrow>,
-        Query<&Tnt>,
-        Query<&Chunk>,
-    )>,
+    mut world_entities: ParamSet<(Query<&Arrow>, Query<&Tnt>, Query<&Chunk>)>,
     // UI entities
     backgrounds: Query<&Background>,
     resources: Query<&Resource>,
@@ -94,24 +90,43 @@ pub fn log_performance_metrics(
 
         let total_entities = all_entities.iter().count();
 
-        let known_entities = block_count + enemy_count + villager_count + hero_count
-            + arrow_count + tnt_count + chunk_count + background_count + resource_count + overlay_count;
+        let known_entities = block_count
+            + enemy_count
+            + villager_count
+            + hero_count
+            + arrow_count
+            + tnt_count
+            + chunk_count
+            + background_count
+            + resource_count
+            + overlay_count;
         let unknown_entities = total_entities.saturating_sub(known_entities);
 
         // Count assets
         let material_count = materials.iter().count();
         let mesh_count = meshes.iter().count();
 
-        info!("========== PERFORMANCE METRICS (Runtime: {:.1}s) ==========", runtime);
+        info!(
+            "========== PERFORMANCE METRICS (Runtime: {:.1}s) ==========",
+            runtime
+        );
         info!("  FPS: {:.1} | Frame Time: {:.2}ms", fps, frame_time);
-        info!("  Entities: {} blocks, {} overlays, {} enemies, {} villagers, {} hero",
-              block_count, overlay_count, enemy_count, villager_count, hero_count);
-        info!("  World: {} chunks, {} arrows, {} tnt | {} resources, {} backgrounds",
-              chunk_count, arrow_count, tnt_count, resource_count, background_count);
-        info!("  ALL Entities: {} total ({} UNKNOWN - healthbars/hearts/buffs/etc)",
-              total_entities, unknown_entities);
-        info!("  Assets: {} materials, {} mesh assets",
-              material_count, mesh_count);
+        info!(
+            "  Entities: {} blocks, {} overlays, {} enemies, {} villagers, {} hero",
+            block_count, overlay_count, enemy_count, villager_count, hero_count
+        );
+        info!(
+            "  World: {} chunks, {} arrows, {} tnt | {} resources, {} backgrounds",
+            chunk_count, arrow_count, tnt_count, resource_count, background_count
+        );
+        info!(
+            "  ALL Entities: {} total ({} UNKNOWN - healthbars/hearts/buffs/etc)",
+            total_entities, unknown_entities
+        );
+        info!(
+            "  Assets: {} materials, {} mesh assets",
+            material_count, mesh_count
+        );
         info!("==========================================================");
     }
 }

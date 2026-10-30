@@ -47,15 +47,4 @@ impl CollisionDebugSettings {
     pub fn toggle(&mut self) {
         self.enabled = !self.enabled;
     }
-
-    /// Enable all visualization
-    pub fn enable_all(&mut self) {
-        self.enabled = true;
-        self.show_blocks = true;
-        self.show_characters = true;
-        self.show_resources = true;
-        self.show_tnt = true;
-        self.show_projectiles = true;
-        self.show_randomboxes = true;
-    }
 }

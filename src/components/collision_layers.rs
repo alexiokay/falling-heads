@@ -5,27 +5,22 @@ use avian3d::prelude::*;
 pub enum GameLayer {
     // Static environment
     #[default]
-    Block,        // Terrain blocks - collide with entities but not each other
+    Block, // Terrain blocks - collide with entities but not each other
 
     // Dynamic entities
-    Character,    // Heroes, villagers - collide with blocks, enemies, arrows
-    Enemy,        // Enemies - collide with blocks, characters, arrows
+    Character, // Heroes, villagers - collide with blocks, enemies, arrows
+    Enemy,     // Enemies - collide with blocks, characters, arrows
 
     // Projectiles
-    Arrow,        // Arrows - sensor only, collide with everything for detection
-    Snowball,     // Snowballs - sensor only
+    Arrow,    // Arrows - sensor only, collide with everything for detection
+    Snowball, // Snowballs - sensor only
 
     // Items
-    Resource,     // Dropped resources - collide with blocks only
-    Tnt,          // TNT blocks - collide with blocks and characters
+    Resource, // Dropped resources - collide with blocks only
+    Tnt,      // TNT blocks - collide with blocks and characters
 }
 
 impl GameLayer {
-    /// Get collision memberships for this layer
-    pub fn memberships(self) -> LayerMask {
-        LayerMask::from(self)
-    }
-
     /// Get what this layer should collide with (filters)
     pub fn filters(self) -> LayerMask {
         match self {
@@ -42,7 +37,7 @@ impl GameLayer {
             GameLayer::Character => LayerMask::from([
                 GameLayer::Block,
                 GameLayer::Enemy,
-                GameLayer::Character,  // Characters collide with each other (includes RandomBox)
+                GameLayer::Character, // Characters collide with each other (includes RandomBox)
                 GameLayer::Tnt,
                 GameLayer::Arrow,
                 GameLayer::Snowball,
@@ -60,23 +55,17 @@ impl GameLayer {
             GameLayer::Arrow => LayerMask::ALL,
 
             // Snowballs detect collisions with characters and blocks (sensor)
-            GameLayer::Snowball => LayerMask::from([
-                GameLayer::Block,
-                GameLayer::Character,
-                GameLayer::Enemy,
-            ]),
+            GameLayer::Snowball => {
+                LayerMask::from([GameLayer::Block, GameLayer::Character, GameLayer::Enemy])
+            }
 
             // Resources only collide with blocks (to settle on ground)
-            GameLayer::Resource => LayerMask::from([
-                GameLayer::Block,
-            ]),
+            GameLayer::Resource => LayerMask::from([GameLayer::Block]),
 
             // TNT collides with blocks and characters
-            GameLayer::Tnt => LayerMask::from([
-                GameLayer::Block,
-                GameLayer::Character,
-                GameLayer::Enemy,
-            ]),
+            GameLayer::Tnt => {
+                LayerMask::from([GameLayer::Block, GameLayer::Character, GameLayer::Enemy])
+            }
         }
     }
 }

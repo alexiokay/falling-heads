@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MineHeads · Into the world</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<main>
+<header><a class="brand" href="#">M<span>H</span> / PLAY LAB</a><span class="edition">MINEHEADS · MOVEMENT STUDIES</span><span class="pill">Playable concepts</span></header>
+<section class="intro"><div><div class="eyebrow">THROUGH THE BACKGROUND</div><h1>Same head. A new dimension.</h1><p>The world pulls you in. You decide how to survive it.</p></div><span class="note">Three directions to try.<br>No changes to the installed game.</span></section>
+<nav aria-label="Movement concepts">
+<button class="concept" data-mode="0" aria-pressed="false"><span class="number">01</span><div><strong>Rebound Run</strong><small>Automatic wall-to-wall bouncing.</small></div><span class="tag">Main-game feel</span></button>
+<button class="concept active" data-mode="1" aria-pressed="true"><span class="number">02</span><div><strong>Springline</strong><small>Your pick · Steer and charge.</small></div><span class="tag">More control</span></button>
+<button class="concept" data-mode="2" aria-pressed="false"><span class="number">03</span><div><strong>Ricochet Ruins</strong><small>Bounce, break blocks, keep going.</small></div><span class="tag">More varied contacts</span></button>
+</nav>
+<section class="stage" aria-label="Playable 3D runner preview"><canvas id="game" aria-label="Head runner game"></canvas>
+<div class="topline"><div><span class="live-dot"></span><span id="phase">SIDE VIEW</span></div><div id="score">0 crystals</div><div id="health">♥ ♥ ♥</div></div>
+<div class="progress"><i id="progress"></i></div>
+<div class="center" id="cover"><span class="eyebrow" id="cover-kicker">01 / LANE RUSH</span><h2 id="cover-title">Step through the world.</h2><p id="cover-desc">Three lanes. Automatic little bounces. You choose when to switch and jump over danger.</p><button id="start">Enter the rift <span>↗</span></button><small>Click to begin · Keyboard or touch controls</small></div>
+<div id="hint">The camera follows you through the opening — no cut.</div>
+<div id="charge"><span>JUMP CHARGE</span><i></i></div>
+<div class="bottomline"><span id="objective">Collect crystals · Dodge stone barriers · Jump gaps</span><div><button id="pause" aria-label="Pause game">Pause</button><button id="restart">Replay entrance</button><button id="full" aria-label="Fullscreen preview">⛶</button></div></div>
+</section>
+<section class="controls"><div><kbd>A</kbd><kbd>D</kbd><span id="move-label">or ← → · switch lanes</span></div><div><kbd>SPACE</kbd><span id="jump-label">jump higher</span></div><div><kbd>P</kbd><span>pause</span></div><div class="touch"><button data-key="left" aria-label="Move left">←</button><button data-key="jump">JUMP</button><button data-key="right" aria-label="Move right">→</button></div></section>
+<footer><div><span class="eyebrow">WHAT CHANGES</span><p id="detail">Choose a movement style above.</p></div><div><span class="eyebrow">SHARED IN ALL THREE</span><p>A continuous camera move, forward travel into depth, bouncing heads, and a return to the same world. Springline keeps manual control; the other two rebound automatically.</p></div></footer>
+</main><script type="module" src="game.js"></script></body></html>

@@ -1,6 +1,6 @@
 # MineHeads - Falling Block Breaker
 
-A 3D isometric infinite falling game built with Bevy 0.17.1 where Minecraft-style heads descend through an endless procedurally generated world of destructible blocks.
+A 3D isometric infinite falling game built with Bevy 0.20.0 where Minecraft-style heads descend through an endless procedurally generated world of destructible blocks.
 
 ## 🎮 Game Overview
 
@@ -24,13 +24,33 @@ Control a falling hero as it bounces through an infinite chunk-based world with 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Rust 1.88.0 or higher
-- Bevy 0.17.1 (included via path dependency)
+- Rust 1.97.1 or higher
+- Bevy 0.20.0 and Avian 0.8.0 (registry dependencies)
+
+See [the upgrade and validation checklist](MINEHEADS_UPGRADE_2026-10-23.md) for current fixes, validation limits and gameplay proposals.
 
 ### Building
 ```bash
 cargo build --release
 ```
+
+The Windows build compiles NVIDIA Streamline/DLSS glue and needs three SDK paths.
+`.cargo/config.toml` points them at `../../south-balcony-twin/vendor/` (this
+machine's layout). Cargo only uses those defaults when the variables are not
+already set, so on another machine set them yourself before building:
+
+| Variable | Must contain |
+|----------|--------------|
+| `VULKAN_SDK` | `include/vulkan/vulkan.h` (LunarG Vulkan SDK or a Vulkan-Headers checkout) |
+| `DLSS_SDK` | the NVIDIA DLSS SDK (used by `vendor/dlss_wgpu`) |
+| `LIBCLANG_PATH` | the folder holding `libclang.dll` (for bindgen) |
+
+Five crates are patched from `vendor/` (`bevy_pbr`, `bevy_solari`,
+`bevy_anti_alias`, `wgpu-hal`, `dlss_wgpu`; see `[patch.crates-io]` in
+`Cargo.toml`). Every Bevy or wgpu upgrade needs those patches ported again.
+
+Settings are saved per user in `%APPDATA%\MineHeads\` (`game-settings.json`,
+`graphics-settings.json`). Test, probe and benchmark launches never overwrite them.
 
 ### Running
 ```bash
@@ -48,14 +68,48 @@ curl -X POST http://localhost:3029/command \
   -d '{"action": "TNT"}'
 ```
 
+If Windows reports the port as forbidden, it is inside a reserved range
+(`netsh interface ipv4 show excludedportrange protocol=tcp`; Hyper-V, WSL and
+Docker reserve these). Start the game with `MINEHEADS_API_PORT` set to a free
+port, or reserve 3029 for MineHeads as admin.
+
+### Play styles
+Each viewer chooses how their heads play the ball. The choice is remembered,
+so heads they spawn later use it too. The streamer cycles the hero's style with **C**.
+
+| Style | Behaviour |
+|-------|-----------|
+| `bouncy` | Default: full bounces off every surface |
+| `heavy` | Falls fast, barely bounces, hard landings do double block damage (digs down) |
+| `floaty` | Low gravity, steady soft hops, long hang time |
+| `sticky` | Grabs walls, hangs on briefly, then wall-jumps up and away |
+
+```bash
+curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \
+  -d '{"action":"STYLE","username":"viewer123","style":"heavy"}'
+# or spawn heads with a style straight away
+curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \
+  -d '{"action":"VILLAGERS","username":"viewer123","style":"sticky"}'
+```
+
 ### Available Commands
 - `TNT` ✅ - Spawn explosive TNT above hero
 - `FAST` ✅ - Speed boost (2x for 5 seconds)
 - `SLOW` ✅ - Slow motion (0.5x for 5 seconds)
 - `LASER` ✅ - Powerful vertical laser beam
 - `ARROW` ✅ - Circular arrow barrage (8 arrows)
-- `FUSS` 🚧 - Create chaos effect (coming soon)
-- `BOLT` 🚧 - Lightning strike (coming soon)
+- `FUSS` ✅ - Mirrored controls for 5 seconds; AI heads turn around
+- `BOLT` ✅ - One lightning strike (4 damage) on the toughest enemy nearby
+- `FEATHER` ✅ - Low gravity for everyone for 8 seconds
+- `ANVIL` ✅ - Three anvils smash down through up to 6 blocks each
+- `GOLEM` ✅ - Friendly iron golem fights enemies for 30 seconds
+- `PEARL` ✅ - Ender pearl: hero jumps to a free spot up to 10 blocks away
+- `QUAKE` ✅ - Ores nearby pop out as drops, blocks crack, heads jolt
+- `SHRINK` ✅ - Friendly heads half size for 10 seconds (no block damage)
+- `WIND` ✅ - Gust pushes every head sideways for 3 seconds
+- `BLACKHOLE` ✅ - Vortex pulls things in for 4 seconds, then pops them outward
+- `ICEAGE` ✅ - Snow and slippery floors for 15 seconds
+- `BEES` ✅ - Swarm chases a random head; a big bounce shakes it off
 - `GHAST` 🚧 - Spawn shooting Ghast enemy (coming soon)
 - `BOX` 🚧 - Spawn loot box (coming soon)
 - `MAGNET` 🚧 - Attract all resources (coming soon)

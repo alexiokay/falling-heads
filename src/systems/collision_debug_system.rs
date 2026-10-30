@@ -1,32 +1,33 @@
+use crate::components::block::{Block, BlockType};
+use crate::components::collision_debug::{CollisionDebugBorder, CollisionDebugSettings};
+use crate::components::enemy::Enemy;
+use crate::components::explosive::Tnt;
+use crate::components::hero::Hero;
+use crate::components::lootbox::{Lootbox, RandomBox};
+use crate::components::projectile::{Arrow, Fireball, Snowball};
+use crate::components::resource::Resource;
+use crate::components::villager::Villager;
+use crate::utils::constants::*;
+use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use avian3d::prelude::*;
-use crate::components::collision_debug::{CollisionDebugBorder, CollisionDebugSettings};
-use crate::components::block::{Block, BlockType};
-use crate::components::hero::Hero;
-use crate::components::villager::Villager;
-use crate::components::enemy::Enemy;
-use crate::components::resource::Resource;
-use crate::components::explosive::Tnt;
-use crate::components::projectile::{Arrow, Snowball, Fireball};
-use crate::components::lootbox::{RandomBox, Lootbox};
-use crate::states::GameState;
-use crate::utils::constants::*;
 
 pub struct CollisionDebugPlugin;
 
 impl Plugin for CollisionDebugPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<CollisionDebugSettings>()
-            .add_systems(Update, (
+        app.init_resource::<CollisionDebugSettings>().add_systems(
+            Update,
+            (
                 toggle_collision_debug,
                 spawn_debug_borders,
                 update_debug_border_positions,
                 update_debug_border_visibility,
                 cleanup_debug_borders,
                 debug_hover_info,
-            ).run_if(in_state(GameState::Playing)));
+            )
+                .run_if(in_state(crate::states::InGame)),
+        );
 
         info!("CollisionDebugPlugin loaded - Press F3 to toggle collision borders");
     }
@@ -56,11 +57,29 @@ fn spawn_debug_borders(
 
     // Query all entities that need debug borders
     block_query: Query<(Entity, &Transform), (With<Block>, Without<CollisionDebugBorder>)>,
-    character_query: Query<(Entity, &Transform), (Or<(With<Hero>, With<Villager>, With<Enemy>)>, Without<CollisionDebugBorder>)>,
+    character_query: Query<
+        (Entity, &Transform),
+        (
+            Or<(With<Hero>, With<Villager>, With<Enemy>)>,
+            Without<CollisionDebugBorder>,
+        ),
+    >,
     resource_query: Query<(Entity, &Transform), (With<Resource>, Without<CollisionDebugBorder>)>,
     tnt_query: Query<(Entity, &Transform), (With<Tnt>, Without<CollisionDebugBorder>)>,
-    projectile_query: Query<(Entity, &Transform), (Or<(With<Arrow>, With<Snowball>, With<Fireball>)>, Without<CollisionDebugBorder>)>,
-    randombox_query: Query<(Entity, &Transform), (Or<(With<RandomBox>, With<Lootbox>)>, Without<CollisionDebugBorder>)>,
+    projectile_query: Query<
+        (Entity, &Transform),
+        (
+            Or<(With<Arrow>, With<Snowball>, With<Fireball>)>,
+            Without<CollisionDebugBorder>,
+        ),
+    >,
+    randombox_query: Query<
+        (Entity, &Transform),
+        (
+            Or<(With<RandomBox>, With<Lootbox>)>,
+            Without<CollisionDebugBorder>,
+        ),
+    >,
 ) {
     if !settings.enabled {
         return;
@@ -76,7 +95,8 @@ fn spawn_debug_borders(
 
     // Spawn borders for blocks (64x64)
     if settings.show_blocks {
-        for (entity, transform) in block_query.iter().take(20) {  // Limit to 20 per frame to prevent freezes
+        for (entity, transform) in block_query.iter().take(20) {
+            // Limit to 20 per frame to prevent freezes
             let border_mesh = meshes.add(Cuboid::new(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
 
             // Spawn border at block position (NOT as child to avoid transform issues)
@@ -215,12 +235,11 @@ fn cleanup_debug_borders(
     entity_check: Query<Entity>,
 ) {
     for (border_entity, border) in border_query.iter() {
-        // If parent doesn't exist anymore, despawn the border
+        // If parent doesn't exist anymore, despawn the border silently
         if entity_check.get(border.parent_entity).is_err() {
-            // Use try_despawn to avoid errors if entity was already despawned
-            if let Ok(mut entity_commands) = commands.get_entity(border_entity) {
-                entity_commands.despawn();
-            }
+            // Try to get entity; if it exists, despawn it
+            // If entity was already despawned, this will log a warning but not crash
+            commands.entity(border_entity).despawn();
         }
     }
 }
@@ -241,8 +260,14 @@ fn debug_hover_info(
     enemy_query: Query<(&Transform, &LinearVelocity), With<Enemy>>,
     resource_query: Query<(&Transform, &Resource, Option<&LinearVelocity>)>,
     tnt_query: Query<(&Transform, Option<&LinearVelocity>), With<Tnt>>,
-    projectile_query: Query<(&Transform, &LinearVelocity), Or<(With<Arrow>, With<Snowball>, With<Fireball>)>>,
-    randombox_query: Query<(&Transform, Option<&LinearVelocity>), Or<(With<RandomBox>, With<Lootbox>)>>,
+    projectile_query: Query<
+        (&Transform, &LinearVelocity),
+        Or<(With<Arrow>, With<Snowball>, With<Fireball>)>,
+    >,
+    randombox_query: Query<
+        (&Transform, Option<&LinearVelocity>),
+        Or<(With<RandomBox>, With<Lootbox>)>,
+    >,
 ) {
     if !settings.enabled {
         return;
@@ -274,7 +299,8 @@ fn debug_hover_info(
         // Simple distance check (not perfect raycasting but good enough for debug)
         let distance_to_ray = (border_pos - ray.origin).length();
 
-        if distance_to_ray < 100.0 {  // Within 100 units
+        if distance_to_ray < 100.0 {
+            // Within 100 units
             if closest_border.is_none() || distance_to_ray < closest_border.unwrap().1 {
                 closest_border = Some((border.parent_entity, distance_to_ray));
             }
@@ -290,43 +316,81 @@ fn debug_hover_info(
             // Check what type of entity this is
             if let Ok((transform, _block_type, velocity)) = block_query.get(entity) {
                 info!("Type: BLOCK");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
                 if let Some(vel) = velocity {
                     info!("Velocity: ({:.1}, {:.1}, {:.1})", vel.x, vel.y, vel.z);
                 }
             } else if let Ok((transform, velocity)) = hero_query.get(entity) {
                 info!("Type: HERO");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
-                info!("Velocity: ({:.1}, {:.1}, {:.1})", velocity.x, velocity.y, velocity.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
+                info!(
+                    "Velocity: ({:.1}, {:.1}, {:.1})",
+                    velocity.x, velocity.y, velocity.z
+                );
             } else if let Ok((transform, velocity)) = villager_query.get(entity) {
                 info!("Type: VILLAGER");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
-                info!("Velocity: ({:.1}, {:.1}, {:.1})", velocity.x, velocity.y, velocity.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
+                info!(
+                    "Velocity: ({:.1}, {:.1}, {:.1})",
+                    velocity.x, velocity.y, velocity.z
+                );
             } else if let Ok((transform, velocity)) = enemy_query.get(entity) {
                 info!("Type: ENEMY");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
-                info!("Velocity: ({:.1}, {:.1}, {:.1})", velocity.x, velocity.y, velocity.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
+                info!(
+                    "Velocity: ({:.1}, {:.1}, {:.1})",
+                    velocity.x, velocity.y, velocity.z
+                );
             } else if let Ok((transform, _resource, velocity)) = resource_query.get(entity) {
                 info!("Type: RESOURCE");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
                 if let Some(vel) = velocity {
                     info!("Velocity: ({:.1}, {:.1}, {:.1})", vel.x, vel.y, vel.z);
                 } else {
-                    warn!("⚠️ GHOST RESOURCE: No velocity component! Resource exists but missing physics!");
+                    warn!(
+                        "⚠️ GHOST RESOURCE: No velocity component! Resource exists but missing physics!"
+                    );
                 }
             } else if let Ok((transform, velocity)) = tnt_query.get(entity) {
                 info!("Type: TNT");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
                 if let Some(vel) = velocity {
                     info!("Velocity: ({:.1}, {:.1}, {:.1})", vel.x, vel.y, vel.z);
                 }
             } else if let Ok((transform, velocity)) = projectile_query.get(entity) {
                 info!("Type: PROJECTILE");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
-                info!("Velocity: ({:.1}, {:.1}, {:.1})", velocity.x, velocity.y, velocity.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
+                info!(
+                    "Velocity: ({:.1}, {:.1}, {:.1})",
+                    velocity.x, velocity.y, velocity.z
+                );
             } else if let Ok((transform, velocity)) = randombox_query.get(entity) {
                 info!("Type: RANDOMBOX");
-                info!("Position: ({:.1}, {:.1}, {:.1})", transform.translation.x, transform.translation.y, transform.translation.z);
+                info!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    transform.translation.x, transform.translation.y, transform.translation.z
+                );
                 if let Some(vel) = velocity {
                     info!("Velocity: ({:.1}, {:.1}, {:.1})", vel.x, vel.y, vel.z);
                 }

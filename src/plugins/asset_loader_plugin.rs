@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use bevy::gltf::GltfAssetLabel;
 use crate::resources::asset_handles::*;
+use bevy::gltf::GltfAssetLabel;
+use bevy::prelude::*;
 
 pub struct AssetLoaderPlugin;
 
@@ -12,10 +12,7 @@ impl Plugin for AssetLoaderPlugin {
 }
 
 /// Centralized asset loading system - keeps main.rs clean
-fn load_all_assets(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+fn load_all_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     info!("Loading all game assets...");
 
     // Load game textures (UI, entities)
@@ -38,7 +35,8 @@ fn load_all_assets(
         sand: asset_server.load("textures/blocks/desert/sand.png"),
         sandstone: asset_server.load("textures/blocks/desert/sandstone/sandstone.png"),
         sandstone_top: asset_server.load("textures/blocks/desert/sandstone/sandstone_top.png"),
-        sandstone_bottom: asset_server.load("textures/blocks/desert/sandstone/sandstone_bottom.png"),
+        sandstone_bottom: asset_server
+            .load("textures/blocks/desert/sandstone/sandstone_bottom.png"),
         oak_log: asset_server.load("textures/blocks/forest/oak_log/oak_log.png"),
         oak_log_top: asset_server.load("textures/blocks/forest/oak_log/oak_log_top.png"),
         oak_leaves: asset_server.load("textures/blocks/forest/oak_leaves.png"),
@@ -119,6 +117,11 @@ fn load_all_assets(
 
     // Load enemy textures
     let enemy_textures = EnemyTextures {
+        ghast: asset_server.load("textures/entities/enemy/ghast/ghast.png"),
+        ghast_shooting: asset_server.load("textures/entities/enemy/ghast/ghast_shooting.png"),
+        bat: asset_server.load("textures/entities/enemy/bat_face.png"),
+        spider: asset_server.load("textures/entities/enemy/CaveSpiderFace.png"),
+        enderman: asset_server.load("textures/entities/enemy/EndermanFace.png"),
         skeleton: asset_server.load("textures/entities/enemy/skeleton.png"),
         skeleton2: asset_server.load("textures/entities/enemy/skeleton2.png"),
         yeti: asset_server.load("textures/entities/enemy/yeti.png"),
@@ -135,25 +138,10 @@ fn load_all_assets(
 
     // Load projectile 3D models
     let projectile_models = crate::resources::asset_handles::ProjectileModels {
-        arrow: asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/projectiles/arrow2.glb")
-        ),  // Load GLB model - Scene 0
+        arrow: asset_server
+            .load(GltfAssetLabel::Scene(0).from_asset("models/projectiles/arrow2.glb")), // Load GLB model - Scene 0
     };
     commands.insert_resource(projectile_models);
-
-    // Load enemy 3D models
-    let enemy_models = crate::resources::asset_handles::EnemyModels {
-        dragon: asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/minecraft_dragon_-_free_-_black_and_white.glb")
-        ),  // Load dragon GLB model with built-in animation - Scene 0
-    };
-    commands.insert_resource(enemy_models);
-
-    // Load dragon animation clip
-    let dragon_animation = asset_server.load(
-        GltfAssetLabel::Animation(0).from_asset("models/minecraft_dragon_-_free_-_black_and_white.glb")
-    );
-    commands.insert_resource(crate::resources::asset_handles::DragonAnimation { fly: dragon_animation });
 
     // Load heart textures (UI)
     let heart_textures = HeartTextures {
@@ -196,6 +184,7 @@ fn load_all_assets(
 
     // Load lootbox reward icons
     let lootbox_icons = crate::resources::asset_handles::LootboxIcons {
+        teleport: asset_server.load("textures/blocks/nether/obsidian.png"),
         monster_horde: asset_server.load("textures/ui/lootbox/monster_horde.png"),
         // treasure_rain: asset_server.load("textures/ui/lootbox/treasure_rain.png"),  // REMOVED
         travelers_arrive: asset_server.load("textures/ui/lootbox/travelers_arrive.png"),
@@ -280,7 +269,7 @@ fn load_all_assets(
         plains: asset_server.load("audio/music/biomes/plains.ogg"),
         forest: asset_server.load("audio/music/biomes/forest.ogg"),
         desert: asset_server.load("audio/music/biomes/desert.ogg"),
-        mountains: asset_server.load("audio/music/biomes/mountains.ogg"),
+        mountains: asset_server.load("audio/music/biomes/mountians.ogg"),
         underground: asset_server.load("audio/music/biomes/underground.ogg"),
         nether: asset_server.load("audio/music/biomes/nether.ogg"),
         end: asset_server.load("audio/music/biomes/end.ogg"),

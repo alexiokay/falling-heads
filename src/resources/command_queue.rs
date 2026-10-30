@@ -1,60 +1,54 @@
-use bevy::prelude::*;
-use std::collections::VecDeque;
-
-#[derive(Resource, Default)]
-pub struct CommandQueue {
-    pub pending: VecDeque<PowerCommand>,
-}
-
-/// Trait for power command behavior - defines how each power executes
-pub trait PowerBehavior {
-    /// Get the display name of this power
-    fn name(&self) -> &'static str;
-
-    /// Get the description of what this power does
-    fn description(&self) -> &'static str {
-        "No description available"
-    }
-
-    /// Get the cooldown duration in seconds (0 = no cooldown)
-    fn cooldown(&self) -> f32 {
-        0.0
-    }
-
-    /// Check if this power requires a hero to be present
-    fn requires_hero(&self) -> bool {
-        true  // Most powers target the hero
-    }
-
-    /// Get the category of this power for UI grouping
-    fn category(&self) -> PowerCategory {
-        PowerCategory::Offensive
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PowerCategory {
-    Offensive,   // TNT, Laser, Arrow
-    Movement,    // Fast, Slow
-    Defensive,   // Mirror, Box
-    Summoning,   // Villagers, Ghast
-    Utility,     // Magnet, Fuss, Bolt
-}
-
+//! Typed commands shared by the dev panel, API and gameplay messages.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PowerCommand {
     pub command_type: PowerCommandType,
-    pub username: String,  // Twitch/YouTube viewer username
+    pub username: String, // Twitch/YouTube viewer username
+    pub launcher: LauncherOptions,
+    /// Play style requested with STYLE or VILLAGERS
+    pub style: Option<crate::components::play_style::PlayStyle>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LaunchDirection {
+    #[default]
+    Auto,
+    Left,
+    Right,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LauncherOptions {
+    pub direction: LaunchDirection,
+    pub villagers: u8,
+}
+impl Default for LauncherOptions {
+    fn default() -> Self {
+        Self {
+            direction: LaunchDirection::Auto,
+            villagers: 1,
+        }
+    }
 }
 
 impl PowerCommand {
     pub fn new(command_type: PowerCommandType, username: String) -> Self {
-        Self { command_type, username }
+        Self {
+            command_type,
+            username,
+            launcher: LauncherOptions::default(),
+            style: None,
+        }
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PowerCommandType {
+    WaterBucket,
+    LavaBucket,
+    Teleport, // Safe travel to the next biome
+    Launcher,
+    Rift,
+    Rewind,
     Tnt,
     Fast,
     Slow,
@@ -65,87 +59,23 @@ pub enum PowerCommandType {
     Ghast,
     Box,
     Magnet,
-    Villagers, // Spawn 5 villagers around hero
-    Mirror,    // Magic barrier that reflects projectiles
-    Dragon,    // Spawn a dragon boss enemy
-    Thunder,   // Spawn multiple lightning strikes that damage random nearby blocks
-    Lootbox,   // Spawn a lootbox near hero
-    RandomBox, // Spawn a bouncing randombox that triggers random events
-    GrowBuff,  // Apply Grow buff to hero (20% bigger per stack, max 2)
-}
-
-impl PowerBehavior for PowerCommandType {
-    fn name(&self) -> &'static str {
-        match self {
-            PowerCommandType::Tnt => "TNT",
-            PowerCommandType::Fast => "FAST",
-            PowerCommandType::Slow => "SLOW",
-            PowerCommandType::Fuss => "FUSS",
-            PowerCommandType::Bolt => "BOLT",
-            PowerCommandType::Arrow => "ARROW",
-            PowerCommandType::Laser => "LASER",
-            PowerCommandType::Ghast => "GHAST",
-            PowerCommandType::Box => "BOX",
-            PowerCommandType::Magnet => "MAGNET",
-            PowerCommandType::Villagers => "VILLAGERS",
-            PowerCommandType::Mirror => "MIRROR",
-            PowerCommandType::Dragon => "DRAGON",
-            PowerCommandType::Thunder => "THUNDER",
-            PowerCommandType::Lootbox => "LOOTBOX",
-            PowerCommandType::RandomBox => "RANDOMBOX",
-            PowerCommandType::GrowBuff => "GROW",
-        }
-    }
-
-    fn description(&self) -> &'static str {
-        match self {
-            PowerCommandType::Tnt => "Spawn explosive TNT above the hero",
-            PowerCommandType::Fast => "Double movement speed for 5 seconds",
-            PowerCommandType::Slow => "Half movement speed for 5 seconds",
-            PowerCommandType::Fuss => "Utility power (not yet implemented)",
-            PowerCommandType::Bolt => "Lightning bolt attack (not yet implemented)",
-            PowerCommandType::Arrow => "Fire 48 arrows in a circular barrage",
-            PowerCommandType::Laser => "Create a powerful laser beam",
-            PowerCommandType::Ghast => "Spawn a floating ghast that shoots fireballs",
-            PowerCommandType::Box => "Create a protective box (not yet implemented)",
-            PowerCommandType::Magnet => "Attract nearby items (not yet implemented)",
-            PowerCommandType::Villagers => "Spawn 5 villagers around the hero",
-            PowerCommandType::Mirror => "Create a magic barrier that reflects projectiles",
-            PowerCommandType::Dragon => "Spawn a powerful dragon boss enemy",
-            PowerCommandType::Thunder => "Spawn lightning strikes that damage random nearby blocks",
-            PowerCommandType::Lootbox => "Trigger random lootbox reward instantly",
-            PowerCommandType::RandomBox => "Spawn a bouncing randombox that triggers random events",
-            PowerCommandType::GrowBuff => "Make hero 20% bigger and 30% faster (stacks up to 2x)",
-        }
-    }
-
-    fn cooldown(&self) -> f32 {
-        match self {
-            PowerCommandType::Tnt => 3.0,
-            PowerCommandType::Fast => 10.0,
-            PowerCommandType::Slow => 10.0,
-            PowerCommandType::Arrow => 15.0,
-            PowerCommandType::Laser => 8.0,
-            PowerCommandType::Villagers => 20.0,
-            PowerCommandType::Mirror => 15.0,
-            PowerCommandType::Ghast => 12.0,   // Medium cooldown for flying enemy
-            PowerCommandType::Dragon => 30.0,  // Long cooldown for boss spawn
-            PowerCommandType::Thunder => 10.0, // Medium cooldown for area damage
-            PowerCommandType::Lootbox => 5.0,  // Short cooldown for lootbox spawn
-            PowerCommandType::GrowBuff => 12.0,  // Medium cooldown for buff
-            _ => 0.0,
-        }
-    }
-
-    fn category(&self) -> PowerCategory {
-        match self {
-            PowerCommandType::Tnt | PowerCommandType::Arrow | PowerCommandType::Laser | PowerCommandType::Bolt | PowerCommandType::Thunder => {
-                PowerCategory::Offensive
-            }
-            PowerCommandType::Fast | PowerCommandType::Slow | PowerCommandType::GrowBuff => PowerCategory::Movement,
-            PowerCommandType::Mirror | PowerCommandType::Box => PowerCategory::Defensive,
-            PowerCommandType::Villagers | PowerCommandType::Ghast | PowerCommandType::Dragon => PowerCategory::Summoning,
-            PowerCommandType::Magnet | PowerCommandType::Fuss | PowerCommandType::Lootbox | PowerCommandType::RandomBox => PowerCategory::Utility,
-        }
-    }
+    Villagers,  // Spawn 5 villagers around hero
+    Mirror,     // Magic barrier that reflects projectiles
+    Dragon,     // Spawn a dragon boss enemy
+    Thunder,    // Spawn multiple lightning strikes that damage random nearby blocks
+    Lootbox,    // Spawn a lootbox near hero
+    RandomBox,  // Spawn a bouncing randombox that triggers random events
+    GrowBuff,   // Apply Grow buff to hero (20% bigger per stack, max 2)
+    LaserBurst, // Spawn 19 small white laser beams in all directions
+    Style,      // Set the sender's heads to a play style (bouncy, heavy, floaty, sticky)
+    Feather,    // Low gravity for everyone for 8 s
+    Anvil,      // Anvils fall around the hero and smash down through blocks
+    Golem,      // Friendly iron golem that fights enemies for 30 s
+    Pearl,      // Ender pearl: hero jumps to a random free spot nearby
+    Quake,      // Earthquake: ores pop out as drops, blocks crack, heads jolt
+    Shrink,     // Friendly heads half size for 10 s (no block damage)
+    Wind,       // Gust pushes every head sideways for 3 s
+    BlackHole,  // Vortex pulls things in for 4 s, then pops them outward
+    IceAge,     // Snow and slippery floors for 15 s
+    Bees,       // Swarm chases a random head and stings lightly
 }

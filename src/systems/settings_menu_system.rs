@@ -1,469 +1,355 @@
-use bevy::prelude::*;
+use crate::{components::settings_menu::*, resources::settings::GameSettings, states::GameState};
 use bevy::ecs::system::ParamSet;
-use bevy::window::{PresentMode, Window, PrimaryWindow};
-use bevy::ui::RelativeCursorPosition;
-use crate::components::settings_menu::*;
-use crate::resources::settings::GameSettings;
-use crate::states::GameState;
+use bevy::{
+    picking::{Pickable, hover::PickingInteraction},
+    prelude::*,
+    ui::RelativeCursorPosition,
+    ui_widgets::Button,
+    window::{PresentMode, PrimaryWindow},
+};
 
-pub fn setup_settings_menu(
-    mut commands: Commands,
-    settings: Res<GameSettings>,
-) {
-    commands
+pub fn menu_button(parent: &mut ChildSpawnerCommands, label: &str, marker: impl Bundle) {
+    parent
         .spawn((
+            marker,
+            SettingsControl,
+            Button,
+            PickingInteraction::default(),
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::Center,
+                width: Val::Percent(100.),
+                min_height: Val::Px(34.),
+                padding: UiRect::all(Val::Px(7.)),
                 justify_content: JustifyContent::Center,
-                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
-            SettingsMenuRoot,
+            BackgroundColor(Color::srgb(0.10, 0.16, 0.19)),
         ))
-        .with_children(|parent| {
-            // Title
-            parent.spawn((
-                Text::new("SETTINGS"),
+        .with_child((
+            Pickable::IGNORE,
+            ToggleButtonText,
+            Text::new(label),
+            TextFont {
+                font_size: FontSize::Px(16.),
+                ..default()
+            },
+        ));
+}
+fn volume(parent: &mut ChildSpawnerCommands, label: &str, value: f32, marker: impl Bundle) {
+    parent
+        .spawn((
+            marker,
+            Node {
+                width: Val::Percent(100.),
+                height: Val::Px(66.),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(10.),
+                ..default()
+            },
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Pickable::IGNORE,
+                VolumeSliderLabel,
+                Text::new(format!("{label}: {:.0}%", value * 100.)),
                 TextFont {
-                    font_size: 60.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                Node {
-                    margin: UiRect::all(Val::Px(30.0)),
+                    font_size: FontSize::Px(16.),
                     ..default()
                 },
             ));
-
-            // VSync Toggle Button
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(300.0),
-                        height: Val::Px(65.0),
-                        margin: UiRect::all(Val::Px(10.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.3, 0.3, 0.6)),
-                    VsyncToggleButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new(if settings.vsync_enabled { "VSync: ON" } else { "VSync: OFF" }),
-                        TextFont {
-                            font_size: 28.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                        ToggleButtonText,
-                    ));
-                });
-
-            // FPS Counter Toggle Button
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(300.0),
-                        height: Val::Px(65.0),
-                        margin: UiRect::all(Val::Px(10.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.3, 0.3, 0.6)),
-                    FpsToggleButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new(if settings.show_fps { "FPS Counter: ON" } else { "FPS Counter: OFF" }),
-                        TextFont {
-                            font_size: 28.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                        ToggleButtonText,
-                    ));
-                });
-
-            // FPS Limit Button (disabled when VSync is on)
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(300.0),
-                        height: Val::Px(65.0),
-                        margin: UiRect::all(Val::Px(10.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(if settings.vsync_enabled {
-                        Color::srgb(0.2, 0.2, 0.2) // Grayed out when VSync is on
-                    } else {
-                        Color::srgb(0.3, 0.6, 0.3)
-                    }),
-                    FpsLimitButton,
-                ))
-                .with_children(|parent| {
-                    let fps_text = if settings.fps_limit == 0 {
-                        "FPS Limit: Unlimited".to_string()
-                    } else {
-                        format!("FPS Limit: {}", settings.fps_limit)
-                    };
-                    parent.spawn((
-                        Text::new(fps_text),
-                        TextFont {
-                            font_size: 28.0,
-                            ..default()
-                        },
-                        TextColor(if settings.vsync_enabled {
-                            Color::srgb(0.5, 0.5, 0.5) // Grayed out text
-                        } else {
-                            Color::WHITE
-                        }),
-                        ToggleButtonText,
-                    ));
-                });
-
-            // Effects Volume Slider
-            parent.spawn((
+            p.spawn((
+                VolumeSliderBar,
+                PickingInteraction::default(),
+                RelativeCursorPosition::default(),
                 Node {
-                    width: Val::Px(400.0),
-                    height: Val::Px(80.0),
-                    margin: UiRect::all(Val::Px(10.0)),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
+                    width: Val::Percent(100.),
+                    height: Val::Px(16.),
                     ..default()
                 },
-                EffectsVolumeSlider,
+                BackgroundColor(Color::srgb(0.09, 0.11, 0.14)),
             ))
-            .with_children(|slider_parent| {
-                slider_parent.spawn((
-                    Text::new(format!("Effects Volume: {}%", (settings.effects_volume * 100.0) as i32)),
-                    TextFont { font_size: 24.0, ..default() },
-                    TextColor(Color::WHITE),
-                    VolumeSliderLabel,
-                    Node { margin: UiRect::bottom(Val::Px(8.0)), ..default() },
+            .with_children(|p| {
+                p.spawn((
+                    Pickable::IGNORE,
+                    Node {
+                        width: Val::Percent(value * 100.),
+                        height: Val::Percent(100.),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.22, 0.55, 0.61)),
                 ));
-                slider_parent.spawn((
+                p.spawn((
+                    Pickable::IGNORE,
+                    VolumeSliderHandle,
                     Node {
-                        width: Val::Px(350.0),
-                        height: Val::Px(30.0),
-                        border: UiRect::all(Val::Px(2.0)),
-                        align_items: AlignItems::Center,
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(value * 100.),
+                        width: Val::Px(5.),
+                        height: Val::Percent(100.),
                         ..default()
                     },
-                    BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
-                    BorderColor::all(Color::srgb(0.5, 0.5, 0.5)),
-                    VolumeSliderBar,
-                    RelativeCursorPosition::default(), // Add this for cursor tracking!
-                    Interaction::default(), // Add this for mouse interaction!
-                ))
-                .with_children(|bar_parent| {
-                    bar_parent.spawn((
-                        Node {
-                            width: Val::Percent(settings.effects_volume * 100.0),
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.3, 0.6, 0.8)),
-                    ));
-                    bar_parent.spawn((
-                        Node {
-                            width: Val::Px(20.0),
-                            height: Val::Px(30.0),
-                            position_type: PositionType::Absolute,
-                            left: Val::Percent(settings.effects_volume * 100.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.8, 0.8, 0.8)),
-                        BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
-                        VolumeSliderHandle,
-                    ));
-                });
-            });
-
-            // Music Volume Slider
-            parent.spawn((
-                Node {
-                    width: Val::Px(400.0),
-                    height: Val::Px(80.0),
-                    margin: UiRect::all(Val::Px(10.0)),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                MusicVolumeSlider,
-            ))
-            .with_children(|slider_parent| {
-                slider_parent.spawn((
-                    Text::new(format!("Music Volume: {}%", (settings.music_volume * 100.0) as i32)),
-                    TextFont { font_size: 24.0, ..default() },
-                    TextColor(Color::WHITE),
-                    VolumeSliderLabel,
-                    Node { margin: UiRect::bottom(Val::Px(8.0)), ..default() },
+                    BackgroundColor(Color::WHITE),
                 ));
-                slider_parent.spawn((
-                    Node {
-                        width: Val::Px(350.0),
-                        height: Val::Px(30.0),
-                        border: UiRect::all(Val::Px(2.0)),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
-                    BorderColor::all(Color::srgb(0.5, 0.5, 0.5)),
-                    VolumeSliderBar,
-                    RelativeCursorPosition::default(), // Add this for cursor tracking!
-                    Interaction::default(), // Add this for mouse interaction!
-                ))
-                .with_children(|bar_parent| {
-                    bar_parent.spawn((
-                        Node {
-                            width: Val::Percent(settings.music_volume * 100.0),
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.3, 0.6, 0.8)),
-                    ));
-                    bar_parent.spawn((
-                        Node {
-                            width: Val::Px(20.0),
-                            height: Val::Px(30.0),
-                            position_type: PositionType::Absolute,
-                            left: Val::Percent(settings.music_volume * 100.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.8, 0.8, 0.8)),
-                        BorderColor::all(Color::srgb(1.0, 1.0, 1.0)),
-                        VolumeSliderHandle,
-                    ));
-                });
             });
-
-            // Dev Mode Toggle Button
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(300.0),
-                        height: Val::Px(65.0),
-                        margin: UiRect::all(Val::Px(10.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.6, 0.3, 0.3)),  // Red-ish for dev mode
-                    DevModeToggleButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new(if settings.dev_mode { "Dev Mode: ON" } else { "Dev Mode: OFF" }),
-                        TextFont {
-                            font_size: 28.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                        ToggleButtonText,
-                    ));
-                });
-
-            // Back Button
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(200.0),
-                        height: Val::Px(65.0),
-                        margin: UiRect::top(Val::Px(30.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.5, 0.5, 0.5)),
-                    BackToMenuButton,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("Back"),
-                        TextFont {
-                            font_size: 32.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
         });
 }
-
-pub fn cleanup_settings_menu(mut commands: Commands, query: Query<Entity, With<SettingsMenuRoot>>) {
-    for entity in query.iter() {
-        commands.entity(entity).despawn();
+pub fn setup_settings_menu(mut commands: Commands, settings: Res<GameSettings>) {
+    commands.insert_resource(SettingsNavigation::default());
+    commands
+        .spawn((
+            SettingsMenuRoot,
+            GlobalZIndex(200),
+            Node {
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.015, 0.02, 0.03, 0.65)),
+        ))
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    width: Val::Percent(92.),
+                    max_width: Val::Px(520.),
+                    max_height: Val::Percent(96.),
+                    padding: UiRect::all(Val::Px(18.)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(10.),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.035, 0.055, 0.065)),
+            ))
+            .with_children(|p| {
+                p.spawn((
+                    Pickable::IGNORE,
+                    Text::new("SETTINGS"),
+                    TextFont {
+                        font_size: FontSize::Px(26.),
+                        ..default()
+                    },
+                ));
+                p.spawn(Node {
+                    width: Val::Percent(100.),
+                    column_gap: Val::Px(8.),
+                    ..default()
+                })
+                .with_children(|tabs| {
+                    for (page, label) in [
+                        (SettingsPage::General, "General"),
+                        (SettingsPage::Graphics, "Graphics"),
+                        (SettingsPage::GameModes, "Game modes"),
+                    ] {
+                        tabs.spawn(Node {
+                            width: Val::Percent(33.4),
+                            ..default()
+                        })
+                        .with_children(|p| menu_button(p, label, SettingsTab(page)));
+                    }
+                });
+                p.spawn((
+                    SettingsPageRoot(SettingsPage::General),
+                    Node {
+                        width: Val::Percent(100.),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(8.),
+                        ..default()
+                    },
+                ))
+                .with_children(|p| {
+                    menu_button(
+                        p,
+                        if settings.vsync_enabled {
+                            "VSync: ON"
+                        } else {
+                            "VSync: OFF"
+                        },
+                        VsyncToggleButton,
+                    );
+                    menu_button(
+                        p,
+                        if settings.show_fps {
+                            "FPS Counter: ON"
+                        } else {
+                            "FPS Counter: OFF"
+                        },
+                        FpsToggleButton,
+                    );
+                    menu_button(p, &fps_label(settings.fps_limit), FpsLimitButton);
+                    volume(
+                        p,
+                        "Effects Volume",
+                        settings.effects_volume,
+                        EffectsVolumeSlider,
+                    );
+                    volume(p, "Music Volume", settings.music_volume, MusicVolumeSlider);
+                    menu_button(
+                        p,
+                        if settings.dev_mode {
+                            "Dev Mode: ON"
+                        } else {
+                            "Dev Mode: OFF"
+                        },
+                        DevModeToggleButton,
+                    );
+                });
+                p.spawn((
+                    SettingsPageRoot(SettingsPage::Graphics),
+                    Node {
+                        display: Display::None,
+                        width: Val::Percent(100.),
+                        flex_direction: FlexDirection::Row,
+                        flex_wrap: FlexWrap::Wrap,
+                        column_gap: Val::Px(6.),
+                        row_gap: Val::Px(4.),
+                        ..default()
+                    },
+                ));
+                // Filled by `game_modes::fill_game_modes_page`.
+                p.spawn((
+                    SettingsPageRoot(SettingsPage::GameModes),
+                    Node {
+                        display: Display::None,
+                        width: Val::Percent(100.),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.),
+                        ..default()
+                    },
+                ));
+                menu_button(p, "Back to pause menu", BackToMenuButton);
+            });
+        });
+}
+fn fps_label(fps: u32) -> String {
+    if fps == 0 {
+        "FPS Limit: Unlimited".into()
+    } else {
+        format!("FPS Limit: {fps}")
     }
 }
-
+pub fn cleanup_settings_menu(mut commands: Commands, roots: Query<Entity, With<SettingsMenuRoot>>) {
+    for e in &roots {
+        commands.entity(e).despawn();
+    }
+}
 pub fn handle_settings_buttons(
-    mut param_set: ParamSet<(
-        Query<
-            (
-                Entity,
-                &Interaction,
-                &mut BackgroundColor,
-                &Children,
-                Option<&VsyncToggleButton>,
-                Option<&FpsToggleButton>,
-                Option<&FpsLimitButton>,
-                Option<&DevModeToggleButton>,
-                Option<&BackToMenuButton>,
-            ),
-            Changed<Interaction>,
-        >,
-        Query<(&mut BackgroundColor, &Children), With<FpsLimitButton>>,
-    )>,
+    buttons: Query<
+        (
+            &PickingInteraction,
+            Option<&VsyncToggleButton>,
+            Option<&FpsToggleButton>,
+            Option<&FpsLimitButton>,
+            Option<&DevModeToggleButton>,
+            Option<&BackToMenuButton>,
+            Option<&SettingsTab>,
+        ),
+        (Changed<PickingInteraction>, With<SettingsControl>),
+    >,
     mut settings: ResMut<GameSettings>,
-    mut next_state: ResMut<NextState<GameState>>,
-    mut window_query: Query<&mut Window, With<PrimaryWindow>>,
-    mut text_query: Query<&mut Text, With<ToggleButtonText>>,
-    mut text_color_query: Query<&mut TextColor>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
+    mut nav: ResMut<SettingsNavigation>,
+    mut state: ResMut<NextState<GameState>>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    for (_entity, interaction, mut color, children, vsync_btn, fps_btn, fps_limit_btn, dev_btn, back_btn) in &mut param_set.p0() {
-        match *interaction {
-            Interaction::Pressed => {
-                if vsync_btn.is_some() {
-                    // Toggle VSync
-                    settings.vsync_enabled = !settings.vsync_enabled;
-
-                    // Apply VSync setting to window
-                    if let Ok(mut window) = window_query.single_mut() {
-                        window.present_mode = if settings.vsync_enabled {
-                            PresentMode::AutoVsync
-                        } else {
-                            PresentMode::AutoNoVsync
-                        };
-                    }
-
-                    // Update VSync button text
-                    for child in children.iter() {
-                        if let Ok(mut text) = text_query.get_mut(child) {
-                            **text = if settings.vsync_enabled { "VSync: ON" } else { "VSync: OFF" }.to_string();
-                        }
-                    }
-                } else if fps_btn.is_some() {
-                    // Toggle FPS counter
-                    settings.show_fps = !settings.show_fps;
-
-                    // Update button text
-                    for child in children.iter() {
-                        if let Ok(mut text) = text_query.get_mut(child) {
-                            **text = if settings.show_fps { "FPS Counter: ON" } else { "FPS Counter: OFF" }.to_string();
-                        }
-                    }
-                } else if fps_limit_btn.is_some() {
-                    // Only allow changing FPS limit when VSync is off
-                    if !settings.vsync_enabled {
-                        // Check if right-click for backwards cycling
-                        let cycle_backwards = mouse_button.just_pressed(MouseButton::Right);
-
-                        if cycle_backwards {
-                            // Cycle backwards: 30 <- 60 <- 120 <- 144 <- 240 <- Unlimited (0) <- 30
-                            settings.fps_limit = match settings.fps_limit {
-                                60 => 30,
-                                120 => 60,
-                                144 => 120,
-                                240 => 144,
-                                0 => 240,
-                                _ => 0,
-                            };
-                        } else {
-                            // Left-click: Cycle forwards: 30 -> 60 -> 120 -> 144 -> 240 -> Unlimited (0) -> 30
-                            settings.fps_limit = match settings.fps_limit {
-                                30 => 60,
-                                60 => 120,
-                                120 => 144,
-                                144 => 240,
-                                240 => 0,
-                                _ => 30,
-                            };
-                        }
-
-                        // Update button text
-                        for child in children.iter() {
-                            if let Ok(mut text) = text_query.get_mut(child) {
-                                **text = if settings.fps_limit == 0 {
-                                    "FPS Limit: Unlimited".to_string()
-                                } else {
-                                    format!("FPS Limit: {}", settings.fps_limit)
-                                };
-                            }
-                        }
-                    }
-                } else if dev_btn.is_some() {
-                    // Toggle Dev Mode
-                    settings.dev_mode = !settings.dev_mode;
-
-                    info!("🔧 Dev Mode {}", if settings.dev_mode { "ENABLED" } else { "DISABLED" });
-
-                    // Update button text
-                    for child in children.iter() {
-                        if let Ok(mut text) = text_query.get_mut(child) {
-                            **text = if settings.dev_mode { "Dev Mode: ON" } else { "Dev Mode: OFF" }.to_string();
-                        }
-                    }
-                } else if back_btn.is_some() {
-                    next_state.set(GameState::Paused);
-                }
-            }
-            Interaction::Hovered => {
-                // Don't highlight if it's the FPS limit button and VSync is enabled
-                if fps_limit_btn.is_some() && settings.vsync_enabled {
-                    // Keep it grayed out
+    for (i, vsync, fps, limit, dev, back, tab) in &buttons {
+        if *i != PickingInteraction::Pressed {
+            continue;
+        }
+        if let Some(tab) = tab {
+            nav.0 = tab.0;
+        } else if back.is_some() {
+            state.set(GameState::Paused);
+        } else if vsync.is_some() {
+            settings.vsync_enabled = !settings.vsync_enabled;
+            for mut w in &mut windows {
+                w.present_mode = if settings.vsync_enabled {
+                    PresentMode::AutoVsync
                 } else {
-                    *color = BackgroundColor(Color::srgb(0.6, 0.6, 0.8));
-                }
+                    PresentMode::AutoNoVsync
+                };
             }
-            Interaction::None => {
-                if vsync_btn.is_some() || fps_btn.is_some() {
-                    *color = BackgroundColor(Color::srgb(0.3, 0.3, 0.6));
-                } else if fps_limit_btn.is_some() {
-                    // Always reflect current VSync state
-                    *color = BackgroundColor(if settings.vsync_enabled {
-                        Color::srgb(0.2, 0.2, 0.2) // Keep grayed out when VSync is on
-                    } else {
-                        Color::srgb(0.3, 0.6, 0.3)
-                    });
-                } else if dev_btn.is_some() {
-                    *color = BackgroundColor(Color::srgb(0.6, 0.3, 0.3));
-                } else if back_btn.is_some() {
-                    *color = BackgroundColor(Color::srgb(0.5, 0.5, 0.5));
-                }
-            }
+        } else if fps.is_some() {
+            settings.show_fps = !settings.show_fps;
+        } else if limit.is_some() && !settings.vsync_enabled {
+            settings.fps_limit = match settings.fps_limit {
+                30 => 60,
+                60 => 120,
+                120 => 144,
+                144 => 240,
+                240 => 0,
+                _ => 30,
+            };
+        } else if dev.is_some() {
+            settings.dev_mode = !settings.dev_mode;
         }
     }
-
-    // Update FPS limit button appearance based on current VSync state
-    if let Ok((mut fps_bg, fps_children)) = param_set.p1().single_mut() {
-        *fps_bg = BackgroundColor(if settings.vsync_enabled {
-            Color::srgb(0.2, 0.2, 0.2)
+}
+pub fn settings_layout_and_style(
+    nav: Res<SettingsNavigation>,
+    settings: Res<GameSettings>,
+    mut pages: Query<(&SettingsPageRoot, &mut Node)>,
+    mut buttons: Query<
+        (
+            &PickingInteraction,
+            &mut BackgroundColor,
+            &Children,
+            Option<&SettingsTab>,
+            Has<FpsLimitButton>,
+            Has<VsyncToggleButton>,
+            Has<FpsToggleButton>,
+            Has<DevModeToggleButton>,
+        ),
+        With<SettingsControl>,
+    >,
+    mut texts: Query<&mut Text, With<ToggleButtonText>>,
+) {
+    for (page, mut node) in &mut pages {
+        node.display = if page.0 == nav.0 {
+            Display::Flex
         } else {
-            Color::srgb(0.3, 0.6, 0.3)
-        });
-
-        // Update text color
-        for child in fps_children.iter() {
-            if let Ok(mut text_color) = text_color_query.get_mut(child) {
-                *text_color = TextColor(if settings.vsync_enabled {
-                    Color::srgb(0.5, 0.5, 0.5)
-                } else {
-                    Color::WHITE
-                });
+            Display::None
+        };
+    }
+    for (interaction, mut color, children, tab, limit, vsync, fps, dev) in &mut buttons {
+        let disabled = limit && settings.vsync_enabled;
+        color.0 = if disabled {
+            Color::srgb(0.08, 0.09, 0.10)
+        } else if *interaction == PickingInteraction::Pressed {
+            Color::srgb(0.20, 0.42, 0.46)
+        } else if *interaction == PickingInteraction::Hovered {
+            Color::srgb(0.16, 0.28, 0.31)
+        } else if tab.is_some_and(|t| t.0 == nav.0) {
+            Color::srgb(0.13, 0.32, 0.36)
+        } else {
+            Color::srgb(0.10, 0.16, 0.19)
+        };
+        let label = if vsync {
+            Some(format!(
+                "VSync: {}",
+                if settings.vsync_enabled { "ON" } else { "OFF" }
+            ))
+        } else if fps {
+            Some(format!(
+                "FPS Counter: {}",
+                if settings.show_fps { "ON" } else { "OFF" }
+            ))
+        } else if limit {
+            Some(fps_label(settings.fps_limit))
+        } else if dev {
+            Some(format!(
+                "Dev Mode: {}",
+                if settings.dev_mode { "ON" } else { "OFF" }
+            ))
+        } else {
+            None
+        };
+        if let Some(label) = label {
+            for child in children {
+                if let Ok(mut text) = texts.get_mut(*child) {
+                    if **text != label {
+                        **text = label.clone();
+                    }
+                }
             }
         }
     }
@@ -472,12 +358,36 @@ pub fn handle_settings_buttons(
 /// Handle volume slider interactions using RelativeCursorPosition
 pub fn handle_volume_sliders(
     mut settings: ResMut<GameSettings>,
-    container_query: Query<(&Children, Option<&EffectsVolumeSlider>, Option<&MusicVolumeSlider>), Or<(With<EffectsVolumeSlider>, With<MusicVolumeSlider>)>>,
-    slider_bar_query: Query<(&Interaction, &RelativeCursorPosition, &Children), With<VolumeSliderBar>>,
+    container_query: Query<
+        (
+            &Children,
+            Option<&EffectsVolumeSlider>,
+            Option<&MusicVolumeSlider>,
+        ),
+        Or<(With<EffectsVolumeSlider>, With<MusicVolumeSlider>)>,
+    >,
+    slider_bar_query: Query<
+        (&PickingInteraction, &RelativeCursorPosition, &Children),
+        With<VolumeSliderBar>,
+    >,
     mut label_query: Query<&mut Text, With<VolumeSliderLabel>>,
     mut param_set: ParamSet<(
-        Query<&mut Node, (Without<VolumeSliderHandle>, Without<VolumeSliderBar>, Without<VolumeSliderLabel>)>,
-        Query<&mut Node, (With<VolumeSliderHandle>, Without<VolumeSliderBar>, Without<VolumeSliderLabel>)>,
+        Query<
+            &mut Node,
+            (
+                Without<VolumeSliderHandle>,
+                Without<VolumeSliderBar>,
+                Without<VolumeSliderLabel>,
+            ),
+        >,
+        Query<
+            &mut Node,
+            (
+                With<VolumeSliderHandle>,
+                Without<VolumeSliderBar>,
+                Without<VolumeSliderLabel>,
+            ),
+        >,
     )>,
     mouse_button: Res<ButtonInput<MouseButton>>,
 ) {
@@ -492,7 +402,10 @@ pub fn handle_volume_sliders(
         for child in container_children.iter() {
             if let Ok((interaction, relative_cursor, bar_children)) = slider_bar_query.get(child) {
                 // Check if mouse is over the slider bar and pressed
-                if matches!(interaction, Interaction::Pressed | Interaction::Hovered) {
+                if matches!(
+                    interaction,
+                    PickingInteraction::Pressed | PickingInteraction::Hovered
+                ) {
                     // Get the normalized cursor position (relative to the bar)
                     if let Some(normalized_pos) = relative_cursor.normalized {
                         // RelativeCursorPosition uses range (-0.5, -0.5) to (0.5, 0.5)
@@ -511,7 +424,11 @@ pub fn handle_volume_sliders(
                         // Update label
                         for label_child in container_children.iter() {
                             if let Ok(mut text) = label_query.get_mut(label_child) {
-                                let label = if effects_marker.is_some() { "Effects Volume" } else { "Music Volume" };
+                                let label = if effects_marker.is_some() {
+                                    "Effects Volume"
+                                } else {
+                                    "Music Volume"
+                                };
                                 **text = format!("{}: {}%", label, (volume * 100.0) as i32);
                             }
                         }
@@ -531,5 +448,68 @@ pub fn handle_volume_sliders(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn graphics_navigation_and_hover_reset_are_owned_by_settings() {
+        let mut app = App::new();
+        app.insert_resource(SettingsNavigation::default())
+            .insert_resource(GameSettings::new())
+            .add_systems(Update, settings_layout_and_style);
+        let general = app
+            .world_mut()
+            .spawn((SettingsPageRoot(SettingsPage::General), Node::default()))
+            .id();
+        let graphics = app
+            .world_mut()
+            .spawn((SettingsPageRoot(SettingsPage::Graphics), Node::default()))
+            .id();
+        let button = app
+            .world_mut()
+            .spawn((
+                SettingsControl,
+                PickingInteraction::Hovered,
+                BackgroundColor(Color::BLACK),
+            ))
+            .with_child((Text::new("Graphics control"), ToggleButtonText))
+            .id();
+        let other = app
+            .world_mut()
+            .spawn((
+                Button,
+                PickingInteraction::Hovered,
+                BackgroundColor(Color::WHITE),
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Node>(graphics).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<BackgroundColor>(other).unwrap().0,
+            Color::WHITE
+        );
+        *app.world_mut()
+            .get_mut::<PickingInteraction>(button)
+            .unwrap() = PickingInteraction::None;
+        app.world_mut().resource_mut::<SettingsNavigation>().0 = SettingsPage::Graphics;
+        app.update();
+        assert_eq!(
+            app.world().get::<Node>(general).unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            app.world().get::<Node>(graphics).unwrap().display,
+            Display::Flex
+        );
+        assert_eq!(
+            app.world().get::<BackgroundColor>(button).unwrap().0,
+            Color::srgb(0.10, 0.16, 0.19)
+        );
     }
 }

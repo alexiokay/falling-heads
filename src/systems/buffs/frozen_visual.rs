@@ -1,12 +1,11 @@
-use bevy::prelude::*;
-use avian3d::prelude::{LinearVelocity, Restitution, Mass};
-use crate::components::frozen::FrozenStacks;
-use crate::components::projectile::Snowball;
-use crate::components::hero::Hero;
-use crate::components::villager::Villager;
 use crate::components::block::Block;
+use crate::components::frozen::FrozenStacks;
+use crate::components::hero::Hero;
+use crate::components::projectile::Snowball;
+use crate::components::villager::Villager;
 use crate::resources::spatial_hash::SpatialHash;
-use crate::states::GameState;
+use avian3d::prelude::{LinearVelocity, Mass, Restitution};
+use bevy::prelude::*;
 
 /// Marker component for snowball splash particles
 #[derive(Component)]
@@ -24,14 +23,25 @@ pub struct FrozenPlugin;
 
 impl Plugin for FrozenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (
-            snowball_collision_system,
-            frozen_stacks_update_system,
-            apply_freeze_movement_penalty,
-            update_splash_particles,
-            update_freeze_overlay,
-        ).run_if(in_state(GameState::Playing)));
+        app.add_systems(
+            Update,
+            (
+                snowball_collision_system,
+                frozen_stacks_update_system,
+                apply_freeze_movement_penalty,
+                update_splash_particles,
+                update_snowballs,
+            )
+                .run_if(in_state(crate::states::InGame)),
+        );
 
+        app.add_systems(
+            PostUpdate,
+            update_freeze_overlay
+                .after(crate::systems::biome_teleport::finish_biome_teleport)
+                .before(TransformSystems::Propagate)
+                .run_if(in_state(crate::states::InGame)),
+        );
         info!("FrozenPlugin loaded");
     }
 }
@@ -40,19 +50,27 @@ impl Plugin for FrozenPlugin {
 fn snowball_collision_system(
     mut commands: Commands,
     spatial_hash: Res<SpatialHash>,
-    snowball_query: Query<(Entity, &Transform), With<Snowball>>,
+    snowball_query: Query<(Entity, &Transform, &Snowball)>,
     block_query: Query<&Transform, With<Block>>,
-    mut target_query: Query<(Entity, &Transform, Option<&mut FrozenStacks>, &mut LinearVelocity), Or<(With<Hero>, With<Villager>)>>,
+    mut target_query: Query<
+        (
+            Entity,
+            &Transform,
+            Option<&mut FrozenStacks>,
+            &mut LinearVelocity,
+        ),
+        Or<(With<Hero>, With<Villager>)>,
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    const SNOWBALL_HIT_RADIUS: f32 = 40.0;  // Collision radius for entities
-    const SNOWBALL_RADIUS: f32 = 12.0;      // Snowball size (24x24, use half)
-    const BLOCK_RADIUS: f32 = 32.0;         // Block size (64x64, use half)
-    const PUSH_FORCE: f32 = 50.0;           // Small push on hit
+    const SNOWBALL_HIT_RADIUS: f32 = 40.0; // Collision radius for entities
+    const SNOWBALL_RADIUS: f32 = 12.0; // Snowball size (24x24, use half)
+    const BLOCK_RADIUS: f32 = 32.0; // Block size (64x64, use half)
+    const PUSH_FORCE: f32 = 50.0; // Small push on hit
 
-    for (snowball_entity, snowball_transform) in snowball_query.iter() {
+    for (snowball_entity, snowball_transform, snowball) in snowball_query.iter() {
         let snowball_pos = snowball_transform.translation;
         let mut snowball_hit_something = false;
 
@@ -68,12 +86,21 @@ fn snowball_collision_system(
 
                 if distance < (SNOWBALL_RADIUS + BLOCK_RADIUS) {
                     // Snowball hit wall - spawn splash particles and despawn
-                    info!("SNOWBALL HIT BLOCK: entity={:?}, distance={:.1}, snowball_pos=({:.0},{:.0}), block_pos=({:.0},{:.0})",
-                        snowball_entity, distance, snowball_pos.x, snowball_pos.y, block_pos.x, block_pos.y);
+                    info!(
+                        "SNOWBALL HIT BLOCK: entity={:?}, distance={:.1}, snowball_pos=({:.0},{:.0}), block_pos=({:.0},{:.0})",
+                        snowball_entity,
+                        distance,
+                        snowball_pos.x,
+                        snowball_pos.y,
+                        block_pos.x,
+                        block_pos.y
+                    );
 
                     // Play snowball hit sound
                     commands.spawn((
-                        AudioPlayer::new(asset_server.load("audio/sfx/projectiles/snowball/hurt1.ogg")),
+                        AudioPlayer::new(
+                            asset_server.load("audio/sfx/projectiles/snowball/hurt1.ogg"),
+                        ),
                         PlaybackSettings::DESPAWN,
                     ));
 
@@ -91,7 +118,9 @@ fn snowball_collision_system(
                                 ..default()
                             })),
                             Transform::from_translation(snowball_pos + offset),
-                            SplashParticle { lifetime: Timer::from_seconds(0.3, TimerMode::Once) },
+                            SplashParticle {
+                                lifetime: Timer::from_seconds(0.3, TimerMode::Once),
+                            },
                         ));
                     }
 
@@ -102,12 +131,16 @@ fn snowball_collision_system(
             }
         }
 
-        if snowball_hit_something {
+        // Reflected (friendly) snowballs never freeze the hero or villagers.
+        if snowball_hit_something || snowball.team == crate::components::projectile::Team::Friendly
+        {
             continue; // Skip to next snowball
         }
 
         // Check collision with hero/villagers
-        for (target_entity, target_transform, frozen_stacks, mut velocity) in target_query.iter_mut() {
+        for (target_entity, target_transform, frozen_stacks, mut velocity) in
+            target_query.iter_mut()
+        {
             let target_pos = target_transform.translation;
             let distance = snowball_pos.distance(target_pos);
 
@@ -135,7 +168,9 @@ fn snowball_collision_system(
                             ..default()
                         })),
                         Transform::from_translation(target_pos + offset),
-                        SplashParticle { lifetime: Timer::from_seconds(0.3, TimerMode::Once) },
+                        SplashParticle {
+                            lifetime: Timer::from_seconds(0.3, TimerMode::Once),
+                        },
                     ));
                 }
 
@@ -152,11 +187,11 @@ fn snowball_collision_system(
                 }
 
                 // Small push back effect
-                let push_direction = (target_pos - snowball_pos).normalize();
+                let push_direction = (target_pos - snowball_pos).normalize_or_zero();
                 velocity.x += push_direction.x * PUSH_FORCE;
                 velocity.y += push_direction.y * PUSH_FORCE;
 
-                break;  // Snowball can only hit one target
+                break; // Snowball can only hit one target
             }
         }
     }
@@ -172,7 +207,7 @@ fn frozen_stacks_update_system(
         // Tick all stack timers
         frozen.stacks.retain_mut(|stack| {
             stack.timer.tick(time.delta());
-            !stack.timer.is_finished()  // Keep stacks that haven't expired
+            !stack.timer.is_finished() // Keep stacks that haven't expired
         });
 
         // If all stacks expired, remove FrozenStacks component
@@ -202,21 +237,50 @@ fn update_splash_particles(
     }
 }
 
+/// Bounce and mass an actor had before it froze solid, restored when it thaws.
+#[derive(Component)]
+struct PreFreezePhysics {
+    restitution: Restitution,
+    mass: f32,
+}
+
 /// Apply movement speed penalty based on freeze level
 fn apply_freeze_movement_penalty(
-    mut frozen_query: Query<(&FrozenStacks, &mut LinearVelocity, &mut Restitution, &mut Mass), Or<(With<Hero>, With<Villager>)>>,
+    mut commands: Commands,
+    mut frozen_query: Query<
+        (
+            Entity,
+            Option<&FrozenStacks>,
+            Option<&PreFreezePhysics>,
+            &mut LinearVelocity,
+            &mut Restitution,
+            &mut Mass,
+        ),
+        (
+            Or<(With<Hero>, With<Villager>)>,
+            Or<(With<FrozenStacks>, With<PreFreezePhysics>)>,
+        ),
+    >,
 ) {
-    for (frozen, mut velocity, mut restitution, mut mass) in frozen_query.iter_mut() {
+    for (entity, frozen, saved, mut velocity, mut restitution, mut mass) in frozen_query.iter_mut()
+    {
         // If fully frozen (6 stacks), become ice cube - no bouncing, heavy, no horizontal movement
-        if frozen.is_fully_frozen() {
-            velocity.x = 0.0;  // Stop all horizontal movement
-            velocity.y = velocity.y.min(0.0);  // Only allow downward movement
-            *restitution = Restitution::new(0.0);  // No bouncing
-            mass.0 = 5.0;  // 5x heavier - falls much faster
-        } else {
-            // Normal movement when not fully frozen
-            *restitution = Restitution::new(1.5);  // Normal bounce (HERO_BOUNCE)
-            mass.0 = 1.0;  // Normal mass
+        if frozen.is_some_and(FrozenStacks::is_fully_frozen) {
+            if saved.is_none() {
+                commands.entity(entity).insert(PreFreezePhysics {
+                    restitution: *restitution,
+                    mass: mass.0,
+                });
+            }
+            velocity.x = 0.0; // Stop all horizontal movement
+            velocity.y = velocity.y.min(0.0); // Only allow downward movement
+            *restitution = Restitution::new(0.0); // No bouncing
+            mass.0 = 5.0; // 5x heavier - falls much faster
+        } else if let Some(saved) = saved {
+            // Thawed (or every stack expired at once): restore the actor's own physics.
+            *restitution = saved.restitution;
+            mass.0 = saved.mass;
+            commands.entity(entity).remove::<PreFreezePhysics>();
         }
     }
 }
@@ -224,7 +288,10 @@ fn apply_freeze_movement_penalty(
 /// Create/update/remove freeze overlays based on freeze stack count
 fn update_freeze_overlay(
     mut commands: Commands,
-    frozen_query: Query<(Entity, &FrozenStacks, &Transform), Or<(With<Hero>, With<Villager>)>>,
+    frozen_query: Query<
+        (Entity, &FrozenStacks, &Transform, Option<&Mesh3d>),
+        Or<(With<Hero>, With<Villager>)>,
+    >,
     mut overlay_query: Query<(Entity, &FreezeOverlay, &mut Transform), Without<FrozenStacks>>,
     mut overlay_material_query: Query<&mut MeshMaterial3d<StandardMaterial>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -234,34 +301,38 @@ fn update_freeze_overlay(
     // Track which entities currently have freeze stacks
     let mut frozen_entities = std::collections::HashSet::new();
 
-    for (entity, frozen, transform) in frozen_query.iter() {
+    for (entity, frozen, transform, face_mesh) in frozen_query.iter() {
+        let face = crate::systems::head_geometry::bounds(&meshes, face_mesh);
+        let mut fitted = crate::systems::head_geometry::overlay_transform(face, transform);
+        fitted.translation.z += crate::systems::actor_depth::ICE_OVERLAY;
         frozen_entities.insert(entity);
         let stack_count = frozen.stack_count();
 
         // Check if this entity already has an overlay
-        let existing_overlay = overlay_query.iter_mut()
+        let existing_overlay = overlay_query
+            .iter_mut()
             .find(|(_, overlay, _)| overlay.parent_entity == entity)
             .map(|(e, _, t)| (e, t));
 
         if let Some((overlay_entity, mut overlay_transform)) = existing_overlay {
             // Update overlay position to follow parent
-            overlay_transform.translation = transform.translation + Vec3::new(0.0, 0.0, 2.0);
+            *overlay_transform = fitted;
 
             // Update overlay alpha based on stack count
             if let Ok(material_handle) = overlay_material_query.get_mut(overlay_entity) {
                 let alpha = get_freeze_alpha(stack_count);
-                if let Some(material) = materials.get_mut(&material_handle.0) {
+                if let Some(mut material) = materials.get_mut(&material_handle.0) {
                     material.base_color = Color::srgba(1.0, 1.0, 1.0, alpha);
                 }
             }
         } else {
             // Create new overlay with ice texture
             let alpha = get_freeze_alpha(stack_count);
-            let overlay_pos = transform.translation + Vec3::new(0.0, 0.0, 2.0);
+            let _overlay_pos = transform.translation + Vec3::new(0.0, 0.0, 2.0);
             let ice_texture = asset_server.load("textures/blocks/iceland/ice.png");
 
             commands.spawn((
-                Mesh3d(meshes.add(Rectangle::new(64.0, 64.0))),  // Match character size
+                Mesh3d(meshes.add(Rectangle::new(64.0, 64.0))), // Match character size
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgba(1.0, 1.0, 1.0, alpha),
                     base_color_texture: Some(ice_texture),
@@ -269,8 +340,11 @@ fn update_freeze_overlay(
                     alpha_mode: AlphaMode::Blend,
                     ..default()
                 })),
-                Transform::from_translation(overlay_pos),
-                FreezeOverlay { parent_entity: entity },
+                fitted,
+                bevy::light::NotShadowCaster,
+                FreezeOverlay {
+                    parent_entity: entity,
+                },
             ));
         }
     }
@@ -286,12 +360,12 @@ fn update_freeze_overlay(
 /// Get freeze overlay alpha based on stack count (1-6)
 fn get_freeze_alpha(stack_count: usize) -> f32 {
     match stack_count {
-        1 => 0.15,  // Very faint ice
-        2 => 0.25,  // Light ice
-        3 => 0.40,  // Moderate ice
-        4 => 0.55,  // Strong ice
-        5 => 0.70,  // Heavy ice
-        _ => 0.85,  // Full freeze - nearly opaque ice
+        1 => 0.15, // Very faint ice
+        2 => 0.25, // Light ice
+        3 => 0.40, // Moderate ice
+        4 => 0.55, // Strong ice
+        5 => 0.70, // Heavy ice
+        _ => 0.85, // Full freeze - nearly opaque ice
     }
 }
 

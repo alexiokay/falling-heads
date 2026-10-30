@@ -1,0 +1,120 @@
+# MineHeads graphics and environment checklist — 23 October 2026
+
+This is a practical catalogue of major modern rendering techniques, not a claim that every possible effect is implemented. Current renderer: Bevy 0.20.0 Vulkan with selectable raster/DLSS or Solari ray-traced lighting plus forward custom materials. A perspective world camera resolves to a texture; a separate native-resolution camera presents that texture, text and UI. The existing 64px art is intentionally retained. Lighting does not add detail absent from the source textures.
+
+## Available settings
+
+Escape → Settings → Graphics tab in the centred menu. Fourteen independently saved switches in graphics-settings.json: Lighting; Shadows; Ambient occlusion; Bloom; Atmospheric haze; Weather / moon lighting; Torches / lava lights; Anti-aliasing (FXAA); Weather particles; Teleport distortion; Animated liquids; DLSS Quality upscaling; Ray tracing (Solari); NVIDIA Frame Generation (2×). Turning off a visual effect does not disable fluid contact, damage, weather reactions or teleport safety. Shadows, AO and local lights require Lighting. HDR remains part of the world camera pipeline; it is not an extra selectable effect.
+
+## Implemented / configured
+
+| Technique | Current implementation | Switch / limitation |
+|---|---|---|
+| Physically based direct lighting | Lit terrain/resource StandardMaterials, roughness adjusted during wet weather | Lighting; actor sprites and some custom shaders remain unlit |
+| Directional shadow maps | Directional world light | Shadows; local lights intentionally do not cast expensive shadows |
+| Ambient occlusion (SSAO) | Depth/normal prepass, high-quality screen-space AO | Ambient occlusion; darkens nearby creases, does not hide objects |
+| HDR and tone mapping | HDR world resolved into a native LDR presentation camera | Internal pipeline, bloom is independently switchable |
+| Bloom | Thresholded HDR highlight glow (1.5 threshold, 0.035 intensity) | Bloom |
+| Ray-traced environment fill | Hemispherical environment map with day/night intensity | Ray tracing + Lighting; prevents unlit black shadow regions |
+| Local emissive lighting | At most twelve nearby torch/lava point lights, bounded range and gentle flicker | Torches / lava lights |
+| Lava emissive appearance | HDR lava shader output | Bloom adds glow; local light pool illuminates adjacent lit terrain |
+| Animated torch flames | Procedural tapered flame material on a small quad; textured wood shaft | Torch objects remain visible when local illumination is disabled |
+| Day/night colour | Smooth warm daylight / cool moonlight transition | Weather / moon lighting; no visible moon disc has been added |
+| Weather lighting | Storm-dependent dimming, material wetness/roughness response | Weather / moon lighting |
+| Atmospheric perspective | Biome-tinted distant haze plus occasional drifting mist in Forest, Underground and Iceland | Atmospheric haze; this is not volumetric fog or ray-marched smoke |
+| Anti-aliasing | FXAA | Anti-aliasing (FXAA); MSAA off to support SSAO/prepasses |
+| Precipitation | Existing rain, snow and fire-rain particles | Weather particles; simulation continues when hidden |
+| Teleport screen distortion | Existing chromatic/lens world transition | Teleport distortion; portal artwork and head animation remain |
+| Animated water/lava | Existing coherent fluid geometry and shader motion | Animated liquids; does not turn fluid simulation off |
+| Articulated model animation | New End dragon with wings/tips, jaw, legs and segmented tail | Natural rare encounter / DRAGON power; no separate graphics switch |
+| NVIDIA Frame Generation | Streamline Vulkan DLSS-G with Reflex pacing, one generated frame per rendered frame | NVIDIA Frame Generation (2×); requires supported GPU, VSync off and focused window; pauses during menus/teleport; higher Multi Frame Generation modes are not exposed |
+| DLSS Super Resolution | NVIDIA Quality upscaling, Vulkan, runtime support detection | DLSS Quality upscaling |
+| Hardware ray-traced lighting | Solari opaque direct/indirect illumination and shadows, bounded RT-only geometry instances | Ray tracing (Solari); requires Lighting |
+| DLSS Ray Reconstruction | Denoises Solari; Quality or native-resolution DLAA mode | Enabled with ray tracing; upscaling switch selects Quality/native |
+| Native UI composition | World renders to its own resolved texture; labels/UI are drawn at output resolution | Always active, prevents shared-target trails/black screens |
+| Frustum culling and streamed chunks | Existing engine visibility and chunk lifecycle | Infrastructure, not an artistic effect |
+
+## Not implemented in this build / next candidates
+
+| Group | Techniques | Recommendation for this game |
+|---|---|---|
+| Surface detail | Normal/bump maps, roughness/metallic maps, parallax/POM, displacement/tessellation, detail decals, layered materials, subsurface scattering | Author matching normal/roughness maps first; keep pixel-art readability. No invented toggle until the feature works. |
+| Indirect illumination | Baked lightmaps, irradiance/light probes, SSGI, voxel GI, full transparent path tracing | Solari opaque lighting is implemented; these alternative methods and full transparent transport are not. |
+| Reflections | Local reflection probes, planar reflection, SSR, ray-traced reflection | Water reflection/refraction needs scene-colour/depth access and correct compositing. Current flowing highlights are not actual reflections. |
+| Water optics | Refraction, absorption, depth tint, foam, shore wetness, projected caustics, surface waves, underwater scattering | Depth tint/edge foam and smooth coherent water geometry first. Water should transmit/reflect light rather than glow like lava. |
+| Atmosphere | Volumetric fog/smoke, volumetric clouds, aerial scattering, god rays, light shafts, heat haze | Bounded low-resolution fog/heat distortion suit the scene; current haze combines distance fog with sparse animated alpha mist bands. |
+| Shadows | Contact shadow enhancements, PCSS raster shadows, local-light raster shadows, baked shadows | Solari opaque ray-traced shadows are implemented. Other listed shadow methods remain future work. |
+| Image treatment | LUT colour grading, exposure controls, vignette, film grain, lens flare, dirt, depth of field, motion blur, sharpening | Optional restrained grading; motion blur/DOF can make fast small heads harder to read. Current teleport chromatic distortion is deliberately temporary. |
+| Temporal / spatial AA | TAA, SMAA, MSAA, temporal reconstruction, reactive masks | Evaluate against pixel art, transparent fluids, text and fast moving arrows. |
+| Upscaling | FSR, XeSS, dynamic resolution | DLSS Quality is implemented; these other upscalers are not. |
+| Additional frame generation | Higher DLSS Multi Frame Generation multipliers, FSR frame generation | Current NVIDIA 2× and Reflex are implemented; higher multipliers and FSR are not. |
+| Animation / particles | Vertex wind, skeletal animation, GPU particles, trails, soft particles, impact decals | Dragon uses a joint hierarchy, reactive boss movement and continuous fire breath. GPU particles and the other listed effects remain future work. |
+| Scalability | LOD/HLOD, impostors, occlusion culling/Hi-Z, batching, instancing, texture streaming/mipmaps, virtual texturing, VRS | These improve performance and differ from ambient occlusion. Audit actual engine paths before labelling them enabled. |
+| Shader packs | Named presets plus complete material/post-process configurations | Future Low / Balanced / Atmospheric presets can use the same settings; user-installed shader packs are not implemented. |
+
+All future artistic effects should have genuine settings controls once implemented. Rendering foundations and correctness fixes should not be optional.
+
+## DLSS and ray tracing: actual status
+
+Implemented using the SDK already installed in Commonfield's vendor directory. The earlier global-environment check missed this installation. MineHeads now configures those paths explicitly, includes the SR/RR runtime DLLs in each immutable release, and uses a separate app project ID. See NATIVE_RENDERER.md for build instructions, renderer switching and validation details.
+
+DLSS Quality operates in raster mode. Ray tracing enables Solari and DLSS Ray Reconstruction; switching upscaling off in RT mode selects native-resolution RR/DLAA. Turning both off restores native raster/FXAA. Runtime support is checked and the Settings status label reports what is active. NVIDIA Frame Generation is independently selectable at 2×. Its rendered/presented FPS counters distinguish simulation/render work from generated presents. Higher Multi Frame Generation modes are not exposed.
+
+This is a hybrid renderer: opaque lit terrain and models participate in secondary rays, while masked foliage writes the primary deferred G-buffer but is excluded from secondary rays. Blended sprites, water, barrier, portals and particles retain forward rendering. Torch/lava locations have emissive geometry proxies because Solari does not implement point lights. Full physically ray-traced transparent water/glass is not claimed. Solari is experimental; judge both image quality and frame time on this game's workloads.
+
+Primary references:
+- https://bevy.org/news/bevy-0-20/
+- https://github.com/bevyengine/dlss_wgpu
+- Commonfield's run-native-dlss.ps1, run-native-solari.ps1 and src/solari.rs.
+- Pinned Bevy 0.20.0 and dlss_wgpu 6.0.0 source.
+
+## Biome climate
+
+The table is an authored baseline, not real-world weather measurement. Temperature currently governs whether snow caps melt naturally; fire rain still supplies heat. Haze and tint drive atmosphere. Humidity and wind are defined for future systems but do not yet drive precipitation/current forces. Water no longer drains simply because it is old. Heat/fire rain and fluid reactions may consume it; ordinary warm-biome water is not silently removed.
+
+| Biome | Temperature °C | Humidity 0–1 | Wind 0–1 | Intended next effects |
+|---|---:|---:|---:|---|
+| Plains | 20 | .50 | .40 | Moderate rain, clear daylight |
+| Forest | 18 | .85 | .20 | Damp haze, slower drying, sheltered rain |
+| Desert | 38 | .12 | .65 | Heat shimmer, dust, explicitly heat-driven surface evaporation if approved |
+| Mountains | 2 | .40 | .90 | Gusts, drifting snow, cold exposed ledges |
+| Underground | 13 | .72 | .08 | Sheltered precipitation, cool damp pockets |
+| Nether | 65 | .04 | .45 | Lava heat, ember haze, local steam reactions |
+| End | 5 | .16 | .35 | Violet atmosphere, rare persistent dragon encounters |
+| Iceland | -15 | .35 | .75 | Persistent snow, freeze/thaw based on local heat |
+
+Other useful future properties: exposure/shelter, local heat sources, precipitation type/probability, visibility, vegetation moisture, surface friction and current strength. Use these to change environmental encounters; do not globally retune the nearly finished dry bouncing physics. A local temperature field should combine biome baseline, weather and lava/torch heat before adding evaporation/freezing. Current frozen-fluid thaw timers have not yet been migrated to that field.
+
+## Gameplay changes in this build
+
+- [x] Portal frame is decorative background geometry, without collision, health or mining dependency. Walk/fall into the opening or press E nearby to use it. No activation plate or wires.
+- [x] Deterministic portal opportunity reduced from 1/13 to 1/127 chunks, still subject to footprint/spawn constraints. Shared travel safety and cooldown remain.
+- [x] Portal fill uses continuous animated noise; removed periodic fleck/grid pattern and made the fill opaque to prevent background weather lines showing through.
+- [x] No age-based water evaporation. Fluid/weather reactions remain active.
+- [x] Deterministic varied arrow penetration: 3–8 units in blocks, 7–13 in heads, capped relative to actual tip length. Terrain arrows still do not mine blocks.
+- [x] End dragon encounters begin every 80–140 seconds spent in the End, at most one at a time. The dragon persists, circles, turns, seeks clear perches, takes damage through articulated hit regions and breathes continuous terrain-igniting fire. DRAGON power shares that implementation.
+- [x] Sparse cave-wall torches, removed when their supporting block disappears; existing oak texture plus flame shader.
+- [ ] Dedicated sculpted/painted dragon art and long-session encounter balance. Reactive boss behaviour is implemented; see ENCOUNTER_FIX_CHECKLIST.md.
+- [ ] Persist changed structures/fluid state across unloading and restarts.
+- [x] DLSS SR and hybrid Solari/DLSS RR integration; see native validation record.
+- [x] Removed the 52-unit near-ground waterfall expansion rule. Airborne water/lava keep a constant ribbon width, independent of transport-cell volume; only supported pools spread horizontally.
+
+## Latest correction pass
+
+- DLSS torch lighting: local Bevy PBR patch computes cluster lookup factors using the internal main-pass resolution. Native and SR comparisons retain the same lights.
+- Background appearance: the proposed brighter matte treatment was rejected by the user and reverted. Previous base intensity, textured emission and default surface response are retained.
+- Steam and water do not cast rectangular shadow-map silhouettes. This removes steam-billboard shadows from newly cooled obsidian.
+- Dragon gains layered scales, belly armor, horns, teeth, wing ribs, claws and tail spines. Jaw, wings, legs, tail and chest have distinct motion; perch/breath states alter the pose. Existing burning behavior is preserved.
+- Snowballs can freeze shallow supported water. Ice stores the original water volume for thawing. Occupied cells and airborne ribbons remain protected against solidification.
+- Snow particles share mesh/material handles while retaining the same count, size variation, textures and motion. Empty fluid meshes are not re-uploaded repeatedly. Renderer-mode checks no longer mark every material as modified each frame.
+- Shadows remain enabled by default; existing saved user preferences are respected. Re-enabling shadow maps rebuilds the sun views while preserving the custom cascade range.
+
+See PERFORMANCE_NOTES.md for measurements, remaining profiling work and optimization tradeoffs.
+
+## 24 October: terrain damage and simpler resolution control
+
+Graphics now has one Quality/Balanced/Performance slider. It updates the DLSS input-resolution mode on release, including with Ray Reconstruction enabled. Raster upscaling selects model M automatically; separate model/quality toggle buttons are hidden. General still contains Effects and Music Volume sliders.
+
+Damaged terrain in RT receives cracks in its deferred albedo/G-buffer, rather than relying only on a transparent forward overlay after denoising. The raster overlay remains for the raster path. The terrain fallback-material system excludes this extended material, preserving it across frames; switching back restores the original species/surface material. Generated crack materials are released when their block disappears or changes renderer.
+
+RT caster inclusion follows the camera footprint plus an 800-unit margin instead of a fixed hero-centred radius. Direct lighting uses ReSTIR with 16 primary samples, a lower confidence cap and a 12-sample world-cache temporal limit to reduce persistence of outdated lighting after destruction. Solari samples a broader 0.12-radian sun disk to soften shadow edges at this game's scale. This remains experimental Solari rendering, not a promise of identical raster and RT shadows or a completed photorealistic renderer.

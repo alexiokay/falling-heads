@@ -1,148 +1,297 @@
-use bevy::prelude::*;
-use bevy::window::{WindowResolution, PresentMode};
+use avian3d::prelude::*;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::prelude::*;
+use bevy::window::{PresentMode, WindowResolution};
 use bevy::winit::WinitSettings;
-use avian3d::{math::*, prelude::*};
 use std::time::{Duration, Instant};
 
+mod api;
 mod components;
-mod resources;
-mod systems;
+mod config;
+mod diagnostics;
 mod events;
 mod plugins;
-mod api;
-mod utils;
-mod config;
+mod resources;
+mod smoke_test;
 mod states;
+mod systems;
+mod utils;
+mod world_preview;
+// Test and probe launch modes, left out of player builds (--no-default-features)
+#[cfg(feature = "probes")]
+mod crowd_probe;
+#[cfg(feature = "probes")]
+mod depth_probe;
+#[cfg(feature = "probes")]
+mod ecology_probe;
+#[cfg(feature = "probes")]
+mod head_size_probe;
+#[cfg(feature = "probes")]
+mod overhaul_probe;
+#[cfg(feature = "probes")]
+mod polish_probe;
+#[cfg(feature = "probes")]
+mod powers_probe;
+#[cfg(feature = "probes")]
+mod refinement_probe;
+#[cfg(feature = "probes")]
+mod snow_ghast_probe;
+#[cfg(feature = "probes")]
+mod ui_smoke;
+#[cfg(feature = "probes")]
+mod visual_probe;
+#[cfg(feature = "probes")]
+mod water_probe;
 
 use plugins::{
-    physics_plugin::PhysicsPlugin,
-    gameplay_plugin::GameplayPlugin,
-    powers_plugin::PowersPlugin,
-    rendering_plugin::RenderingPlugin,
+    asset_loader_plugin::AssetLoaderPlugin, audio_plugin::AudioPlugin,
+    external_api_plugin::ExternalApiPlugin, gameplay_plugin::GameplayPlugin,
+    physics_plugin::PhysicsPlugin, powers_plugin::PowersPlugin, rendering_plugin::RenderingPlugin,
     ui_plugin::UiPlugin,
-    audio_plugin::AudioPlugin,
-    external_api_plugin::ExternalApiPlugin,
-    asset_loader_plugin::AssetLoaderPlugin,
 };
 // Buff systems
 use systems::buffs::buff_core::BuffPlugin;
-use systems::buffs::frozen_visual::FrozenPlugin;
 use systems::buffs::burning_visual::BurningVisualPlugin;
+use systems::buffs::frozen_visual::FrozenPlugin;
+use systems::buffs::status_effects::StatusEffectsPlugin;
 
 // Weather systems
-use systems::weather::weather_core::WeatherSystemPlugin;
 use systems::weather::snow_accumulation::SnowAccumulationPlugin;
+use systems::weather::weather_core::WeatherSystemPlugin;
 
 // UI systems
+use systems::ui::commands_panel::CommandsPanelPlugin;
+use systems::ui::dev_panel::DevPanelPlugin;
 use systems::ui::heart_ui::HeartUIPlugin;
 use systems::ui::username_label::UsernameLabelPlugin;
-use systems::ui::dev_panel::DevPanelPlugin;
-use systems::ui::commands_panel::CommandsPanelPlugin;
 use systems::ui::xp_bar::XpBarUIPlugin;
 
 // Progression systems
 use systems::progression::experience::ExperiencePlugin;
 
 // Other systems
-use systems::projectile_system::ProjectilePlugin;
-use systems::enemy_ai_system::EnemyAIPlugin;
-use systems::damage_visual_system::DamageVisualPlugin;
-use systems::block_damage_overlay_system::BlockDamageOverlayPlugin;
-use systems::death_particle_system::DeathParticlePlugin;
-use systems::collision_debug_system::CollisionDebugPlugin;
-use systems::random_events::RandomEventPlugin;
-use systems::lootbox_system::LootboxPlugin;
-use systems::randombox_system::RandomBoxPlugin;
 use resources::asset_handles::BlockTextures;
 use resources::material_cache::MaterialCache;
 use resources::mesh_cache::MeshCache;
 use resources::settings::GameSettings;
 use resources::world_config::WorldConfig;
 use states::GameState;
+use systems::block_damage_overlay_system::BlockDamageOverlayPlugin;
+use systems::collision_debug_system::CollisionDebugPlugin;
+use systems::damage_visual_system::DamageVisualPlugin;
+use systems::death_particle_system::DeathParticlePlugin;
+use systems::enemy_ai_system::EnemyAIPlugin;
+use systems::lootbox_system::LootboxPlugin;
 use systems::performance_diagnostics::{PerformanceTracker, log_performance_metrics};
-use utils::system_sets::configure_system_sets;
+use systems::projectile_system::ProjectilePlugin;
+use systems::random_events::RandomEventPlugin;
+use systems::randombox_system::RandomBoxPlugin;
 
 fn main() {
+    if std::env::args().any(|a| a == "--export-world-preview") {
+        if let Err(e) = world_preview::run() {
+            eprintln!("World preview: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    let session = diagnostics::Session::start()
+        .map_err(|e| eprintln!("Cannot create diagnostics: {e}"))
+        .ok();
     let mut app = App::new();
-    let settings = GameSettings::new();
+    if let Some(session) = &session {
+        app.insert_resource(session.clone());
+    }
+    #[cfg(feature = "probes")]
+    if std::env::args().any(|a| a == "--diagnostics-test-clean" || a == "--diagnostics-test-panic")
+    {
+        app.add_plugins(bevy::log::LogPlugin {
+            custom_layer: diagnostics::layer,
+            ..default()
+        });
+        info!("Diagnostics self-test log entry");
+        if std::env::args().any(|a| a == "--diagnostics-test-panic") {
+            panic!("Intentional diagnostics self-test panic");
+        }
+        if let Some(session) = session {
+            session.finish(0);
+        }
+        return;
+    }
+    #[cfg(target_os = "windows")]
+    systems::frame_generation::prepare(&mut app);
+    // Player settings from the last session (test and probe runs use the defaults)
+    let mut settings = if resources::settings::persistence_enabled() {
+        GameSettings::load()
+    } else {
+        GameSettings::new()
+    };
+    // Test, probe and benchmark runs (or MINEHEADS_QUIET=1): music off, effects
+    // at 5%, so automated checks are not loud.
+    let quiet = !resources::settings::persistence_enabled()
+        || std::env::var("MINEHEADS_QUIET").is_ok_and(|v| v != "0");
+    if quiet {
+        settings.music_volume = 0.0; // Music fully off in test runs
+        settings.effects_volume = 0.05;
+    }
+    let smoke_test = std::env::args().any(|arg| {
+        arg == "--smoke-test"
+            || arg == "--vfx-smoke-test"
+            || arg == "--ui-smoke-test"
+            || arg == "--gpu-smoke-test"
+            || arg == "--fg-smoke-test"
+            || arg == "--visual-smoke-test"
+    });
 
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Falling Heads - Minecraft Block Breaker".to_string(),
-                resolution: WindowResolution::new(720, 1280),
-                present_mode: PresentMode::AutoNoVsync, // Disable VSync for uncapped FPS and smooth movement
+    systems::native_gpu::prepare(&mut app);
+    app.add_plugins(
+        DefaultPlugins
+            .set(bevy::log::LogPlugin {
+                custom_layer: diagnostics::layer,
+                ..default()
+            })
+            .set(systems::native_gpu::render_plugin())
+            // Quiet runs also scale every sound, including ones without a volume setting.
+            .set(bevy::audio::AudioPlugin {
+                global_volume: bevy::audio::GlobalVolume::new(bevy::audio::Volume::Linear(
+                    if quiet { 0.05 } else { 1.0 },
+                )),
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "MineHeads".to_string(),
+                    visible: !smoke_test || std::env::args().any(|a| a == "--fg-visible-test"),
+                    resolution: WindowResolution::new(720, 1280),
+                    present_mode: if settings.vsync_enabled {
+                        PresentMode::AutoVsync
+                    } else {
+                        PresentMode::AutoNoVsync
+                    }, // Saved VSync choice (off by default; FPS limiter instead)
+                    ..default()
+                }),
                 ..default()
             }),
-            ..default()
-        }))
-        .insert_resource(WinitSettings {
-            focused_mode: bevy::winit::UpdateMode::Continuous,
-            unfocused_mode: bevy::winit::UpdateMode::Continuous, // Keep rendering when unfocused
-        })
-        .insert_resource(FpsLimiter::new())
-        .init_state::<GameState>()
-        .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        // Enable interpolation for ALL rigid bodies by default for smooth movement at any framerate
-        .add_plugins(PhysicsPlugins::default()
+    )
+    .insert_resource(WinitSettings {
+        focused_mode: bevy::winit::UpdateMode::Continuous,
+        unfocused_mode: bevy::winit::UpdateMode::Continuous, // Keep rendering when unfocused
+    })
+    .insert_resource(FpsLimiter::new())
+    .init_state::<GameState>()
+    .add_computed_state::<states::InGame>()
+    .add_plugins(FrameTimeDiagnosticsPlugin::default())
+    // Enable interpolation for ALL rigid bodies by default for smooth movement at any framerate
+    .add_plugins(
+        PhysicsPlugins::default()
             .with_length_unit(64.0)
             .build()
             .disable::<PhysicsInterpolationPlugin>()
-            .add(PhysicsInterpolationPlugin::interpolate_all()))
-        .insert_resource(Gravity(Vector::NEG_Y * 500.0))  // -500 gravity (matching old constant)
-        .insert_resource(SubstepCount(1))  // Reduce substeps from default 6 to 1 for performance
-        .add_systems(OnEnter(GameState::Paused), pause_physics)
-        .add_systems(OnEnter(GameState::Playing), resume_physics)
-        .add_plugins(AssetLoaderPlugin)  // Load assets first
-        .add_plugins((
-            PhysicsPlugin,  // Keep custom physics plugin for migration
-            GameplayPlugin,
-            PowersPlugin,
-            RenderingPlugin,
-            UiPlugin,
-            AudioPlugin,
-            ExternalApiPlugin,
-            BuffPlugin,
-        ))
-        .add_plugins((
-            ProjectilePlugin,
-            EnemyAIPlugin,
-            HeartUIPlugin,
-            UsernameLabelPlugin,
-            XpBarUIPlugin,
-            DamageVisualPlugin,
-            BlockDamageOverlayPlugin,
-            WeatherSystemPlugin,
-            FrozenPlugin,
-        ))
-        .add_plugins((
-            DevPanelPlugin,
-            CommandsPanelPlugin,
-            DeathParticlePlugin,
-            SnowAccumulationPlugin,
-            BurningVisualPlugin,
-            RandomEventPlugin,
-            CollisionDebugPlugin,
-            ExperiencePlugin,
-            LootboxPlugin,
-            RandomBoxPlugin,
-        ))
-        .init_resource::<MaterialCache>()
-        .init_resource::<PerformanceTracker>()
-        .init_resource::<WorldConfig>()
-        .init_resource::<resources::command_queue::CommandQueue>()
-        .init_resource::<resources::world_seed::WorldSeed>()
-        .insert_resource(settings)
-        .add_systems(Startup, setup)
-        .add_systems(Update, initialize_mesh_cache)
-        .add_systems(Update, initialize_material_cache)
-        .add_systems(Update, log_performance_metrics)
-        .add_systems(Update, apply_fps_limit);
+            .add(PhysicsInterpolationPlugin::interpolate_all()),
+    )
+    .insert_resource(Gravity(Vec3::NEG_Y * 500.0)) // -500 gravity (matching old constant)
+    .insert_resource(SubstepCount(1)) // Reduce substeps from default 6 to 1 for performance
+    .add_systems(OnEnter(GameState::Paused), pause_physics)
+    .add_systems(OnEnter(GameState::Playing), resume_physics)
+    .add_plugins(systems::biome_teleport::BiomeTeleportPlugin)
+    .add_plugins(systems::biome_mist::BiomeMistPlugin)
+    .add_plugins(systems::world_portals::WorldPortalPlugin)
+    .add_plugins(systems::launcher::LauncherPlugin)
+    .add_plugins(systems::spiders::SpiderPlugin)
+    .add_plugins(systems::bats::BatPlugin)
+    .add_plugins(systems::play_styles::PlayStylePlugin)
+    .add_plugins(systems::game_modes::GameModesPlugin)
+    .add_plugins(systems::extra_powers::ExtraPowersPlugin)
+    .add_plugins(systems::window_icon::WindowIconPlugin)
+    .add_plugins(systems::ui::loading_screen::LoadingScreenPlugin)
+    .add_plugins(systems::biome_encounters::BiomeEncountersPlugin)
+    .add_plugins(systems::biome_content::BiomeContentPlugin)
+    .add_plugins(systems::slime_rift::SlimeRiftPlugin)
+    .add_plugins(systems::terrain_cracks::TerrainCracksPlugin)
+    .add_plugins(systems::dragon_flyover::DragonPlugin)
+    .add_plugins(systems::energy_vfx::EnergyVfxPlugin)
+    .add_plugins(systems::mirror_vfx::MirrorVfxPlugin)
+    .add_plugins(AssetLoaderPlugin) // Load assets first
+    .add_plugins((
+        PhysicsPlugin, // Avian actor contacts plus swept grid terrain
+        GameplayPlugin,
+        PowersPlugin,
+        RenderingPlugin,
+        UiPlugin,
+        AudioPlugin,
+        ExternalApiPlugin,
+        BuffPlugin,
+    ))
+    .add_plugins((
+        ProjectilePlugin,
+        EnemyAIPlugin,
+        systems::target_index::TargetIndexPlugin,
+        HeartUIPlugin,
+        UsernameLabelPlugin,
+        XpBarUIPlugin,
+        DamageVisualPlugin,
+        systems::actor_depth::ActorDepthPlugin,
+        BlockDamageOverlayPlugin,
+        WeatherSystemPlugin,
+        FrozenPlugin,
+    ))
+    .add_plugins((
+        DevPanelPlugin,
+        CommandsPanelPlugin,
+        DeathParticlePlugin,
+        SnowAccumulationPlugin,
+        BurningVisualPlugin,
+        StatusEffectsPlugin,
+        RandomEventPlugin,
+        CollisionDebugPlugin,
+        ExperiencePlugin,
+        LootboxPlugin,
+        RandomBoxPlugin,
+        systems::drop_terrain::DropTerrainPlugin,
+        systems::crowd_slide::CrowdSlidePlugin,
+        systems::fluids::FluidPlugin,
+    ))
+    .init_resource::<MaterialCache>()
+    .add_plugins(systems::forest_trees::ForestTreesPlugin)
+    .init_resource::<PerformanceTracker>()
+    .init_resource::<WorldConfig>()
+    .init_resource::<resources::world_seed::WorldSeed>()
+    .insert_resource(settings)
+    .add_systems(Update, resources::settings::save_game_settings)
+    .add_systems(Startup, setup)
+    .add_systems(Update, initialize_mesh_cache)
+    .add_systems(Update, initialize_material_cache)
+    .add_systems(Update, diagnostics::snapshot)
+    .add_systems(Update, log_performance_metrics)
+    .add_systems(Update, apply_fps_limit);
 
-    // Configure system execution order
-    configure_system_sets(&mut app);
+    systems::native_gpu::install(&mut app);
+    #[cfg(target_os = "windows")]
+    systems::frame_generation::install(&mut app);
 
-    app.run();
+    if std::env::args().any(|arg| arg == "--fg-smoke-test") {
+    } else if std::env::args().any(|arg| arg == "--gpu-smoke-test") {
+        app.add_plugins(systems::native_gpu::GpuSmokePlugin);
+    } else if cfg!(feature = "probes") && std::env::args().any(|arg| arg == "--ui-smoke-test") {
+        #[cfg(feature = "probes")]
+        app.add_plugins(ui_smoke::UiSmokePlugin);
+    } else if cfg!(feature = "probes") && std::env::args().any(|a| a == "--visual-smoke-test") {
+        #[cfg(feature = "probes")]
+        app.add_plugins(visual_probe::VisualProbePlugin);
+    } else if smoke_test {
+        app.add_plugins(smoke_test::SmokeTestPlugin);
+    }
+    let exit = app.run();
+    let code = match exit {
+        AppExit::Success => 0,
+        AppExit::Error(code) => code.get(),
+    };
+    if let Some(session) = session {
+        session.finish(code);
+    }
+    if code != 0 {
+        std::process::exit(code as i32);
+    }
 }
 
 /// Pause Avian physics when entering Paused state
@@ -174,7 +323,13 @@ impl FpsLimiter {
 fn apply_fps_limit(
     settings: Res<GameSettings>,
     mut limiter: ResMut<FpsLimiter>,
+    #[cfg(target_os = "windows")] fg: Option<Res<systems::frame_generation::FrameGenerationStatus>>,
 ) {
+    #[cfg(target_os = "windows")]
+    if fg.is_some_and(|s| s.available) {
+        limiter.last_frame = Instant::now();
+        return;
+    }
     // Skip if VSync is enabled (let VSync handle frame limiting)
     if settings.vsync_enabled {
         limiter.last_frame = Instant::now();
@@ -210,36 +365,51 @@ fn setup(mut commands: Commands) {
             ..default()
         },
         Projection::Perspective(PerspectiveProjection {
-            fov: std::f32::consts::FRAC_PI_4,  // 45 degree field of view
+            fov: std::f32::consts::FRAC_PI_4, // 45 degree field of view
             ..default()
         }),
-        Transform::from_xyz(30.0, 80.0, 1500.0)  // Far back to see large 64x64x64 blocks
+        Transform::from_xyz(30.0, 80.0, 1500.0) // Far back to see large 64x64x64 blocks
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
     ));
 
-    // Spawn 2D camera for Text2d rendering
+    // Present the resolved world image, labels and UI at native output resolution.
     commands.spawn((
         Camera2d,
+        Msaa::Off,
+        IsDefaultUiCamera,
         Camera {
-            order: 1, // Render after 3D
-            clear_color: ClearColorConfig::None, // Don't clear 3D scene
+            order: 1,                                            // Render after 3D
+            clear_color: ClearColorConfig::Custom(Color::BLACK), // World arrives via the compositor sprite
             ..default()
         },
     ));
 
     // Add ambient light for 3D blocks
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
         brightness: 1500.0,
         affects_lightmapped_meshes: false,
     });
 
-    // Add directional light for 3D depth
+    // Shadows must cover the play plane 1500 world units from the camera.
     commands.spawn((
+        bevy::light::CascadeShadowConfigBuilder {
+            num_cascades: 2,
+            minimum_distance: 900.,
+            first_cascade_far_bound: 1650.,
+            maximum_distance: 2600.,
+            ..default()
+        }
+        .build(),
         DirectionalLight {
             illuminance: 25000.0,
-            shadows_enabled: false,
+            shadow_maps_enabled: false,
             ..default()
+        },
+        // Solari samples this finite disk for softer contact-shadow edges.
+        bevy::light::SunDisk {
+            angular_size: 0.12,
+            intensity: 1.,
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, -0.5, 0.0)),
     ));
@@ -267,6 +437,7 @@ fn initialize_mesh_cache(
 /// Initialize shared materials for all block types to reduce memory usage
 /// Runs in Update to ensure textures are loaded first
 fn initialize_material_cache(
+    asset_server: Res<AssetServer>,
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut cache: ResMut<MaterialCache>,
@@ -283,7 +454,34 @@ fn initialize_material_cache(
         return;
     };
 
-    // Wait for all textures to load before generating atlases
+    // Wait for all textures to load before generating atlases. A texture that
+    // failed to load gets a placeholder and an error instead of waiting forever.
+    let t = &block_textures;
+    if !crate::systems::atlas_generator::textures_ready_or_placeholder(
+        &[
+            &t.pumpkin_top,
+            &t.pumpkin_side,
+            &t.pumpkin_front,
+            &t.oak_log,
+            &t.oak_log_top,
+            &t.oak_leaves,
+            &t.melon_top,
+            &t.melon_side,
+            &t.tnt_top,
+            &t.tnt_bottom,
+            &t.tnt_side,
+            &t.cactus_top,
+            &t.cactus_bottom,
+            &t.cactus_side,
+            &t.sandstone_top,
+            &t.sandstone_bottom,
+            &t.sandstone,
+        ],
+        &mut images,
+        &asset_server,
+    ) {
+        return;
+    }
     let pumpkin_top = images.get(&block_textures.pumpkin_top);
     let pumpkin_side = images.get(&block_textures.pumpkin_side);
     let pumpkin_front = images.get(&block_textures.pumpkin_front);
@@ -303,12 +501,24 @@ fn initialize_material_cache(
     let sandstone_bottom = images.get(&block_textures.sandstone_bottom);
     let sandstone_side = images.get(&block_textures.sandstone);
 
-    if pumpkin_top.is_none() || pumpkin_side.is_none() || pumpkin_front.is_none()
-        || oak_log.is_none() || oak_log_top.is_none() || oak_leaves.is_none()
-        || melon_top.is_none() || melon_side.is_none()
-        || tnt_top.is_none() || tnt_bottom.is_none() || tnt_side.is_none()
-        || cactus_top.is_none() || cactus_bottom.is_none() || cactus_side.is_none()
-        || sandstone_top.is_none() || sandstone_bottom.is_none() || sandstone_side.is_none() {
+    if pumpkin_top.is_none()
+        || pumpkin_side.is_none()
+        || pumpkin_front.is_none()
+        || oak_log.is_none()
+        || oak_log_top.is_none()
+        || oak_leaves.is_none()
+        || melon_top.is_none()
+        || melon_side.is_none()
+        || tnt_top.is_none()
+        || tnt_bottom.is_none()
+        || tnt_side.is_none()
+        || cactus_top.is_none()
+        || cactus_bottom.is_none()
+        || cactus_side.is_none()
+        || sandstone_top.is_none()
+        || sandstone_bottom.is_none()
+        || sandstone_side.is_none()
+    {
         return; // Textures not loaded yet, wait for next frame
     }
 
@@ -392,269 +602,276 @@ fn initialize_material_cache(
 
     // Create one material per block type
     let block_types = [
-        BlockType::Stone, BlockType::Dirt, BlockType::Grass, BlockType::Sand,
-        BlockType::Sandstone, BlockType::Snow, BlockType::Coal, BlockType::Iron,
-        BlockType::Gold, BlockType::Diamond, BlockType::Emerald, BlockType::Redstone,
-        BlockType::Wood, BlockType::Leaves, BlockType::Pumpkin, BlockType::Melon,
-        BlockType::Cactus, BlockType::DeadBush, BlockType::Mushroom, BlockType::Vines,
+        BlockType::Stone,
+        BlockType::Dirt,
+        BlockType::Grass,
+        BlockType::Sand,
+        BlockType::Sandstone,
+        BlockType::Snow,
+        BlockType::Ice,
+        BlockType::Coal,
+        BlockType::Iron,
+        BlockType::Gold,
+        BlockType::Diamond,
+        BlockType::Emerald,
+        BlockType::Redstone,
+        BlockType::Wood,
+        BlockType::Leaves,
+        BlockType::Pumpkin,
+        BlockType::Melon,
+        BlockType::Cactus,
+        BlockType::DeadBush,
+        BlockType::Mushroom,
+        BlockType::Vines,
         BlockType::Cobweb,
-        BlockType::Netherrack, BlockType::Netherite, BlockType::AncientDebris,
-        BlockType::SoulSand, BlockType::Glowstone, BlockType::EndStone,
-        BlockType::Obsidian, BlockType::ChorusFruit, BlockType::Purpur,
+        BlockType::Netherrack,
+        BlockType::Netherite,
+        BlockType::AncientDebris,
+        BlockType::SoulSand,
+        BlockType::Glowstone,
+        BlockType::EndStone,
+        BlockType::Obsidian,
+        BlockType::ChorusFruit,
+        BlockType::Purpur,
     ];
 
     for block_type in block_types {
         let material = match block_type {
-            BlockType::AncientDebris => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.ancient_debris_side.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Netherrack => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.netherrack.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Obsidian => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.obsidian.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Gold => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.gold_block.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
+            BlockType::Purpur => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(
+                    asset_server
+                        .load_builder()
+                        .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
+                            s.sampler = bevy::image::ImageSampler::nearest()
+                        })
+                        .load("textures/blocks/end/purpur_block.png"),
+                ),
+                perceptual_roughness: 0.95,
+                ..default()
+            }),
+            BlockType::AncientDebris => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.ancient_debris_side.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Netherrack => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.netherrack.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Obsidian => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.obsidian.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Gold => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.gold_block.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
             BlockType::Leaves => {
-                info!("Creating Leaves material with atlas handle: {:?}", oak_leaves_atlas_handle);
+                info!(
+                    "Creating Leaves material with atlas handle: {:?}",
+                    oak_leaves_atlas_handle
+                );
                 materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.4, 0.8, 0.4),  // Tint leaves green (Minecraft-style biome tinting)
+                    base_color: Color::srgb(0.4, 0.8, 0.4), // Tint leaves green (Minecraft-style biome tinting)
                     base_color_texture: Some(oak_leaves_atlas_handle.clone()),
                     unlit: true,
-                    alpha_mode: AlphaMode::Blend,  // Support transparency for leaf gaps
-                    cull_mode: None,  // Render both sides for better leaf appearance
-                    double_sided: true,
+                    alpha_mode: AlphaMode::Mask(0.5),
+                    cull_mode: Some(bevy::render::render_resource::Face::Back),
+                    double_sided: false,
                     ..default()
                 })
             }
-            BlockType::Wood => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(oak_log_atlas_handle.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            }
-            BlockType::Pumpkin => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(pumpkin_atlas_handle.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            }
-            BlockType::Melon => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(melon_atlas_handle.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            }
+            BlockType::Wood => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(oak_log_atlas_handle.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            }),
+            BlockType::Pumpkin => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(pumpkin_atlas_handle.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            }),
+            BlockType::Melon => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(melon_atlas_handle.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            }),
             BlockType::Grass => {
                 materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.4, 0.8, 0.4),  // Green tint for leaves
+                    base_color: Color::srgb(0.4, 0.8, 0.4), // Green tint for leaves
                     base_color_texture: Some(oak_leaves_atlas_handle.clone()),
                     unlit: true,
-                    alpha_mode: AlphaMode::Blend,
-                    cull_mode: None,
-                    double_sided: true,
+                    alpha_mode: AlphaMode::Mask(0.5),
+                    cull_mode: Some(bevy::render::render_resource::Face::Back),
+                    double_sided: false,
                     ..default()
                 })
             }
-            BlockType::Dirt => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.dirt.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Stone => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.stone.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Coal => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.coal_ore.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Iron => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.coal_ore.clone()),  // Reusing coal texture for iron (no iron_ore texture)
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Diamond => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.diamond_ore.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Emerald => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.emerald_ore.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Redstone => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.redstone_ore.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Sand => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.sand.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Sandstone => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(sandstone_atlas_handle.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            }
-            BlockType::EndStone => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.end_stone.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Snow => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.snow.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Cactus => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(cactus_atlas_handle.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Blend,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            }
-            BlockType::Cobweb => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.cobweb.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Blend,
-                    cull_mode: None,
-                    double_sided: true,
-                    ..default()
-                })
-            }
-            BlockType::SoulSand => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.soul_sand.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Netherite => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.netherite_block.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            BlockType::Glowstone => {
-                materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    base_color_texture: Some(block_textures.glowstone.clone()),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
-            _ => {
-                materials.add(StandardMaterial {
-                    base_color: get_block_color(block_type),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Opaque,
-                    ..default()
-                })
-            }
+            BlockType::Dirt => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.dirt.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Stone => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.stone.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Coal => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.coal_ore.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Iron => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.iron_ore.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Diamond => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.diamond_ore.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Emerald => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.emerald_ore.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Redstone => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.redstone_ore.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Sand => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.sand.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Sandstone => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(sandstone_atlas_handle.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            }),
+            BlockType::EndStone => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.end_stone.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Ice => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.65, 0.85, 1.),
+                base_color_texture: Some(asset_server.load("textures/blocks/iceland/ice.png")),
+                perceptual_roughness: 0.2,
+                ..default()
+            }),
+            BlockType::Snow => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.snow.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Cactus => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(cactus_atlas_handle.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Mask(0.5),
+                cull_mode: Some(bevy::render::render_resource::Face::Back),
+                double_sided: false,
+                ..default()
+            }),
+            BlockType::Cobweb => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.cobweb.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Mask(0.5),
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            }),
+            BlockType::SoulSand => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.soul_sand.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Netherite => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.netherite_block.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            BlockType::Mushroom => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                perceptual_roughness: 0.95,
+                ..default()
+            }),
+            BlockType::DeadBush => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.50, 0.30, 0.13),
+                base_color_texture: Some(block_textures.dirt.clone()),
+                perceptual_roughness: 0.95,
+                ..default()
+            }),
+            BlockType::Glowstone => materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                base_color_texture: Some(block_textures.glowstone.clone()),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
+            _ => materials.add(StandardMaterial {
+                base_color: get_block_color(block_type),
+                unlit: true,
+                alpha_mode: AlphaMode::Opaque,
+                ..default()
+            }),
         };
 
         cache.materials.insert(block_type, material);
@@ -664,8 +881,12 @@ fn initialize_material_cache(
     use crate::components::resource::ResourceType;
 
     let resource_types = [
-        ResourceType::Coal, ResourceType::Iron, ResourceType::Gold,
-        ResourceType::Diamond, ResourceType::Emerald, ResourceType::Redstone,
+        ResourceType::Coal,
+        ResourceType::Iron,
+        ResourceType::Gold,
+        ResourceType::Diamond,
+        ResourceType::Emerald,
+        ResourceType::Redstone,
         ResourceType::Netherite,
     ];
 
@@ -691,6 +912,9 @@ fn initialize_material_cache(
         cache.resource_materials.insert(resource_type, material);
     }
 
-    info!("Material cache initialized with {} block materials and {} resource materials",
-          cache.materials.len(), cache.resource_materials.len());
+    info!(
+        "Material cache initialized with {} block materials and {} resource materials",
+        cache.materials.len(),
+        cache.resource_materials.len()
+    );
 }

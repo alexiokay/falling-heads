@@ -6,12 +6,6 @@ pub struct Lootbox {
     pub is_open: bool,
 }
 
-impl Lootbox {
-    pub fn new() -> Self {
-        Self { is_open: false }
-    }
-}
-
 /// RandomBox - bouncing entity that triggers random events when touched by hero
 #[derive(Component, Debug)]
 pub struct RandomBox;
@@ -29,7 +23,7 @@ pub struct RouletteSpinner {
     pub is_spinning: bool,
     pub spin_timer: Timer,
     pub selected_index: usize,
-    pub last_item_index: usize, // Track last item for tick sound
+    pub last_item_index: usize,     // Track last item for tick sound
     pub item_entities: Vec<Entity>, // Store item entities to query their positions
 }
 
@@ -40,20 +34,11 @@ pub struct RouletteItem {
 }
 
 impl RouletteSpinner {
-    pub fn new(items: Vec<LootboxReward>, selected_index: usize) -> Self {
-        Self {
-            items,
-            spin_speed: 2000.0, // Start fast
-            current_offset: 0.0,
-            is_spinning: true,
-            spin_timer: Timer::from_seconds(3.0, TimerMode::Once), // 3 seconds total spin
-            selected_index,
-            last_item_index: 0, // Start at first item
-            item_entities: Vec::new(), // Will be populated when spawning items
-        }
-    }
-
-    pub fn new_with_speed(items: Vec<LootboxReward>, selected_index: usize, spin_speed: f32) -> Self {
+    pub fn new_with_speed(
+        items: Vec<LootboxReward>,
+        selected_index: usize,
+        spin_speed: f32,
+    ) -> Self {
         Self {
             items,
             spin_speed,
@@ -61,7 +46,7 @@ impl RouletteSpinner {
             is_spinning: true,
             spin_timer: Timer::from_seconds(3.0, TimerMode::Once),
             selected_index,
-            last_item_index: 0, // Start at first item
+            last_item_index: 0,        // Start at first item
             item_entities: Vec::new(), // Will be populated when spawning items
         }
     }
@@ -70,24 +55,26 @@ impl RouletteSpinner {
 /// Possible rewards from lootbox
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LootboxReward {
-    MonsterHorde,      // Spawns enemies (bad)
+    Teleport,
+    MonsterHorde, // Spawns enemies (bad)
     // TreasureRain,      // REMOVED - Spawns resources (good)
-    TravelersArrive,   // Spawns villagers (good)
-    EliteEnemy,        // Spawns elite enemy (bad)
-    MegaTreasure,      // Extra resources (very good)
-    MagicBarrier,      // Magic barrier that reflects projectiles (good)
-    ArrowBarrage,      // Fires 48 arrows in all directions (good)
-    ThunderStrike,     // Lightning strikes that damage blocks (neutral/bad)
-    TntRain,           // Spawns TNT above hero (bad/chaotic)
-    LaserBeam,         // Powerful laser beam (good)
-    Magnet,            // Attracts nearby resources (good)
-    Nothing,           // Nothing happens (neutral)
+    TravelersArrive, // Spawns villagers (good)
+    EliteEnemy,      // Spawns elite enemy (bad)
+    MegaTreasure,    // Extra resources (very good)
+    MagicBarrier,    // Magic barrier that reflects projectiles (good)
+    ArrowBarrage,    // Fires 48 arrows in all directions (good)
+    ThunderStrike,   // Lightning strikes that damage blocks (neutral/bad)
+    TntRain,         // Spawns TNT above hero (bad/chaotic)
+    LaserBeam,       // Powerful laser beam (good)
+    Magnet,          // Attracts nearby resources (good)
+    Nothing,         // Nothing happens (neutral)
 }
 
 impl LootboxReward {
     /// Get display name for the reward
     pub fn name(&self) -> &str {
         match self {
+            LootboxReward::Teleport => "Biome Portal",
             LootboxReward::MonsterHorde => "Monster Horde",
             // LootboxReward::TreasureRain => "Treasure Rain", // REMOVED
             LootboxReward::TravelersArrive => "Travelers Arrive",
@@ -103,31 +90,10 @@ impl LootboxReward {
         }
     }
 
-    /// Get color for the reward (good, bad, neutral)
-    pub fn color(&self) -> Color {
-        match self {
-            // Red (bad/dangerous)
-            LootboxReward::MonsterHorde | LootboxReward::EliteEnemy | LootboxReward::TntRain => {
-                Color::srgb(0.8, 0.2, 0.2)
-            }
-            // Green (good)
-            LootboxReward::TravelersArrive | LootboxReward::MegaTreasure => {
-                Color::srgb(0.2, 0.8, 0.2)
-            }
-            // Cyan (powers/good)
-            LootboxReward::MagicBarrier | LootboxReward::ArrowBarrage | LootboxReward::LaserBeam | LootboxReward::Magnet => {
-                Color::srgb(0.2, 0.8, 0.8)
-            }
-            // Yellow (neutral/unpredictable)
-            LootboxReward::ThunderStrike => Color::srgb(0.8, 0.8, 0.2),
-            // Gray (neutral/nothing)
-            LootboxReward::Nothing => Color::srgb(0.5, 0.5, 0.5),
-        }
-    }
-
     /// Get icon handle for the reward
     pub fn icon(&self, icons: &crate::resources::asset_handles::LootboxIcons) -> Handle<Image> {
         match self {
+            LootboxReward::Teleport => icons.teleport.clone(),
             LootboxReward::MonsterHorde => icons.monster_horde.clone(),
             LootboxReward::TravelersArrive => icons.travelers_arrive.clone(),
             LootboxReward::EliteEnemy => icons.elite_enemy.clone(),
@@ -145,6 +111,7 @@ impl LootboxReward {
     /// Get all possible rewards for the roulette
     pub fn all_rewards() -> Vec<Self> {
         vec![
+            LootboxReward::Teleport,
             LootboxReward::MonsterHorde,
             LootboxReward::TravelersArrive,
             LootboxReward::EliteEnemy,
@@ -161,22 +128,23 @@ impl LootboxReward {
 
     /// Get weighted random reward
     pub fn random() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let roll = rng.gen_range(0..100);
+        use rand::RngExt;
+        let mut rng = rand::rng();
+        let roll = rng.random_range(0..100);
 
         match roll {
-            0..11 => LootboxReward::MonsterHorde,      // 11%
-            11..36 => LootboxReward::TravelersArrive,  // 25% (increased from 11% + removed TreasureRain 14%)
-            36..42 => LootboxReward::EliteEnemy,       // 6%
-            42..53 => LootboxReward::MegaTreasure,     // 11%
-            53..62 => LootboxReward::MagicBarrier,     // 9%
-            62..71 => LootboxReward::ArrowBarrage,     // 9%
-            71..77 => LootboxReward::ThunderStrike,    // 6%
-            77..82 => LootboxReward::TntRain,          // 5%
-            82..88 => LootboxReward::LaserBeam,        // 6%
-            88..97 => LootboxReward::Magnet,           // 9%
-            _ => LootboxReward::Nothing,               // 3%
+            0..11 => LootboxReward::MonsterHorde, // 11%
+            11..16 => LootboxReward::Teleport,
+            16..36 => LootboxReward::TravelersArrive, // 25% (increased from 11% + removed TreasureRain 14%)
+            36..42 => LootboxReward::EliteEnemy,      // 6%
+            42..53 => LootboxReward::MegaTreasure,    // 11%
+            53..62 => LootboxReward::MagicBarrier,    // 9%
+            62..71 => LootboxReward::ArrowBarrage,    // 9%
+            71..77 => LootboxReward::ThunderStrike,   // 6%
+            77..82 => LootboxReward::TntRain,         // 5%
+            82..88 => LootboxReward::LaserBeam,       // 6%
+            88..97 => LootboxReward::Magnet,          // 9%
+            _ => LootboxReward::Nothing,              // 3%
         }
     }
 }

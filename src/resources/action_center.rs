@@ -17,7 +17,7 @@ pub struct ActionCenter {
 impl Default for ActionCenter {
     fn default() -> Self {
         Self {
-            center: Vec3::new(0.0, 130000.0, 10.0),  // Start at Forest biome spawn
+            center: Vec3::new(0.0, 130000.0, 10.0), // Start at Forest biome spawn
             raw_center: Vec3::new(0.0, 130000.0, 10.0),
             combat_intensity: 0.0,
             last_combat_time: 0.0,
@@ -49,7 +49,7 @@ impl ActionWeights {
     pub fn adjust_for_combat(&self, combat_intensity: f32) -> Self {
         let combat_shift = combat_intensity * 0.1; // Up to 10% shift during intense combat (reduced from 20%)
         Self {
-            hero: (self.hero - combat_shift).max(0.7),  // Hero weight stays minimum 70% (up from 30%)
+            hero: (self.hero - combat_shift).max(0.7), // Hero weight stays minimum 70% (up from 30%)
             combat: (self.combat + combat_shift).min(0.2), // Combat weight max 20% (down from 50%)
             villagers: self.villagers,
             projectiles: self.projectiles,

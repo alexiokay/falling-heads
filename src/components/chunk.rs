@@ -1,11 +1,11 @@
-use bevy::prelude::*;
 use crate::components::block::BiomeType;
+use bevy::prelude::*;
 
 /// Represents a chunk of the world (16x16 blocks)
 #[derive(Component)]
 pub struct Chunk {
-    pub chunk_x: i32,  // Chunk coordinate in X axis
-    pub chunk_y: i32,  // Chunk coordinate in Y axis
+    pub chunk_x: i32, // Chunk coordinate in X axis
+    pub chunk_y: i32, // Chunk coordinate in Y axis
     pub biome: BiomeType,
 }
 
@@ -14,6 +14,17 @@ pub struct Chunk {
 pub struct ChunkMember {
     pub chunk_x: i32,
     pub chunk_y: i32,
+}
+
+impl ChunkMember {
+    /// Chunk containing a world position, so the entity unloads with that chunk.
+    pub fn at(position: Vec3) -> Self {
+        let size = CHUNK_SIZE_F32 * crate::utils::constants::BLOCK_SIZE;
+        Self {
+            chunk_x: (position.x / size).floor() as i32,
+            chunk_y: (position.y / size).floor() as i32,
+        }
+    }
 }
 
 /// Resource to track which chunks are currently loaded

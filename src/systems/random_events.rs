@@ -1,26 +1,25 @@
-use bevy::prelude::*;
-use bevy::ecs::schedule::common_conditions::resource_exists;
-use rand::Rng;
 use avian3d::prelude::*;
+use bevy::ecs::schedule::common_conditions::resource_exists;
+use bevy::prelude::*;
+use rand::RngExt;
 
+use crate::components::block::Block;
 use crate::components::{
-    hero::Hero,
-    enemy::{Enemy, EnemyType, Health, EnemyBehavior, Flying},
     buff::Buffable,
     bundles::{SpriteBundle3d, avian_physics},
-    resource::{Resource, ResourceType, RotatingResource},
     collision_layers::GameLayer,
+    enemy::{Enemy, EnemyBehavior, EnemyType, Flying, Health},
+    hero::Hero,
+    resource::{Resource, ResourceType, RotatingResource},
 };
-use avian3d::prelude::CollisionLayers;
 use crate::resources::{
-    asset_handles::{GameTextures, EnemyTextures, ResourceTextures},
+    asset_handles::{EnemyTextures, GameTextures, ResourceTextures},
     mesh_cache::MeshCache,
     spatial_hash::SpatialHash,
 };
-use crate::states::GameState;
-use crate::utils::constants::*;
 use crate::systems::entity_spawn::spawn_villager;
-use crate::components::block::Block;
+use crate::utils::constants::*;
+use avian3d::prelude::CollisionLayers;
 
 /// Resource to track random event timing
 #[derive(Resource)]
@@ -31,8 +30,8 @@ pub struct RandomEventTimer {
 
 impl Default for RandomEventTimer {
     fn default() -> Self {
-        let mut rng = rand::thread_rng();
-        let initial_delay = rng.gen_range(30.0..60.0);
+        let mut rng = rand::rng();
+        let initial_delay = rng.random_range(30.0..60.0);
 
         Self {
             timer: Timer::from_seconds(initial_delay, TimerMode::Once),
@@ -44,25 +43,25 @@ impl Default for RandomEventTimer {
 /// Different types of random events that can occur
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RandomEventType {
-    MobSpawn,           // Spawn enemies near hero
-    LootDrop,           // Drop resources around hero
-    VillagerSpawn,      // Spawn friendly villagers
-    EliteMobSpawn,      // Spawn stronger enemies
-    GrowBuff,           // Apply Grow buff to hero
+    MobSpawn,      // Spawn enemies near hero
+    LootDrop,      // Drop resources around hero
+    VillagerSpawn, // Spawn friendly villagers
+    EliteMobSpawn, // Spawn stronger enemies
+    GrowBuff,      // Apply Grow buff to hero
 }
 
 impl RandomEventType {
     /// Get a random event based on weighted probabilities
     pub fn random() -> Self {
-        let mut rng = rand::thread_rng();
-        let roll = rng.gen_range(0..100);
+        let mut rng = rand::rng();
+        let roll = rng.random_range(0..100);
 
         match roll {
-            0..30 => RandomEventType::MobSpawn,          // 30% chance
-            30..55 => RandomEventType::LootDrop,         // 25% chance
-            55..70 => RandomEventType::VillagerSpawn,    // 15% chance
-            70..85 => RandomEventType::GrowBuff,         // 15% chance (NEW!)
-            _ => RandomEventType::EliteMobSpawn,         // 15% chance
+            0..30 => RandomEventType::MobSpawn,       // 30% chance
+            30..55 => RandomEventType::LootDrop,      // 25% chance
+            55..70 => RandomEventType::VillagerSpawn, // 15% chance
+            70..85 => RandomEventType::GrowBuff,      // 15% chance (NEW!)
+            _ => RandomEventType::EliteMobSpawn,      // 15% chance
         }
     }
 
@@ -91,20 +90,16 @@ fn find_empty_spawn_position(
     radius: f32,
     spatial_hash: &SpatialHash,
     block_query: &Query<&Transform, With<Block>>,
-    rng: &mut impl Rng,
+    rng: &mut impl RngExt,
 ) -> Option<Vec3> {
     // Try multiple times to find an empty position
     for _ in 0..30 {
-        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let distance = rng.gen_range(radius * 0.7..radius);
+        let angle = rng.random_range(0.0..std::f32::consts::TAU);
+        let distance = rng.random_range(radius * 0.7..radius);
         let offset_x = angle.cos() * distance;
         let offset_y = angle.sin() * distance;
 
-        let test_pos = Vec3::new(
-            base_pos.x + offset_x,
-            base_pos.y + offset_y,
-            10.0,
-        );
+        let test_pos = Vec3::new(base_pos.x + offset_x, base_pos.y + offset_y, 10.0);
 
         // Check if this position collides with any blocks
         let chunk_coords = spatial_hash.world_to_chunk(test_pos.x, test_pos.y);
@@ -155,7 +150,7 @@ pub fn random_event_system(
 
     if event_timer.timer.is_finished() {
         // Get hero position for event spawning
-        let hero_pos = if let Ok(hero_transform) = hero_query.single() {
+        let _hero_pos = if let Ok(hero_transform) = hero_query.single() {
             hero_transform.translation
         } else {
             return; // No hero, skip events
@@ -173,8 +168,8 @@ pub fn random_event_system(
         });
 
         // Reset timer with new random delay
-        let mut rng = rand::thread_rng();
-        let next_delay = rng.gen_range(30.0..60.0);
+        let mut rng = rand::rng();
+        let next_delay = rng.random_range(30.0..60.0);
         event_timer.timer = Timer::from_seconds(next_delay, TimerMode::Once);
         event_timer.next_event_delay = next_delay;
     }
@@ -204,30 +199,32 @@ pub fn handle_mob_spawn_event(
         };
 
         let hero_pos = hero_transform.translation;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Spawn 3-5 enemies around the hero in empty spaces
-        let num_enemies = rng.gen_range(3..=5);
+        let num_enemies = rng.random_range(3..=5);
         let radius = 800.0; // Spawn at medium distance
         let mut spawned = 0;
 
         for _ in 0..num_enemies {
             // Find an empty position
-            if let Some(spawn_pos) = find_empty_spawn_position(hero_pos, radius, &spatial_hash, &block_query, &mut rng) {
+            if let Some(spawn_pos) =
+                find_empty_spawn_position(hero_pos, radius, &spatial_hash, &block_query, &mut rng)
+            {
                 // Choose appropriate enemy type based on hero Y position (biome)
                 let enemy_type = if hero_pos.y > 150000.0 {
                     // Iceland biome
                     EnemyType::Yeti
                 } else if hero_pos.y < 100000.0 {
                     // Nether biome
-                    if rng.gen_bool(0.3) {
+                    if rng.random_bool(0.3) {
                         EnemyType::Ghast
                     } else {
                         EnemyType::Pigman
                     }
                 } else {
                     // Overworld biomes
-                    if rng.gen_bool(0.5) {
+                    if rng.random_bool(0.5) {
                         EnemyType::Skeleton
                     } else {
                         EnemyType::Zombie
@@ -274,18 +271,14 @@ pub fn handle_elite_mob_spawn_event(
         };
 
         let hero_pos = hero_transform.translation;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Spawn 1-2 elite enemies (Ghast or Dragon)
-        let num_elites = rng.gen_range(1..=2);
-        let offset_x = rng.gen_range(-600.0..600.0);
-        let offset_y = rng.gen_range(400.0..800.0); // Above hero
+        let num_elites = rng.random_range(1..=2);
+        let offset_x = rng.random_range(-600.0..600.0);
+        let offset_y = rng.random_range(400.0..800.0); // Above hero
 
-        let spawn_pos = Vec3::new(
-            hero_pos.x + offset_x,
-            hero_pos.y + offset_y,
-            10.0,
-        );
+        let spawn_pos = Vec3::new(hero_pos.x + offset_x, hero_pos.y + offset_y, 10.0);
 
         // Choose elite enemy type (only Ghast - Dragon is experimental)
         let enemy_type = EnemyType::Ghast;
@@ -328,26 +321,27 @@ pub fn handle_loot_drop_event(
         };
 
         let hero_pos = hero_transform.translation;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Drop 5-10 random resources around the hero in empty spaces
-        let num_drops = rng.gen_range(5..=10);
+        let num_drops = rng.random_range(5..=10);
         let mut dropped = 0;
 
         for _ in 0..num_drops {
             // Find an empty position for the resource
-            if let Some(drop_pos) = find_empty_spawn_position(hero_pos, 400.0, &spatial_hash, &block_query, &mut rng) {
-
-            // Random resource type (uses actual ResourceType enum variants)
-            let resource_type = match rng.gen_range(0..7) {
-                0 => ResourceType::Coal,
-                1 => ResourceType::Iron,
-                2 => ResourceType::Gold,
-                3 => ResourceType::Diamond,
-                4 => ResourceType::Emerald,
-                5 => ResourceType::Redstone,
-                _ => ResourceType::Netherite,
-            };
+            if let Some(drop_pos) =
+                find_empty_spawn_position(hero_pos, 400.0, &spatial_hash, &block_query, &mut rng)
+            {
+                // Random resource type (uses actual ResourceType enum variants)
+                let resource_type = match rng.random_range(0..7) {
+                    0 => ResourceType::Coal,
+                    1 => ResourceType::Iron,
+                    2 => ResourceType::Gold,
+                    3 => ResourceType::Diamond,
+                    4 => ResourceType::Emerald,
+                    5 => ResourceType::Redstone,
+                    _ => ResourceType::Netherite,
+                };
 
                 spawn_resource(
                     &mut commands,
@@ -387,15 +381,17 @@ pub fn handle_villager_spawn_event(
         };
 
         let hero_pos = hero_transform.translation;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Spawn 2-4 villagers around the hero in empty spaces
-        let num_villagers = rng.gen_range(2..=4);
+        let num_villagers = rng.random_range(2..=4);
         let mut spawned = 0;
 
         for _ in 0..num_villagers {
             // Find an empty position for the villager
-            if let Some(villager_pos) = find_empty_spawn_position(hero_pos, 500.0, &spatial_hash, &block_query, &mut rng) {
+            if let Some(villager_pos) =
+                find_empty_spawn_position(hero_pos, 500.0, &spatial_hash, &block_query, &mut rng)
+            {
                 spawn_villager(
                     &mut commands,
                     villager_pos,
@@ -490,7 +486,7 @@ fn spawn_enemy(
     meshes: &mut ResMut<Assets<Mesh>>,
     asset_server: &AssetServer,
 ) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Special handling for Ghast - flying enemy with proper physics
     if enemy_type == EnemyType::Ghast {
@@ -504,23 +500,22 @@ fn spawn_enemy(
             ..default()
         });
 
-        let ghast_entity = commands.spawn((
-            Enemy::new(EnemyType::Ghast),
-            Flying,  // Makes Ghast float and ignore block collisions
-            Health::new(EnemyType::Ghast.max_health()),
-            Buffable,
-            SpriteBundle3d::new(
-                meshes.add(Rectangle::new(80.0, 80.0)),
-                material,
-                position,
-            ),
-        )).id();
+        let ghast_entity = commands
+            .spawn((
+                Enemy::new(EnemyType::Ghast),
+                Flying, // Makes Ghast float and ignore block collisions
+                Health::new(EnemyType::Ghast.max_health()),
+                Buffable,
+                crate::components::chunk::ChunkMember::at(position),
+                SpriteBundle3d::new(meshes.add(Rectangle::new(80.0, 80.0)), material, position),
+            ))
+            .id();
 
         // Add custom flying physics components
         commands.entity(ghast_entity).insert((
             RigidBody::Dynamic,
             LinearVelocity(Vec3::ZERO),
-            GravityScale(0.0),  // No gravity - ghasts float
+            GravityScale(0.0), // No gravity - ghasts float
             LinearDamping(2.0),
             Mass(CHARACTER_MASS),
             Collider::cuboid(80.0, 80.0, 80.0),
@@ -540,7 +535,9 @@ fn spawn_enemy(
         EnemyType::Zombie => &enemy_textures.skeleton,
         EnemyType::Skeleton => &enemy_textures.skeleton,
         EnemyType::Pigman => &enemy_textures.skeleton2,
-        EnemyType::Enderman => &enemy_textures.skeleton2,
+        EnemyType::Enderman | EnemyType::Sentinel => &enemy_textures.enderman,
+        EnemyType::Bat => &enemy_textures.bat,
+        EnemyType::Spider => &enemy_textures.spider,
         EnemyType::Yeti => &enemy_textures.yeti,
         _ => &enemy_textures.skeleton, // Fallback
     };
@@ -555,8 +552,8 @@ fn spawn_enemy(
 
     // Initial velocity for spawn (drop from above)
     let initial_velocity = Vec3::new(
-        rng.gen_range(-50.0..50.0),
-        rng.gen_range(50.0..150.0),
+        rng.random_range(-50.0..50.0),
+        rng.random_range(50.0..150.0),
         0.0,
     );
 
@@ -565,7 +562,12 @@ fn spawn_enemy(
         Health::new(enemy_type.max_health()),
         Buffable,
         avian_physics::enemy_with_velocity(initial_velocity),
-        SpriteBundle3d::new(meshes.add(Rectangle::new(ENEMY_SIZE, ENEMY_SIZE)), material, position),
+        crate::components::chunk::ChunkMember::at(position),
+        SpriteBundle3d::new(
+            meshes.add(Rectangle::new(ENEMY_SIZE, ENEMY_SIZE)),
+            material,
+            position,
+        ),
     ));
 }
 
@@ -592,24 +594,25 @@ fn spawn_resource(
         base_color: Color::WHITE,
         base_color_texture: Some(texture.clone()),
         unlit: true,
-        alpha_mode: AlphaMode::Blend,
+        alpha_mode: AlphaMode::Mask(0.5),
         cull_mode: None,
         ..default()
     });
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Random upward velocity for dramatic effect
-    let upward_velocity = rng.gen_range(100.0..200.0);
+    let upward_velocity = rng.random_range(100.0..200.0);
 
     // Resources should be at Z=5.0 (behind hero at Z=10.0, in front of blocks at Z=-10.0)
     // Add random offset to prevent Z-fighting
-    let z_offset = rng.gen_range(0.0..2.0);
+    let z_offset = rng.random_range(0.0..2.0);
     let resource_position = Vec3::new(position.x, position.y, 5.0 + z_offset);
 
     commands.spawn((
         Resource { resource_type },
         RotatingResource::default(),
+        crate::components::chunk::ChunkMember::at(resource_position),
         avian_physics::resource(Vec3::new(0.0, upward_velocity, 0.0)),
         SpriteBundle3d::new(
             meshes.add(Rectangle::new(RESOURCE_SIZE, RESOURCE_SIZE)),
@@ -624,24 +627,24 @@ pub struct RandomEventPlugin;
 
 impl Plugin for RandomEventPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<RandomEventTimer>()
-            .add_systems(
-                Update,
-                (
-                    random_event_system,
-                    handle_mob_spawn_event,
-                    handle_elite_mob_spawn_event,
-                    handle_loot_drop_event,
-                    handle_villager_spawn_event,
-                    handle_grow_buff_event,
-                    cleanup_event_notifications,
-                )
-                    .run_if(in_state(GameState::Playing))
-                    .run_if(resource_exists::<MeshCache>)
-                    .run_if(resource_exists::<EnemyTextures>)
-                    .run_if(resource_exists::<ResourceTextures>),
-            );
+        app.init_resource::<RandomEventTimer>().add_systems(
+            Update,
+            (
+                random_event_system.run_if(crate::systems::game_modes::mode_on(
+                    crate::systems::game_modes::GameMode::RandomEvents,
+                )),
+                handle_mob_spawn_event,
+                handle_elite_mob_spawn_event,
+                handle_loot_drop_event,
+                handle_villager_spawn_event,
+                handle_grow_buff_event,
+                cleanup_event_notifications,
+            )
+                .run_if(in_state(crate::states::InGame))
+                .run_if(resource_exists::<MeshCache>)
+                .run_if(resource_exists::<EnemyTextures>)
+                .run_if(resource_exists::<ResourceTextures>),
+        );
 
         info!("RandomEventPlugin loaded");
     }

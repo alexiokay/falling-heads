@@ -1,19 +1,22 @@
-use bevy::prelude::*;
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use crate::components::hero::Hero;
+use crate::resources::day_night_cycle::DayNightCycle;
 use crate::resources::inventory::Inventory;
 use crate::resources::settings::GameSettings;
 use crate::resources::world_config::WorldConfig;
-use crate::resources::day_night_cycle::DayNightCycle;
 use crate::states::GameState;
+use crate::systems::biome_music_system::update_music_volume_in_settings;
 use crate::systems::pause_menu_system::*;
 use crate::systems::settings_menu_system::*;
-use crate::systems::biome_music_system::update_music_volume_in_settings;
-use crate::components::hero::Hero;
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::prelude::*;
 
 pub struct UiPlugin;
 
 #[derive(Component)]
 struct InventoryText;
+
+#[derive(Component)]
+struct GameplayHudRoot;
 
 #[derive(Component)]
 struct ResourceCount {
@@ -47,32 +50,41 @@ impl Default for FpsUpdateTimer {
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<FpsUpdateTimer>()
+        app.init_resource::<FpsUpdateTimer>()
             .init_resource::<DayNightCycle>()
             .add_systems(OnEnter(GameState::Playing), setup_ui)
-            .add_systems(Update, (
-                update_day_night_cycle,
-                update_inventory_display,
-                update_fps_display,
-                update_fps_visibility,
-                update_y_coordinate,
-                update_difficulty_display,
-                update_day_night_display,
-                toggle_pause,
-            ).run_if(in_state(GameState::Playing)))
-            .add_systems(Update, (
-                toggle_pause,
-                handle_menu_buttons,
-            ).run_if(in_state(GameState::Paused)))
+            .add_systems(OnExit(GameState::Playing), cleanup_ui)
+            .add_systems(
+                Update,
+                (
+                    update_day_night_cycle,
+                    update_inventory_display,
+                    update_fps_display,
+                    update_fps_visibility,
+                    update_y_coordinate,
+                    update_difficulty_display,
+                    update_day_night_display,
+                    toggle_pause,
+                )
+                    .run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                Update,
+                (toggle_pause, handle_menu_buttons).run_if(in_state(GameState::Paused)),
+            )
             .add_systems(OnEnter(GameState::Paused), setup_pause_menu)
             .add_systems(OnExit(GameState::Paused), cleanup_pause_menu)
-            .add_systems(Update, (
-                toggle_pause,
-                handle_settings_buttons,
-                handle_volume_sliders,
-                update_music_volume_in_settings, // Update music volume in real-time
-            ).run_if(in_state(GameState::Settings)))
+            .add_systems(
+                Update,
+                (
+                    toggle_pause,
+                    handle_settings_buttons,
+                    settings_layout_and_style.after(handle_settings_buttons),
+                    handle_volume_sliders,
+                    update_music_volume_in_settings, // Update music volume in real-time
+                )
+                    .run_if(in_state(GameState::Settings)),
+            )
             .add_systems(OnEnter(GameState::Settings), setup_settings_menu)
             .add_systems(OnExit(GameState::Settings), cleanup_settings_menu);
 
@@ -94,37 +106,41 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
             },
             BackgroundColor(Color::NONE),
             InventoryText,
+            GameplayHudRoot,
+            bevy::picking::Pickable::IGNORE,
         ))
         .with_children(|parent| {
             // Helper macro to spawn resource rows
             macro_rules! resource_row {
                 ($name:expr, $texture:expr) => {
-                    parent.spawn(Node {
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Vw(0.6),
-                        ..default()
-                    }).with_children(|row| {
-                        row.spawn((
-                            ImageNode::new(asset_server.load($texture)),
-                            Node {
-                                width: Val::Vw(2.5),
-                                height: Val::Vw(2.5),
-                                ..default()
-                            },
-                        ));
-                        row.spawn((
-                            Text::new("0"),
-                            TextFont {
-                                font_size: 28.0,
-                                ..default()
-                            },
-                            TextColor(Color::WHITE),
-                            ResourceCount {
-                                resource_type: $name.to_string(),
-                            },
-                        ));
-                    });
+                    parent
+                        .spawn(Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Vw(0.6),
+                            ..default()
+                        })
+                        .with_children(|row| {
+                            row.spawn((
+                                ImageNode::new(asset_server.load($texture)),
+                                Node {
+                                    width: Val::Vw(2.5),
+                                    height: Val::Vw(2.5),
+                                    ..default()
+                                },
+                            ));
+                            row.spawn((
+                                Text::new("0"),
+                                TextFont {
+                                    font_size: FontSize::Px(28.0),
+                                    ..default()
+                                },
+                                TextColor(Color::WHITE),
+                                ResourceCount {
+                                    resource_type: $name.to_string(),
+                                },
+                            ));
+                        });
                 };
             }
 
@@ -141,7 +157,7 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent.spawn((
                 Text::new("Y: 0"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: FontSize::Px(24.0),
                     ..default()
                 },
                 TextColor(Color::WHITE),
@@ -159,7 +175,7 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent.spawn((
                 Text::new("Difficulty: 1.0"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: FontSize::Px(24.0),
                     ..default()
                 },
                 TextColor(Color::srgb(1.0, 0.5, 0.0)), // Orange
@@ -170,17 +186,44 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent.spawn((
                 Text::new("Day"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: FontSize::Px(24.0),
                     ..default()
                 },
                 TextColor(Color::srgb(1.0, 1.0, 0.0)), // Yellow
                 DayNightText,
+            ));
+
+            // Hero play style (C or the dev panel changes it)
+            parent.spawn((
+                Text::new("Style: Bouncy"),
+                TextFont {
+                    font_size: FontSize::Px(24.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.6, 0.9, 1.0)),
+                crate::systems::play_styles::HeroStyleText,
+            ));
+
+            // Active effects on the hero (empty when there are none)
+            parent.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: FontSize::Px(20.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.75, 1.0, 0.6)),
+                Node {
+                    max_width: Val::Px(420.0),
+                    ..default()
+                },
+                crate::systems::buffs::status_effects::HeroEffectsText,
             ));
         });
 
     // Spawn FPS counter (top right)
     commands
         .spawn((
+            GameplayHudRoot,
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
@@ -195,7 +238,7 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent.spawn((
                 Text::new("FPS: --"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: FontSize::Px(24.0),
                     ..default()
                 },
                 TextColor(Color::srgb(0.0, 1.0, 0.0)), // Green color
@@ -235,6 +278,9 @@ fn update_fps_display(
     mut timer: ResMut<FpsUpdateTimer>,
     time: Res<Time>,
     settings: Res<GameSettings>,
+    #[cfg(target_os = "windows")] fg: Option<
+        Res<crate::systems::frame_generation::FrameGenerationStatus>,
+    >,
 ) {
     if !settings.show_fps {
         return;
@@ -248,6 +294,14 @@ fn update_fps_display(
     }
 
     for mut text in query.iter_mut() {
+        #[cfg(target_os = "windows")]
+        if let Some(fg) = fg.as_ref().filter(|f| f.active) {
+            **text = format!(
+                "Rendered: {:.0} FPS\nPresented: {:.0} FPS (FG)",
+                fg.rendered_fps, fg.presented_fps
+            );
+            continue;
+        }
         if let Some(fps) = diagnostics
             .get(&FrameTimeDiagnosticsPlugin::FPS)
             .and_then(|fps| fps.smoothed())
@@ -298,10 +352,7 @@ fn update_difficulty_display(
     }
 }
 
-fn update_day_night_cycle(
-    time: Res<Time>,
-    mut cycle: ResMut<DayNightCycle>,
-) {
+fn update_day_night_cycle(time: Res<Time>, mut cycle: ResMut<DayNightCycle>) {
     cycle.update(time.delta_secs());
 }
 
@@ -320,5 +371,11 @@ fn update_day_night_display(
             **text = new_text.to_string();
             *color = TextColor(new_color);
         }
+    }
+}
+
+fn cleanup_ui(mut commands: Commands, roots: Query<Entity, With<GameplayHudRoot>>) {
+    for entity in &roots {
+        commands.entity(entity).despawn();
     }
 }

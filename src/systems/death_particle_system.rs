@@ -1,18 +1,16 @@
-use bevy::prelude::*;
-use rand::Rng;
 use crate::components::death_particle::DeathParticle;
 use crate::events::damage_events::EntityDied;
-use crate::states::GameState;
+use bevy::prelude::*;
+use rand::RngExt;
 
 pub struct DeathParticlePlugin;
 
 impl Plugin for DeathParticlePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_systems(Update, (
-                spawn_death_particles,
-                update_death_particles,
-            ).run_if(in_state(GameState::Playing)));
+        app.add_systems(
+            Update,
+            (spawn_death_particles, update_death_particles).run_if(in_state(crate::states::InGame)),
+        );
 
         info!("DeathParticlePlugin loaded");
     }
@@ -22,13 +20,20 @@ impl Plugin for DeathParticlePlugin {
 fn spawn_death_particles(
     mut commands: Commands,
     mut death_events: MessageReader<EntityDied>,
-    entity_query: Query<(&Transform, Option<&MeshMaterial3d<StandardMaterial>>, Option<&crate::components::damage_visual::DamageVisual>)>,
+    entity_query: Query<(
+        &Transform,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&crate::components::damage_visual::DamageVisual>,
+        Option<&Mesh3d>,
+    )>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for event in death_events.read() {
         // Get entity info
-        let Ok((transform, material_handle, damage_visual)) = entity_query.get(event.entity) else {
+        let Ok((transform, material_handle, damage_visual, face_mesh)) =
+            entity_query.get(event.entity)
+        else {
             continue;
         };
 
@@ -48,31 +53,34 @@ fn spawn_death_particles(
             None
         };
 
+        let face = super::head_geometry::bounds(&meshes, face_mesh);
+        let dimensions = super::head_geometry::effect_scale(face, transform);
+        let area_scale = dimensions.x.min(dimensions.y).sqrt().clamp(0.25, 2.);
         // Spawn 8-12 particles flying in different directions
-        let mut rng = rand::thread_rng();
-        let particle_count = rng.gen_range(8..=12);
+        let mut rng = rand::rng();
+        let particle_count = rng.random_range(8..=12);
 
         for _ in 0..particle_count {
             // Random velocity in all directions (explosion effect)
             let velocity = Vec3::new(
-                rng.gen_range(-300.0..300.0),
-                rng.gen_range(100.0..400.0),  // Bias upward
-                rng.gen_range(-50.0..50.0),
+                rng.random_range(-300.0..300.0) * area_scale,
+                rng.random_range(100.0..400.0) * area_scale, // Bias upward
+                rng.random_range(-50.0..50.0),
             );
 
             // Random rotation velocity for spinning effect (in radians/sec)
             let rotation_velocity = Vec3::new(
-                rng.gen_range(-5.0..5.0),  // X-axis rotation
-                rng.gen_range(-5.0..5.0),  // Y-axis rotation
-                rng.gen_range(-5.0..5.0),  // Z-axis rotation
+                rng.random_range(-5.0..5.0), // X-axis rotation
+                rng.random_range(-5.0..5.0), // Y-axis rotation
+                rng.random_range(-5.0..5.0), // Z-axis rotation
             );
 
             // Random particle size with more variation (6-18 units)
-            let size_base = rng.gen_range(6.0..18.0);
+            let size_base = rng.random_range(6.0..18.0);
             // Add slight non-uniform scaling for more natural look
-            let size_x = size_base * rng.gen_range(0.8..1.2);
-            let size_y = size_base * rng.gen_range(0.8..1.2);
-            let size_z = size_base * rng.gen_range(0.8..1.2);
+            let size_x = size_base * rng.random_range(0.8..1.2) * dimensions.x;
+            let size_y = size_base * rng.random_range(0.8..1.2) * dimensions.y;
+            let size_z = size_base * rng.random_range(0.8..1.2) * dimensions.x.min(dimensions.y);
 
             // Create particle mesh (small cube with slight size variation)
             let particle_mesh = meshes.add(Cuboid::new(size_x, size_y, size_z));
@@ -82,7 +90,7 @@ fn spawn_death_particles(
                 materials.add(StandardMaterial {
                     base_color: mat.base_color,
                     base_color_texture: mat.base_color_texture.clone(), // Use actual texture!
-                    unlit: true,  // Particles glow
+                    unlit: true,                                        // Particles glow
                     alpha_mode: mat.alpha_mode,
                     ..default()
                 })
@@ -98,21 +106,32 @@ fn spawn_death_particles(
             // Random initial rotation
             let initial_rotation = Quat::from_euler(
                 EulerRot::XYZ,
-                rng.gen_range(0.0..std::f32::consts::TAU),
-                rng.gen_range(0.0..std::f32::consts::TAU),
-                rng.gen_range(0.0..std::f32::consts::TAU),
+                rng.random_range(0.0..std::f32::consts::TAU),
+                rng.random_range(0.0..std::f32::consts::TAU),
+                rng.random_range(0.0..std::f32::consts::TAU),
             );
 
             // Spawn particle at death location with random rotation
             commands.spawn((
-                DeathParticle::new(velocity, rotation_velocity, rng.gen_range(1.5..2.5)),
+                DeathParticle::new(velocity, rotation_velocity, rng.random_range(1.5..2.5)),
                 Mesh3d(particle_mesh),
                 MeshMaterial3d(particle_material),
-                Transform::from_translation(transform.translation).with_rotation(initial_rotation),
+                Transform::from_translation(transform.transform_point(
+                    face.center
+                        + Vec3::new(
+                            rng.random_range(-0.4..0.4) * face.size.x,
+                            rng.random_range(-0.4..0.4) * face.size.y,
+                            face.size.z * 0.5,
+                        ),
+                ))
+                .with_rotation(initial_rotation),
             ));
         }
 
-        info!("💀 Death particles spawned for entity {:?} with actual texture pieces", event.entity);
+        info!(
+            "💀 Death particles spawned for entity {:?} with actual texture pieces",
+            event.entity
+        );
     }
 }
 

@@ -15,10 +15,8 @@ pub fn get_damage_stage(current_health: u32, max_health: u32) -> usize {
         return 8; // Maximum damage (about to break)
     }
 
-    // Map health percentage to damage stage (0-8)
-    let health_percent = current_health as f32 / max_health as f32;
-    let stage = ((1.0 - health_percent) * 9.0) as usize;
-    stage.min(8) // Cap at stage 8
+    // Integer arithmetic avoids losing a damage stage at exact fractions such as 1/3.
+    (((max_health - current_health) as u64 * 9 / max_health as u64) as usize).clamp(1, 8)
 }
 
 #[cfg(test)]
@@ -40,9 +38,11 @@ mod tests {
         assert_eq!(get_damage_stage(2, 5), 5); // 40%
         assert_eq!(get_damage_stage(1, 5), 7); // 20%
 
+        assert_eq!(get_damage_stage(99, 100), 1); // First hit is always visible
+
         // Block with 10 health
         assert_eq!(get_damage_stage(10, 10), 0); // 100%
-        assert_eq!(get_damage_stage(5, 10), 4);  // 50%
-        assert_eq!(get_damage_stage(1, 10), 8);  // 10%
+        assert_eq!(get_damage_stage(5, 10), 4); // 50%
+        assert_eq!(get_damage_stage(1, 10), 8); // 10%
     }
 }

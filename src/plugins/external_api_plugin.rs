@@ -1,24 +1,132 @@
-use bevy::prelude::*;
-use bevy::scene::SceneRoot;
-use crate::resources::command_queue::{PowerCommand, PowerCommandType};
-use crate::resources::asset_handles::{GameTextures, ProjectileTextures, DragonAnimation};
-use crate::events::power_events::PowerActivated;
+use crate::components::enemy::{Enemy, EnemyBehavior, EnemyType, Flying, Health};
 use crate::components::hero::Hero;
 use crate::components::power_effect::SpeedModifier;
-use crate::plugins::powers_plugin::{spawn_tnt, spawn_laser, spawn_arrows, spawn_magic_barrier, spawn_magnet_field};
+use crate::events::power_events::PowerActivated;
+use crate::plugins::powers_plugin::{
+    spawn_arrows, spawn_laser, spawn_laser_burst, spawn_magic_barrier, spawn_magnet_field,
+    spawn_tnt,
+};
+use crate::resources::asset_handles::{GameTextures, ProjectileTextures};
+use crate::resources::command_queue::{PowerCommand, PowerCommandType};
 use crate::systems::entity_spawn::spawn_villagers_around_position;
-use crate::components::enemy::{Enemy, EnemyType, Health, Dragon, DragonState, Flying, EnemyBehavior, DragonAnimationClip};
-use crate::components::bundles::PhysicsBundle;
-use crate::resources::asset_handles::EnemyModels;
+use bevy::prelude::*;
+
 use crate::components::collision_layers::GameLayer;
 use crate::utils::constants::{CHARACTER_MASS, ENEMY_BOUNCE};
 use avian3d::prelude::*;
 
 pub struct ExternalApiPlugin;
 
+#[derive(serde::Deserialize)]
+struct LauncherApiOptions {
+    #[serde(default)]
+    direction: crate::resources::command_queue::LaunchDirection,
+    #[serde(default = "one_passenger")]
+    villagers: u8,
+}
+fn one_passenger() -> u8 {
+    1
+}
+#[cfg(test)]
+mod launcher_api_tests {
+    use super::*;
+    #[test]
+    fn api_defaults_and_passenger_limits() {
+        let defaults: LauncherApiOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(defaults.validated().unwrap().villagers, 1);
+        for count in [0, 1, 8] {
+            let options: LauncherApiOptions =
+                serde_json::from_value(serde_json::json!({"direction":"left","villagers":count}))
+                    .unwrap();
+            assert_eq!(
+                options.validated().unwrap().direction,
+                crate::resources::command_queue::LaunchDirection::Left
+            );
+        }
+        let invalid: LauncherApiOptions = serde_json::from_str("{\"villagers\":9}").unwrap();
+        assert!(invalid.validated().is_err());
+        for json in [
+            "{\"villagers\":-1}",
+            "{\"villagers\":1.5}",
+            "{\"direction\":\"up\"}",
+        ] {
+            assert!(serde_json::from_str::<LauncherApiOptions>(json).is_err());
+        }
+    }
+}
+impl LauncherApiOptions {
+    fn validated(&self) -> Result<crate::resources::command_queue::LauncherOptions, &'static str> {
+        if self.villagers > 8 {
+            return Err("Launcher villagers must be between 0 and 8");
+        }
+        Ok(crate::resources::command_queue::LauncherOptions {
+            direction: self.direction,
+            villagers: self.villagers,
+        })
+    }
+}
+
 // Global channel for commands (simplified approach)
-use std::sync::{Arc, Mutex, OnceLock};
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// Default API port. Set MINEHEADS_API_PORT to use another one (e.g. when
+/// Windows has reserved a range containing 3029 for Hyper-V/WSL/Docker).
+const DEFAULT_API_PORT: u16 = 3029;
+
+fn api_addr() -> String {
+    let port = std::env::var("MINEHEADS_API_PORT")
+        .ok()
+        .and_then(|p| p.trim().parse::<u16>().ok())
+        .unwrap_or(DEFAULT_API_PORT);
+    format!("127.0.0.1:{port}")
+}
+
+/// STYLE needs a valid style; VILLAGERS may carry one; other commands ignore it.
+fn requested_style(
+    command: PowerCommandType,
+    style: Option<&str>,
+) -> Result<Option<crate::components::play_style::PlayStyle>, String> {
+    use crate::components::play_style::PlayStyle;
+    let names = || {
+        PlayStyle::ALL
+            .map(|s| s.name().to_ascii_lowercase())
+            .join(", ")
+    };
+    match (command, style) {
+        (PowerCommandType::Style | PowerCommandType::Villagers, Some(name)) => {
+            PlayStyle::parse(name)
+                .map(Some)
+                .ok_or_else(|| format!("Unknown style '{name}'. Styles: {}", names()))
+        }
+        (PowerCommandType::Style, None) => Err(format!("STYLE needs \"style\": {}", names())),
+        _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod style_api_tests {
+    use super::*;
+    use crate::components::play_style::PlayStyle;
+    #[test]
+    fn style_is_required_for_style_optional_for_villagers_ignored_elsewhere() {
+        assert_eq!(
+            requested_style(PowerCommandType::Style, Some("Heavy")),
+            Ok(Some(PlayStyle::Heavy))
+        );
+        assert!(requested_style(PowerCommandType::Style, None).is_err());
+        assert!(requested_style(PowerCommandType::Style, Some("rocket")).is_err());
+        assert_eq!(requested_style(PowerCommandType::Villagers, None), Ok(None));
+        assert_eq!(
+            requested_style(PowerCommandType::Villagers, Some("sticky")),
+            Ok(Some(PlayStyle::Sticky))
+        );
+        assert_eq!(
+            requested_style(PowerCommandType::Tnt, Some("rocket")),
+            Ok(None)
+        );
+    }
+}
 
 static COMMAND_QUEUE: OnceLock<Arc<Mutex<VecDeque<PowerCommand>>>> = OnceLock::new();
 
@@ -29,13 +137,18 @@ pub fn get_command_queue() -> Option<Arc<Mutex<VecDeque<PowerCommand>>>> {
 
 impl Plugin for ExternalApiPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_message::<PowerActivated>()
+        app.add_message::<PowerActivated>()
             .add_systems(Startup, start_api_server)
-            .add_systems(Update, process_commands)
+            .add_systems(
+                Update,
+                process_commands.run_if(in_state(crate::states::InGame)),
+            )
             .add_systems(Update, update_thunder_bolts);
 
-        info!("ExternalApiPlugin loaded - API will start on http://localhost:3000");
+        info!(
+            "ExternalApiPlugin loaded - API will start on http://{}",
+            api_addr()
+        );
     }
 }
 
@@ -43,13 +156,19 @@ fn start_api_server() {
     // Initialize the global queue
     let queue = Arc::new(Mutex::new(VecDeque::new()));
     COMMAND_QUEUE.set(queue.clone()).ok();
+    if std::env::args().any(|arg| {
+        arg == "--smoke-test"
+            || arg == "--vfx-smoke-test"
+            || arg == "--ui-smoke-test"
+            || arg == "--gpu-smoke-test"
+            || arg == "--fg-smoke-test"
+            || arg == "--visual-smoke-test"
+    }) {
+        return;
+    }
 
     use axum::{
-        routing::post,
-        Router, Json,
-        extract::State,
-        response::IntoResponse,
-        http::StatusCode,
+        Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post,
     };
     use serde::{Deserialize, Serialize};
     use tokio::runtime::Runtime;
@@ -59,6 +178,11 @@ fn start_api_server() {
         action: String,
         #[serde(default = "default_username")]
         username: String,
+        #[serde(flatten)]
+        launcher: LauncherApiOptions,
+        /// Play style for STYLE (required) or VILLAGERS (optional)
+        #[serde(default)]
+        style: Option<String>,
     }
 
     fn default_username() -> String {
@@ -76,12 +200,19 @@ fn start_api_server() {
         Json(cmd): Json<CommandRequest>,
     ) -> impl IntoResponse {
         let command_type = match cmd.action.to_uppercase().as_str() {
+            "WATERBUCKET" => Some(PowerCommandType::WaterBucket),
+            "LAVABUCKET" => Some(PowerCommandType::LavaBucket),
+            "TELEPORT" => Some(PowerCommandType::Teleport),
+            "LAUNCHER" | "ROCKET" => Some(PowerCommandType::Launcher),
+            "RIFT" => Some(PowerCommandType::Rift),
+            "REWIND" => Some(PowerCommandType::Rewind),
             "TNT" => Some(PowerCommandType::Tnt),
             "FAST" => Some(PowerCommandType::Fast),
             "SLOW" => Some(PowerCommandType::Slow),
             "FUSS" => Some(PowerCommandType::Fuss),
             "BOLT" => Some(PowerCommandType::Bolt),
             "ARROW" => Some(PowerCommandType::Arrow),
+            "BURST" => Some(PowerCommandType::LaserBurst), // Renamed from LASERBURST to BURST
             "LASER" => Some(PowerCommandType::Laser),
             "GHAST" => Some(PowerCommandType::Ghast),
             "BOX" => Some(PowerCommandType::Box),
@@ -91,18 +222,68 @@ fn start_api_server() {
             "DRAGON" => Some(PowerCommandType::Dragon),
             "THUNDER" => Some(PowerCommandType::Thunder),
             "LOOTBOX" => Some(PowerCommandType::Lootbox),
+            "STYLE" => Some(PowerCommandType::Style),
+            "FEATHER" => Some(PowerCommandType::Feather),
+            "ANVIL" => Some(PowerCommandType::Anvil),
+            "GOLEM" => Some(PowerCommandType::Golem),
+            "PEARL" | "ENDERPEARL" => Some(PowerCommandType::Pearl),
+            "QUAKE" | "EARTHQUAKE" => Some(PowerCommandType::Quake),
+            "SHRINK" => Some(PowerCommandType::Shrink),
+            "WIND" => Some(PowerCommandType::Wind),
+            "BLACKHOLE" | "BLACK_HOLE" | "HOLE" => Some(PowerCommandType::BlackHole),
+            "ICEAGE" | "ICE_AGE" | "ICE" => Some(PowerCommandType::IceAge),
+            "BEES" | "BEE" => Some(PowerCommandType::Bees),
             _ => None,
         };
 
+        if !crate::systems::game_modes::chat_powers_on() {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(CommandResponse {
+                    success: false,
+                    message: "Chat powers are turned off in the game (Settings > Game modes)"
+                        .into(),
+                }),
+            );
+        }
         if let Some(cmd_type) = command_type {
-            let power_cmd = PowerCommand::new(cmd_type, cmd.username.clone());
+            let mut power_cmd = PowerCommand::new(cmd_type, cmd.username.clone());
+            match requested_style(cmd_type, cmd.style.as_deref()) {
+                Ok(style) => power_cmd.style = style,
+                Err(message) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(CommandResponse {
+                            success: false,
+                            message,
+                        }),
+                    );
+                }
+            }
+            if cmd_type == PowerCommandType::Launcher {
+                match cmd.launcher.validated() {
+                    Ok(options) => power_cmd.launcher = options,
+                    Err(message) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(CommandResponse {
+                                success: false,
+                                message: message.into(),
+                            }),
+                        );
+                    }
+                }
+            }
             if let Ok(mut q) = queue.lock() {
                 q.push_back(power_cmd);
                 (
                     StatusCode::OK,
                     Json(CommandResponse {
                         success: true,
-                        message: format!("Power '{}' queued for user '{}'!", cmd.action, cmd.username),
+                        message: format!(
+                            "Power '{}' queued for user '{}'!",
+                            cmd.action, cmd.username
+                        ),
                     }),
                 )
             } else {
@@ -119,7 +300,10 @@ fn start_api_server() {
                 StatusCode::BAD_REQUEST,
                 Json(CommandResponse {
                     success: false,
-                    message: format!("Unknown command: {}. Available: TNT, FAST, SLOW, LASER, ARROW, BOLT, GHAST, BOX, MAGNET, FUSS, VILLAGERS, MIRROR", cmd.action),
+                    message: format!(
+                        "Unknown command: {}. Available: TNT, FAST, SLOW, LASER, BURST, ARROW, BOLT, GHAST, BOX, MAGNET, FUSS, VILLAGERS, MIRROR, DRAGON, THUNDER, LOOTBOX, STYLE, FEATHER, ANVIL, GOLEM, PEARL, QUAKE, SHRINK, WIND, BLACKHOLE, ICEAGE, BEES, GROW",
+                        cmd.action
+                    ),
                 }),
             )
         }
@@ -130,33 +314,65 @@ fn start_api_server() {
         .with_state(queue.clone());
 
     // Spawn API server in background thread
+    let api_addr = api_addr();
     std::thread::spawn(move || {
-        let rt = Runtime::new().unwrap();
+        let rt = match Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                error!("API server disabled: cannot start async runtime: {e}");
+                return;
+            }
+        };
         rt.block_on(async {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:3029")
-                .await
-                .expect("Failed to bind to port 3029");
-            println!("🌐 API Server running on http://127.0.0.1:3029");
-            println!("📡 Try: curl -X POST http://localhost:3029/command -H \"Content-Type: application/json\" -d '{{\"action\":\"TNT\",\"username\":\"viewer123\"}}'");
-            axum::serve(listener, app_router).await.unwrap();
+            let listener = match tokio::net::TcpListener::bind(&api_addr).await {
+                Ok(listener) => listener,
+                Err(e) => {
+                    error!("API server disabled: cannot bind {api_addr}: {e}");
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        error!(
+                            "Windows may have reserved this port (see `netsh interface ipv4 show \n                             excludedportrange protocol=tcp`). Set MINEHEADS_API_PORT to a free port, \n                             or reserve this one for MineHeads as admin."
+                        );
+                    }
+                    return;
+                }
+            };
+            info!("API server running on http://{api_addr}");
+            info!("Try: curl -X POST http://{api_addr}/command -H \"Content-Type: application/json\" -d '{{\"action\":\"TNT\",\"username\":\"viewer123\"}}'");
+            if let Err(e) = axum::serve(listener, app_router).await {
+                error!("API server stopped: {e}");
+            }
         });
     });
 }
 
+#[allow(clippy::too_many_arguments)] // Bevy system parameters
 fn process_commands(
     mut commands: Commands,
     hero_query: Query<(Entity, &Transform), With<Hero>>,
     textures: Res<GameTextures>,
     projectile_textures: Option<Res<ProjectileTextures>>,
-    enemy_models: Res<EnemyModels>,
-    dragon_animation: Option<Res<DragonAnimation>>,
     asset_server: Res<AssetServer>,
     block_atlases: Option<Res<crate::resources::asset_handles::BlockAtlases>>,
     mesh_cache: Option<Res<crate::resources::mesh_cache::MeshCache>>,
     spatial_hash: Res<crate::resources::spatial_hash::SpatialHash>,
     mut queries: ParamSet<(
-        Query<(Entity, &Transform, &crate::components::block::Block)>,
-        Query<(Entity, &Transform, &crate::components::enemy::Health), Or<(With<Hero>, With<crate::components::villager::Villager>, With<crate::components::enemy::Enemy>)>>,
+        Query<
+            (
+                Entity,
+                &Transform,
+                &crate::components::block::BlockType,
+                Option<&crate::systems::biome_content::Tile>,
+            ),
+            With<crate::components::block::Block>,
+        >,
+        Query<
+            (Entity, &Transform, &crate::components::enemy::Health),
+            Or<(
+                With<Hero>,
+                With<crate::components::villager::Villager>,
+                With<crate::components::enemy::Enemy>,
+            )>,
+        >,
         Query<&mut crate::components::buff::Buff>,
     )>,
     camera_query: Query<&Projection, With<Camera>>,
@@ -164,6 +380,7 @@ fn process_commands(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut power_events: MessageWriter<PowerActivated>,
     mut damage_events: MessageWriter<crate::events::damage_events::EntityDamaged>,
+    mut destroyed: MessageWriter<crate::events::block_events::BlockDestroyed>,
 ) {
     let Some(queue) = COMMAND_QUEUE.get() else {
         return;
@@ -174,15 +391,48 @@ fn process_commands(
     };
 
     while let Some(command) = q.pop_front() {
-        power_events.write(PowerActivated { command: command.clone() });
+        power_events.write(PowerActivated {
+            command: command.clone(),
+        });
 
         // Execute power immediately
         match command.command_type {
+            PowerCommandType::Rift
+            | PowerCommandType::Rewind
+            | PowerCommandType::Launcher
+            | PowerCommandType::Teleport
+            | PowerCommandType::WaterBucket
+            | PowerCommandType::LavaBucket
+            | PowerCommandType::Style
+            | PowerCommandType::Fuss
+            | PowerCommandType::Bolt
+            | PowerCommandType::Feather
+            | PowerCommandType::Anvil
+            | PowerCommandType::Golem
+            | PowerCommandType::Pearl
+            | PowerCommandType::Quake
+            | PowerCommandType::Shrink
+            | PowerCommandType::Wind
+            | PowerCommandType::BlackHole
+            | PowerCommandType::IceAge
+            | PowerCommandType::Bees => {} // Dedicated systems consume PowerActivated.
             PowerCommandType::Tnt => {
-                if let (Ok((_, hero_transform)), Some(atlases), Some(mesh_cache)) =
-                    (hero_query.single(), block_atlases.as_ref(), mesh_cache.as_ref()) {
-                    let spawn_pos = hero_transform.translation + Vec3::new(0.0, 50.0, 0.0);  // 2D scale
-                    spawn_tnt(&mut commands, spawn_pos, &atlases, &mesh_cache, &mut meshes, &mut materials, Some(command.username.clone()), Some(&asset_server));
+                if let (Ok((_, hero_transform)), Some(atlases), Some(mesh_cache)) = (
+                    hero_query.single(),
+                    block_atlases.as_ref(),
+                    mesh_cache.as_ref(),
+                ) {
+                    let spawn_pos = hero_transform.translation + Vec3::new(0.0, 50.0, 0.0); // 2D scale
+                    spawn_tnt(
+                        &mut commands,
+                        spawn_pos,
+                        &atlases,
+                        &mesh_cache,
+                        &mut meshes,
+                        &mut materials,
+                        Some(command.username.clone()),
+                        Some(&asset_server),
+                    );
                     info!("🧨 TNT power activated by {}!", command.username);
                 }
             }
@@ -192,7 +442,10 @@ fn process_commands(
                         multiplier: 2.0,
                         duration: Timer::from_seconds(5.0, TimerMode::Once),
                     });
-                    info!("⚡ FAST power activated by {}! Speed x2 for 5 seconds", command.username);
+                    info!(
+                        "⚡ FAST power activated by {}! Speed x2 for 5 seconds",
+                        command.username
+                    );
                 }
             }
             PowerCommandType::Slow => {
@@ -201,19 +454,46 @@ fn process_commands(
                         multiplier: 0.5,
                         duration: Timer::from_seconds(5.0, TimerMode::Once),
                     });
-                    info!("🐌 SLOW power activated by {}! Speed x0.5 for 5 seconds", command.username);
+                    info!(
+                        "🐌 SLOW power activated by {}! Speed x0.5 for 5 seconds",
+                        command.username
+                    );
                 }
             }
             PowerCommandType::Laser => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
-                    spawn_laser(&mut commands, hero_transform.translation, &mut meshes, &mut materials, &asset_server);
+                    spawn_laser(
+                        &mut commands,
+                        hero_transform.translation,
+                        &mut meshes,
+                        &mut materials,
+                        &asset_server,
+                    );
                     info!("💜 LASER power activated by {}!", command.username);
+                }
+            }
+            PowerCommandType::LaserBurst => {
+                if let Ok((hero_entity, _)) = hero_query.single() {
+                    spawn_laser_burst(
+                        &mut commands,
+                        hero_entity,
+                        &mut meshes,
+                        &mut materials,
+                        &asset_server,
+                    );
+                    info!("⚡ LASER BURST activated by {}!", command.username);
                 }
             }
             PowerCommandType::Arrow => {
                 if let Ok((hero_entity, _)) = hero_query.single() {
                     if let Some(ref projectile_textures) = projectile_textures {
-                        spawn_arrows(&mut commands, hero_entity, &mut meshes, &mut materials, projectile_textures);
+                        spawn_arrows(
+                            &mut commands,
+                            hero_entity,
+                            &mut meshes,
+                            &mut materials,
+                            projectile_textures,
+                        );
                         info!("🏹 ARROW barrage activated by {}!", command.username);
                     } else {
                         info!("⚠️ ARROW power waiting for textures to load...");
@@ -243,8 +523,6 @@ fn process_commands(
                         &mut commands,
                         hero_entity,
                         hero_transform.translation,
-                        &mut meshes,
-                        &mut materials,
                         &asset_server,
                     );
                     info!("🪞 MIRROR barrier activated by {}!", command.username);
@@ -275,21 +553,7 @@ fn process_commands(
                     info!("👻 GHAST spawned by {}!", command.username);
                 }
             }
-            PowerCommandType::Dragon => {
-                if let Ok((_, hero_transform)) = hero_query.single() {
-                    if let Some(dragon_anim) = dragon_animation.as_ref() {
-                        spawn_dragon(
-                            &mut commands,
-                            hero_transform.translation + Vec3::new(300.0, 200.0, 0.0), // Spawn above and to the right
-                            &enemy_models,
-                            dragon_anim,
-                            &mut meshes,
-                            &mut materials,
-                        );
-                        info!("🐉 DRAGON spawned by {}!", command.username);
-                    }
-                }
-            }
+            PowerCommandType::Dragon => {} // Shared natural/power dragon encounter.
             PowerCommandType::Thunder => {
                 if let Ok((_, hero_transform)) = hero_query.single() {
                     spawn_thunder_strikes(
@@ -302,6 +566,7 @@ fn process_commands(
                         &mut materials,
                         &asset_server,
                         &mut damage_events,
+                        &mut destroyed,
                     );
                     info!("⚡ THUNDER strikes spawned by {}!", command.username);
                 }
@@ -313,83 +578,57 @@ fn process_commands(
 
                 use crate::systems::lootbox_system::spawn_roulette_ui_for_command;
                 if spawn_roulette_ui_for_command(&mut commands, selected_reward, &asset_server) {
-                    info!("📦 LOOTBOX reward triggered by {}: {:?}", command.username, selected_reward);
+                    info!(
+                        "📦 LOOTBOX reward triggered by {}: {:?}",
+                        command.username, selected_reward
+                    );
                 } else {
-                    info!("📦 LOOTBOX already active, skipping request from {}", command.username);
+                    info!(
+                        "📦 LOOTBOX already active, skipping request from {}",
+                        command.username
+                    );
                 }
             }
             PowerCommandType::RandomBox => {
                 // Spawn a bouncing randombox near the hero in a free area
                 if let Ok((_, hero_transform)) = hero_query.single() {
                     use crate::systems::randombox_system::spawn_randombox;
-                    use rand::Rng;
+                    use rand::RngExt;
 
-                    // Find a safe spawn position by checking blocks
-                    let mut rng = rand::thread_rng();
+                    // Every spawn is validated by the common drop/terrain resolver before rendering.
                     let hero_pos = hero_transform.translation;
-                    let mut spawn_pos = None;
+                    let mut rng = rand::rng();
+                    let final_pos =
+                        hero_pos + Vec3::new(rng.random_range(-350.0..350.0), 200.0, 0.0);
 
-                    // Try 30 times to find an empty position
-                    for _ in 0..30 {
-                        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-                        let distance = rng.gen_range(420.0..600.0);
-                        let offset_x = angle.cos() * distance;
-                        let offset_y = angle.sin() * distance;
-
-                        let test_pos = Vec3::new(
-                            hero_pos.x + offset_x,
-                            hero_pos.y + offset_y + 300.0,
-                            10.0,
-                        );
-
-                        // Check if this position is clear of blocks
-                        let chunk_coords = spatial_hash.world_to_chunk(test_pos.x, test_pos.y);
-                        let mut is_blocked = false;
-
-                        'chunk_check: for dx in -1..=1 {
-                            for dy in -1..=1 {
-                                let check_chunk = (chunk_coords.0 + dx, chunk_coords.1 + dy);
-                                if let Some(entities) = spatial_hash.chunks.get(&check_chunk) {
-                                    for &entity in entities {
-                                        if let Ok((_, block_transform, _)) = queries.p0().get(entity) {
-                                            let dist = test_pos.distance(block_transform.translation);
-                                            if dist < 96.0 { // BLOCK_SIZE (64) + RANDOMBOX_SIZE (48) / 2
-                                                is_blocked = true;
-                                                break 'chunk_check;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if !is_blocked {
-                            spawn_pos = Some(test_pos);
-                            break;
-                        }
-                    }
-
-                    // Use found position or fallback to above hero
-                    let final_pos = spawn_pos.unwrap_or_else(|| Vec3::new(hero_pos.x, hero_pos.y + 400.0, 10.0));
-
-                    spawn_randombox(&mut commands, final_pos, &textures, &mut meshes, &mut materials);
-                    info!("🎲 RANDOMBOX spawned by {} at {:?}!", command.username, final_pos);
+                    spawn_randombox(
+                        &mut commands,
+                        final_pos,
+                        &textures,
+                        &mut meshes,
+                        &mut materials,
+                    );
+                    info!(
+                        "🎲 RANDOMBOX spawned by {} at {:?}!",
+                        command.username, final_pos
+                    );
                 }
             }
             PowerCommandType::GrowBuff => {
                 // Apply Grow buff to hero (makes them bigger and faster)
                 if let Ok((hero_entity, _)) = hero_query.single() {
-                    use crate::systems::buffs::buff_core::apply_buff;
-                    use crate::components::buff::BuffType;
-
-                    let mut buff_query = queries.p2();
-                    let mut existing_buff = buff_query.get_mut(hero_entity).ok();
-                    apply_buff(&mut commands, hero_entity, BuffType::Grow, 10.0, existing_buff.as_deref_mut());
-                    info!("🔼 GROW buff activated by {}! Hero grows 20% bigger and 30% faster", command.username);
+                    crate::systems::buffs::buff_core::activate_growth(&mut commands, hero_entity);
+                    info!(
+                        "🔼 GROW buff activated by {}! Hero grows 20% bigger and 30% faster",
+                        command.username
+                    );
                 }
             }
             _ => {
-                info!("⚡ Power {:?} activated by {} (not yet implemented)", command.command_type, command.username);
+                info!(
+                    "⚡ Power {:?} activated by {} (not yet implemented)",
+                    command.command_type, command.username
+                );
             }
         }
     }
@@ -409,27 +648,27 @@ fn spawn_ghast(
 
     commands.spawn((
         Enemy::new(EnemyType::Ghast),
-        Flying,  // Ghasts float and ignore block collisions
+        Flying, // Ghasts float and ignore block collisions
         Health::new(EnemyType::Ghast.max_health()),
         // Custom physics for flying - no gravity!
         RigidBody::Dynamic,
         LinearVelocity(Vec3::ZERO),
         GravityScale(0.0),  // No gravity - ghasts float
-        LinearDamping(2.0),  // Slow down naturally - allows Avian collision response to work
+        LinearDamping(2.0), // Slow down naturally - allows Avian collision response to work
         Mass(CHARACTER_MASS),
-        Collider::cuboid(80.0, 80.0, 80.0),  // 160x160 collider - matches 2x pattern used by other entities (prevents overlap)
-        Restitution::new(ENEMY_BOUNCE),  // Same bounce as other enemies
+        Collider::cuboid(80.0, 80.0, 80.0), // 160x160 collider - matches 2x pattern used by other entities (prevents overlap)
+        Restitution::new(ENEMY_BOUNCE),     // Same bounce as other enemies
         Friction::new(0.0),
         LockedAxes::ROTATION_LOCKED,
         CollisionLayers::new(GameLayer::Enemy, GameLayer::Enemy.filters()),
         CollisionEventsEnabled,
         SpriteBundle3d::new(
-            meshes.add(Rectangle::new(80.0, 80.0)),  // Bigger size
+            meshes.add(Rectangle::new(80.0, 80.0)), // Bigger size
             materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 base_color_texture: Some(ghast_texture),
                 unlit: true,
-                alpha_mode: AlphaMode::Blend,
+                alpha_mode: AlphaMode::Mask(0.5),
                 ..default()
             }),
             position,
@@ -439,52 +678,29 @@ fn spawn_ghast(
     info!("👻 Ghast spawned at {:?}", position);
 }
 
-fn spawn_dragon(
-    commands: &mut Commands,
-    position: Vec3,
-    enemy_models: &Res<EnemyModels>,
-    dragon_animation: &DragonAnimation,
-    _meshes: &mut ResMut<Assets<Mesh>>,
-    _materials: &mut ResMut<Assets<StandardMaterial>>,
-) {
-    // Spawn dragon in front of camera to avoid background clipping
-    // Keep hero's Y (height), but move forward in Z and offset in X
-    let spawn_pos = Vec3::new(position.x + 400.0, position.y, 200.0);
-
-    // First target: fly to the left side of the screen
-    let target_position = Vec3::new(position.x - 600.0, position.y + 300.0, 200.0);
-
-    // Spawn dragon boss enemy using GLB model with animation
-    commands.spawn((
-        Enemy::new(EnemyType::Dragon),
-        Dragon {
-            state: DragonState::Emerging,
-            state_timer: 0.0,
-            hover_offset: 0.0,
-            hover_timer: 0.0,
-            target_position,
-            spawn_position: position,
-        },
-        Flying,  // Dragons ignore block collisions
-        Health::new(EnemyType::Dragon.max_health()),
-        PhysicsBundle::dragon(),
-        SceneRoot(enemy_models.dragon.clone()),
-        AnimationPlayer::default(),
-        DragonAnimationClip(dragon_animation.fly.clone()),  // Store animation clip handle
-        Transform::from_translation(spawn_pos)
-            .with_scale(Vec3::new(80.0, 80.0, 80.0))  // Much bigger!
-            .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
-        Visibility::Visible,
-    ));
-}
-
+#[allow(clippy::too_many_arguments)] // Bevy system parameters
 fn spawn_thunder_strikes(
     commands: &mut Commands,
     hero_pos: Vec3,
     spatial_hash: &Res<crate::resources::spatial_hash::SpatialHash>,
     queries: &mut ParamSet<(
-        Query<(Entity, &Transform, &crate::components::block::Block)>,
-        Query<(Entity, &Transform, &crate::components::enemy::Health), Or<(With<crate::components::hero::Hero>, With<crate::components::villager::Villager>, With<crate::components::enemy::Enemy>)>>,
+        Query<
+            (
+                Entity,
+                &Transform,
+                &crate::components::block::BlockType,
+                Option<&crate::systems::biome_content::Tile>,
+            ),
+            With<crate::components::block::Block>,
+        >,
+        Query<
+            (Entity, &Transform, &crate::components::enemy::Health),
+            Or<(
+                With<crate::components::hero::Hero>,
+                With<crate::components::villager::Villager>,
+                With<crate::components::enemy::Enemy>,
+            )>,
+        >,
         Query<&mut crate::components::buff::Buff>,
     )>,
     camera_query: &Query<&Projection, With<Camera>>,
@@ -492,23 +708,25 @@ fn spawn_thunder_strikes(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     asset_server: &Res<AssetServer>,
     damage_events: &mut MessageWriter<crate::events::damage_events::EntityDamaged>,
+    destroyed: &mut MessageWriter<crate::events::block_events::BlockDestroyed>,
 ) {
-    use rand::Rng;
     use crate::components::bundles::SpriteBundle3d;
     use crate::utils::constants::BLOCK_SIZE;
+    use rand::RngExt;
 
     const THUNDER_COUNT: usize = 3;
-    const EXPLOSION_RADIUS: f32 = BLOCK_SIZE * 3.0;  // 3 blocks radius for bigger impact
+    const EXPLOSION_RADIUS: f32 = BLOCK_SIZE * 3.0; // 3 blocks radius for bigger impact
     const LIGHTNING_WIDTH: f32 = 24.0;
     const LIGHTNING_CORE_WIDTH: f32 = 12.0;
     const LIGHTNING_HEIGHT: f32 = 1400.0;
     const LIGHTNING_DURATION: f32 = 0.25;
     const LIGHTNING_SEGMENTS: usize = 14;
-    const LIGHTNING_ZIGZAG: f32 = 80.0;  // More dramatic zigzag
-    const BRANCH_CHANCE: f32 = 0.3;  // 30% chance per segment to create branch
-    const BRANCH_LENGTH_RATIO: f32 = 0.4;  // Branch length compared to main bolt
+    const LIGHTNING_ZIGZAG: f32 = 80.0; // More dramatic zigzag
+    const BRANCH_CHANCE: f32 = 0.3; // 30% chance per segment to create branch
+    const BRANCH_LENGTH_RATIO: f32 = 0.4; // Branch length compared to main bolt
 
-    let mut rng = rand::thread_rng();
+    let mut broken = std::collections::HashSet::new(); // Shared by all strikes this command
+    let mut rng = rand::rng();
 
     // Get screen dimensions from camera
     let (screen_width, screen_height) = if let Ok(projection) = camera_query.single() {
@@ -517,16 +735,16 @@ fn spawn_thunder_strikes(
             _ => (1920.0, 1080.0),
         }
     } else {
-        (1920.0, 1080.0)  // Fallback
+        (1920.0, 1080.0) // Fallback
     };
 
     // Instead of targeting specific blocks, spawn randomly across ENTIRE screen (width AND height)
     for _ in 0..THUNDER_COUNT {
         // Random X position across the screen
-        let strike_x = hero_pos.x + rng.gen_range(-screen_width / 2.0..screen_width / 2.0);
+        let strike_x = hero_pos.x + rng.random_range(-screen_width / 2.0..screen_width / 2.0);
 
         // Random Y position across the screen (where the bottom of lightning hits)
-        let target_y = hero_pos.y + rng.gen_range(-screen_height / 2.0..screen_height / 2.0);
+        let target_y = hero_pos.y + rng.random_range(-screen_height / 2.0..screen_height / 2.0);
 
         // Lightning goes from well above target to well below target
         let top_y = target_y + LIGHTNING_HEIGHT;
@@ -558,7 +776,7 @@ fn spawn_thunder_strikes(
 
         let mut current_x = strike_x;
         for i in 1..=LIGHTNING_SEGMENTS {
-            let offset = rng.gen_range(-LIGHTNING_ZIGZAG..LIGHTNING_ZIGZAG);
+            let offset = rng.random_range(-LIGHTNING_ZIGZAG..LIGHTNING_ZIGZAG);
             current_x += offset;
             let y = top_y - (i as f32 * segment_height);
             points.push(Vec2::new(current_x, y));
@@ -576,10 +794,18 @@ fn spawn_thunder_strikes(
             // Damage blocks
             let nearby = spatial_hash.query_nearby(explosion_pos.x, explosion_pos.y);
             for block_entity in nearby {
-                if let Ok((entity, transform, _block)) = queries.p0().get(block_entity) {
+                if let Ok((entity, transform, kind, tile)) = queries.p0().get(block_entity) {
                     let dist = explosion_pos.distance(transform.translation);
                     if dist <= EXPLOSION_RADIUS {
-                        commands.entity(entity).despawn();
+                        crate::plugins::gameplay_plugin::break_block(
+                            commands,
+                            destroyed,
+                            &mut broken,
+                            entity,
+                            *kind,
+                            transform.translation,
+                            tile.copied(),
+                        );
                     }
                 }
             }
@@ -593,7 +819,10 @@ fn spawn_thunder_strikes(
                         entity: char_entity,
                         damage: 2,
                     });
-                    info!("⚡ Thunder explosion damaged character at distance {:.1}", dist);
+                    info!(
+                        "⚡ Thunder explosion damaged character at distance {:.1}",
+                        dist
+                    );
                 }
             }
         }
@@ -631,7 +860,10 @@ fn spawn_thunder_strikes(
             core_transform.rotation = Quat::from_rotation_z(angle - std::f32::consts::FRAC_PI_2);
 
             let mut core_bundle = SpriteBundle3d::new(
-                meshes.add(Rectangle::new(LIGHTNING_CORE_WIDTH * width_scale, length + 4.0)),
+                meshes.add(Rectangle::new(
+                    LIGHTNING_CORE_WIDTH * width_scale,
+                    length + 4.0,
+                )),
                 core_material.clone(),
                 Vec3::new(mid_x, mid_y, 201.0),
             );
@@ -654,9 +886,9 @@ fn spawn_thunder_strikes(
             draw_segment(start, end, 1.0);
 
             // Random chance to create a branch
-            if rng.gen_range(0.0..1.0) < BRANCH_CHANCE && i > 2 {
+            if rng.random_range(0.0..1.0) < BRANCH_CHANCE && i > 2 {
                 // Branch goes sideways from this point
-                let branch_direction = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+                let branch_direction = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
                 let branch_length = LIGHTNING_HEIGHT * BRANCH_LENGTH_RATIO;
                 let branch_segments = (LIGHTNING_SEGMENTS as f32 * BRANCH_LENGTH_RATIO) as usize;
 
@@ -664,8 +896,9 @@ fn spawn_thunder_strikes(
                 let mut branch_x = start.x;
 
                 for j in 1..=branch_segments {
-                    let offset = rng.gen_range(-LIGHTNING_ZIGZAG * 0.5..LIGHTNING_ZIGZAG * 0.5);
-                    branch_x += branch_direction * (branch_length / branch_segments as f32 * 0.5) + offset;
+                    let offset = rng.random_range(-LIGHTNING_ZIGZAG * 0.5..LIGHTNING_ZIGZAG * 0.5);
+                    branch_x +=
+                        branch_direction * (branch_length / branch_segments as f32 * 0.5) + offset;
                     let branch_y = start.y - (j as f32 * (branch_length / branch_segments as f32));
                     branch_points.push(Vec2::new(branch_x, branch_y));
                 }
@@ -702,4 +935,3 @@ fn update_thunder_bolts(
         }
     }
 }
-

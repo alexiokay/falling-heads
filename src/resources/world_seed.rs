@@ -8,9 +8,9 @@ pub struct WorldSeed {
 
 impl Default for WorldSeed {
     fn default() -> Self {
-        use rand::Rng;
+        use rand::RngExt;
         Self {
-            seed: rand::thread_rng().gen_range(0..u32::MAX),
+            seed: rand::rng().random_range(0..u32::MAX),
         }
     }
 }

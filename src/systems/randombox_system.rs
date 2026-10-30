@@ -1,19 +1,12 @@
-use bevy::prelude::*;
 use avian3d::prelude::*;
-use rand::Rng;
+use bevy::prelude::*;
+use rand::RngExt;
 
 use crate::components::{
-    hero::Hero,
-    lootbox::RandomBox,
-    bundles::SpriteBundle3d,
-    collision_layers::GameLayer,
-    block::Block,
+    bundles::SpriteBundle3d, collision_layers::GameLayer, hero::Hero, lootbox::RandomBox,
 };
 use crate::resources::asset_handles::GameTextures;
-use crate::resources::spatial_hash::SpatialHash;
-use crate::systems::random_events::{RandomEventType, EventNotification};
-use crate::states::GameState;
-use crate::utils::constants::BLOCK_SIZE;
+use crate::systems::random_events::{EventNotification, RandomEventType};
 
 const RANDOMBOX_SIZE: f32 = 48.0; // Smaller than villagers (64px)
 const RANDOMBOX_SPAWN_INTERVAL: f32 = 30.0; // Spawn every 30 seconds
@@ -22,65 +15,6 @@ const MAX_RANDOMBOXES: usize = 3; // Maximum number at once
 /// Timer resource for spawning randomboxes
 #[derive(Resource)]
 pub struct RandomBoxSpawnTimer(pub Timer);
-
-/// Helper function to find an empty spawn position (not inside blocks)
-fn find_empty_spawn_position(
-    base_pos: Vec3,
-    radius: f32,
-    spatial_hash: &SpatialHash,
-    block_query: &Query<&Transform, With<Block>>,
-    rng: &mut impl Rng,
-) -> Option<Vec3> {
-    // Try multiple times to find an empty position
-    for _ in 0..30 {
-        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let distance = rng.gen_range(radius * 0.7..radius);
-        let offset_x = angle.cos() * distance;
-        let offset_y = angle.sin() * distance;
-
-        let test_pos = Vec3::new(
-            base_pos.x + offset_x,
-            base_pos.y + offset_y + 300.0, // Spawn 300px above to ensure it's in the air
-            10.0,
-        );
-
-        // Check if this position collides with any blocks
-        let chunk_coords = spatial_hash.world_to_chunk(test_pos.x, test_pos.y);
-        let mut is_blocked = false;
-
-        // Check this chunk and adjacent chunks for blocks
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                let check_chunk = (chunk_coords.0 + dx, chunk_coords.1 + dy);
-                if let Some(entities) = spatial_hash.chunks.get(&check_chunk) {
-                    for &entity in entities {
-                        if let Ok(block_transform) = block_query.get(entity) {
-                            let distance = test_pos.distance(block_transform.translation);
-                            // Check if we're too close to a block (within block size + randombox size)
-                            if distance < (BLOCK_SIZE + RANDOMBOX_SIZE) * 1.5 {
-                                is_blocked = true;
-                                break;
-                            }
-                        }
-                    }
-                    if is_blocked {
-                        break;
-                    }
-                }
-            }
-            if is_blocked {
-                break;
-            }
-        }
-
-        if !is_blocked {
-            return Some(test_pos);
-        }
-    }
-
-    // Fallback: spawn above hero position (should be safe)
-    Some(Vec3::new(base_pos.x, base_pos.y + 400.0, 10.0))
-}
 
 /// Spawn randomboxes periodically
 pub fn spawn_randombox_periodic(
@@ -111,11 +45,11 @@ pub fn spawn_randombox_periodic(
         return;
     };
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Spawn randombox near hero (within 300-500 pixels)
-    let distance = rng.gen_range(300.0..500.0);
-    let angle = rng.gen_range(0.0..(2.0 * std::f32::consts::PI));
+    let distance = rng.random_range(300.0..500.0);
+    let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
 
     let spawn_pos = Vec3::new(
         hero_transform.translation.x + distance * angle.cos(),
@@ -123,7 +57,13 @@ pub fn spawn_randombox_periodic(
         hero_transform.translation.z,
     );
 
-    spawn_randombox(&mut commands, spawn_pos, &textures, &mut meshes, &mut materials);
+    spawn_randombox(
+        &mut commands,
+        spawn_pos,
+        &textures,
+        &mut meshes,
+        &mut materials,
+    );
 
     info!("📦 RandomBox spawned at {:?}", spawn_pos);
 }
@@ -139,35 +79,6 @@ pub fn spawn_randombox(
     spawn_randombox_internal(commands, position, textures, meshes, materials);
 }
 
-/// Spawn a single randombox with block collision checking
-pub fn spawn_randombox_safe(
-    commands: &mut Commands,
-    hero_pos: Vec3,
-    textures: &GameTextures,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    spatial_hash: &SpatialHash,
-    block_query: &Query<&Transform, With<Block>>,
-) {
-    let mut rng = rand::thread_rng();
-
-    // Try to find an empty position within 500-700px radius
-    let spawn_pos = if let Some(pos) = find_empty_spawn_position(
-        hero_pos,
-        600.0, // radius
-        spatial_hash,
-        block_query,
-        &mut rng,
-    ) {
-        pos
-    } else {
-        // Fallback to position directly above hero
-        Vec3::new(hero_pos.x, hero_pos.y + 400.0, 10.0)
-    };
-
-    spawn_randombox_internal(commands, spawn_pos, textures, meshes, materials);
-}
-
 /// Internal function to spawn a randombox
 fn spawn_randombox_internal(
     commands: &mut Commands,
@@ -180,19 +91,17 @@ fn spawn_randombox_internal(
         base_color: Color::WHITE,
         base_color_texture: Some(textures.randombox.clone()),
         unlit: true,
-        alpha_mode: AlphaMode::Blend,
+        alpha_mode: AlphaMode::Mask(0.5),
         cull_mode: None,
         ..default()
     });
 
-    let mut rng = rand::thread_rng();
-    let initial_velocity = Vec2::new(
-        rng.gen_range(-50.0..50.0),
-        rng.gen_range(-100.0..0.0),
-    );
+    let mut rng = rand::rng();
+    let initial_velocity = Vec2::new(rng.random_range(-50.0..50.0), rng.random_range(-100.0..0.0));
 
     commands.spawn((
         RandomBox,
+        crate::components::chunk::ChunkMember::at(position),
         SpriteBundle3d::new(
             meshes.add(Rectangle::new(RANDOMBOX_SIZE, RANDOMBOX_SIZE)),
             material,
@@ -201,14 +110,18 @@ fn spawn_randombox_internal(
         RigidBody::Dynamic,
         LinearVelocity(initial_velocity.extend(0.0)),
         GravityScale(1.5), // Same as villagers
-        Mass(1.0), // Same as villagers
+        Mass(1.0),         // Same as villagers
         Collider::cuboid(RANDOMBOX_SIZE, RANDOMBOX_SIZE, RANDOMBOX_SIZE),
         // NO Sensor - they're solid objects that bounce!
         Restitution::new(1.0), // Same bounce as villagers
-        Friction::new(0.0), // No friction like villagers
-        LockedAxes::new().lock_rotation_x().lock_rotation_y().lock_rotation_z().lock_translation_z(),
+        Friction::new(0.0),    // No friction like villagers
+        LockedAxes::new()
+            .lock_rotation_x()
+            .lock_rotation_y()
+            .lock_rotation_z()
+            .lock_translation_z(),
         CollisionLayers::new(
-            GameLayer::Character,  // Same as villagers - they're dynamic entities
+            GameLayer::Character, // Same as villagers - they're dynamic entities
             GameLayer::Character.filters(),
         ),
         CollisionEventsEnabled,
@@ -245,7 +158,10 @@ pub fn handle_randombox_collision(
                 // Trigger random event by spawning notification
                 let event_type = RandomEventType::random();
 
-                info!("🎲 RandomBox opened via collision! Triggering event: {}", event_type.name());
+                info!(
+                    "🎲 RandomBox opened via collision! Triggering event: {}",
+                    event_type.name()
+                );
 
                 // Spawn event notification (will be handled by existing systems)
                 commands.spawn(EventNotification {
@@ -267,16 +183,20 @@ pub struct RandomBoxPlugin;
 
 impl Plugin for RandomBoxPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(RandomBoxSpawnTimer(Timer::from_seconds(RANDOMBOX_SPAWN_INTERVAL, TimerMode::Repeating)))
-            .add_systems(
-                Update,
-                (
-                    spawn_randombox_periodic,
-                    handle_randombox_collision,
-                )
-                    .run_if(in_state(GameState::Playing)),
-            );
+        app.insert_resource(RandomBoxSpawnTimer(Timer::from_seconds(
+            RANDOMBOX_SPAWN_INTERVAL,
+            TimerMode::Repeating,
+        )))
+        .add_systems(
+            Update,
+            (
+                spawn_randombox_periodic.run_if(crate::systems::game_modes::mode_on(
+                    crate::systems::game_modes::GameMode::RandomBoxes,
+                )),
+                handle_randombox_collision,
+            )
+                .run_if(in_state(crate::states::InGame)),
+        );
 
         info!("RandomBoxPlugin loaded");
     }

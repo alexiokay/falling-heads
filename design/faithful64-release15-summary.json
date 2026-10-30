@@ -1,0 +1,223 @@
+{
+  "pack": "C:\\Users\\alexispace\\Downloads\\Faithful 64x - Release 15",
+  "textures": 3903,
+  "groups": {
+    "block": 1295,
+    "entity": 739,
+    "environment": 12,
+    "font": 5,
+    "gui": 542,
+    "item": 833,
+    "map": 42,
+    "misc": 6,
+    "mob_effect": 40,
+    "painting": 52,
+    "particle": 297,
+    "trims": 40
+  },
+  "sizes": {
+    "64x64": 2226,
+    "128x128": 251,
+    "64x128": 4,
+    "64x512": 5,
+    "64x256": 17,
+    "64x192": 9,
+    "64x320": 3,
+    "64x2048": 7,
+    "64x640": 3,
+    "64x1280": 3,
+    "128x2048": 1,
+    "64x1024": 3,
+    "64x1152": 1,
+    "256x256": 396,
+    "64x1216": 2,
+    "128x4096": 1,
+    "512x256": 39,
+    "256x128": 137,
+    "512x512": 59,
+    "128x64": 7,
+    "256x2816": 2,
+    "1024x1024": 39,
+    "256x512": 4,
+    "32x32": 136,
+    "192x128": 4,
+    "192x192": 12,
+    "768x768": 1,
+    "256x1024": 2,
+    "576x3600": 1,
+    "512x160": 1,
+    "512x2144": 1,
+    "2048x1024": 1,
+    "128x8": 5,
+    "256x144": 3,
+    "520x256": 2,
+    "96x104": 13,
+    "800x104": 3,
+    "104x104": 8,
+    "112x128": 12,
+    "128x112": 12,
+    "728x20": 27,
+    "112x84": 5,
+    "440x64": 2,
+    "88x88": 4,
+    "72x72": 63,
+    "96x64": 3,
+    "56x56": 10,
+    "36x112": 1,
+    "48x116": 1,
+    "72x16": 1,
+    "48x48": 2,
+    "24x24": 2,
+    "96x96": 13,
+    "200x264": 1,
+    "40x56": 1,
+    "264x264": 2,
+    "48x60": 6,
+    "104x128": 28,
+    "432x76": 3,
+    "360x216": 1,
+    "64x72": 3,
+    "36x8": 1,
+    "408x20": 3,
+    "24x108": 2,
+    "40x36": 2,
+    "80x80": 29,
+    "944x136": 4,
+    "800x80": 14,
+    "512x192": 1,
+    "20x24": 1,
+    "56x52": 1,
+    "60x60": 9,
+    "640x128": 5,
+    "36x36": 65,
+    "64x16": 2,
+    "728x88": 1,
+    "116x96": 2,
+    "96x92": 1,
+    "28x40": 2,
+    "48x20": 1,
+    "36x32": 1,
+    "160x80": 1,
+    "40x32": 18,
+    "32x192": 1,
+    "40x40": 1,
+    "52x52": 2,
+    "60x56": 1,
+    "32x28": 6,
+    "40x112": 3,
+    "40x224": 1,
+    "80x72": 2,
+    "104x64": 8,
+    "48x68": 4,
+    "100x100": 4,
+    "140x108": 2,
+    "640x256": 1,
+    "200x200": 1,
+    "400x400": 1,
+    "92x52": 4,
+    "24x128": 1,
+    "32x80": 2,
+    "320x320": 1,
+    "520x96": 4,
+    "192x256": 2,
+    "256x192": 2,
+    "12x12": 12,
+    "20x20": 38,
+    "16x16": 17,
+    "72x504": 1
+  },
+  "upgraded_textures": [
+    {
+      "source": "assets/minecraft/textures/block/birch_leaves.png",
+      "destination": "assets/textures/blocks/forest/species/birch_leaves.png",
+      "sha256": "661b0016c539b7d818b2f9ec79bf77f49e12896285dc577b673af97ff403264d"
+    },
+    {
+      "source": "assets/minecraft/textures/block/birch_log.png",
+      "destination": "assets/textures/blocks/forest/species/birch_log.png",
+      "sha256": "8b4d50b9bcdcaca1a6b43e3f4015d7307fbe4000094aa077cb7b4fc477c3e60a"
+    },
+    {
+      "source": "assets/minecraft/textures/block/birch_log_top.png",
+      "destination": "assets/textures/blocks/forest/species/birch_log_top.png",
+      "sha256": "dcfaa75b3b9aae3cf3570f7e959a5284a9e0839384c48eee3cc1e8c0412d47f9"
+    },
+    {
+      "source": "assets/minecraft/textures/block/dirt.png",
+      "destination": "assets/textures/blocks/forest/species/dirt.png",
+      "sha256": "d60fd78c8e62623bc7fa0c11365effa5d0a37544563f20020c1e537c44a895cd"
+    },
+    {
+      "source": "assets/minecraft/textures/block/grass_block_side.png",
+      "destination": "assets/textures/blocks/forest/species/grass_block_side.png",
+      "sha256": "ea4697c18c68f21b17061446fd362ac7fa503f8caddeb9c3bcba2813e20ccb91"
+    },
+    {
+      "source": "assets/minecraft/textures/block/grass_block_top.png",
+      "destination": "assets/textures/blocks/forest/species/grass_block_top.png",
+      "sha256": "b5da2bc075f72fa78abfd772d9e86877b1204d07fbd1a2844502a96b1edb2d00"
+    },
+    {
+      "source": "assets/minecraft/textures/block/oak_leaves.png",
+      "destination": "assets/textures/blocks/forest/species/oak_leaves.png",
+      "sha256": "a266144a0900354a3f31bcdff4f3e146631ed5cd42f4cf9036e043c4ad5f6eca"
+    },
+    {
+      "source": "assets/minecraft/textures/block/oak_log.png",
+      "destination": "assets/textures/blocks/forest/species/oak_log.png",
+      "sha256": "78262faa10c0b99f309e925141959f8942b8e561de5996401e61c01f496043bd"
+    },
+    {
+      "source": "assets/minecraft/textures/block/oak_log_top.png",
+      "destination": "assets/textures/blocks/forest/species/oak_log_top.png",
+      "sha256": "9da3071b72fe645beb1e08db83afdf218a0cb34c42c41e044622a57d39d613bb"
+    },
+    {
+      "source": "assets/minecraft/textures/block/spruce_leaves.png",
+      "destination": "assets/textures/blocks/forest/species/spruce_leaves.png",
+      "sha256": "cc7187b8cee853fac0f17875bdbfd81e6d6da3f056d20ce0eaa8d445e5b69ac0"
+    },
+    {
+      "source": "assets/minecraft/textures/block/spruce_log.png",
+      "destination": "assets/textures/blocks/forest/species/spruce_log.png",
+      "sha256": "5cbdcf86e620c09f22313b3d917999dcee4d417910ee955566d9be45c433844a"
+    },
+    {
+      "source": "assets/minecraft/textures/block/spruce_log_top.png",
+      "destination": "assets/textures/blocks/forest/species/spruce_log_top.png",
+      "sha256": "3abb06ed1d288c3c9185c92e5be1fc63af35f5f1043da9ed428bea6921f706ca"
+    },
+    {
+      "source": "assets/minecraft/textures/block/chiseled_sandstone.png",
+      "destination": "assets/textures/structures/chiseled_sandstone.png",
+      "sha256": "337c3db1b2732da471c5a7897145a35306d485eac7b37d36ce9667aa89a91fa7"
+    },
+    {
+      "source": "assets/minecraft/textures/block/cut_sandstone.png",
+      "destination": "assets/textures/structures/cut_sandstone.png",
+      "sha256": "3b45274f3336f022b2fc3f58fdcd3d309e46cccf81d61819550e4b9e4d8037ab"
+    },
+    {
+      "source": "assets/minecraft/textures/block/dark_oak_planks.png",
+      "destination": "assets/textures/structures/dark_oak_planks.png",
+      "sha256": "b0a3fae0bea92cceebd8a2415657348710dfa0a2a2603e60827e079d43e85f16"
+    },
+    {
+      "source": "assets/minecraft/textures/block/nether_bricks.png",
+      "destination": "assets/textures/structures/nether_bricks.png",
+      "sha256": "c9d9f62ce804776fb48c4a3f3c1272baef77991efcf6b0b764797d9cf0fa73b5"
+    },
+    {
+      "source": "assets/minecraft/textures/block/oak_planks.png",
+      "destination": "assets/textures/structures/oak_planks.png",
+      "sha256": "f2aa1fcb0437b2cc2402026c2f87c8234d6d0340c946dbd9b7aa054541496d7f"
+    },
+    {
+      "source": "assets/minecraft/textures/block/stone_bricks.png",
+      "destination": "assets/textures/structures/stone_bricks.png",
+      "sha256": "c8d4e8f3d3056283dc696032b9b1f2e6ceea222bfc4280ef43ba214b167bd657"
+    }
+  ],
+  "audio_source": "F:\\Users\\alexispace\\Downloads\\mc_sounds\\minecraft\\sounds",
+  "audio_count": 4013
+}

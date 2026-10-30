@@ -1,0 +1,84 @@
+{
+  "Plains": {
+    "generation_ms": 40.107200000000006,
+    "tiles": 9240,
+    "new_materials": {
+      "Biome_short_grass": 59,
+      "Biome_farmland_moist": 7,
+      "Biome_wheat_stage7": 6,
+      "Biome_hay_block_side": 4
+    }
+  },
+  "Forest": {
+    "generation_ms": 200.5035,
+    "tiles": 10318,
+    "new_materials": {
+      "Biome_rooted_dirt": 1196,
+      "Biome_moss_block": 126,
+      "Biome_flowering_azalea_leaves": 78,
+      "Biome_sweet_berry_bush_stage3": 32,
+      "Biome_mossy_stone_bricks": 9,
+      "Biome_fern": 55,
+      "Biome_mossy_cobblestone": 2
+    }
+  },
+  "Desert": {
+    "generation_ms": 44.4569,
+    "tiles": 9030,
+    "new_materials": {
+      "Biome_terracotta": 1706,
+      "Biome_red_sand": 1914
+    }
+  },
+  "Mountains": {
+    "generation_ms": 46.503299999999996,
+    "tiles": 9629,
+    "new_materials": {
+      "Biome_calcite": 797,
+      "Biome_tuff": 1704
+    }
+  },
+  "Underground": {
+    "generation_ms": 63.9951,
+    "tiles": 13642,
+    "new_materials": {
+      "Biome_deepslate": 11765,
+      "Biome_pointed_dripstone_down_tip": 91,
+      "Biome_pointed_dripstone_up_tip": 37,
+      "Biome_cracked_deepslate_bricks": 16,
+      "Biome_calcite": 73,
+      "Biome_amethyst_block": 109,
+      "Biome_amethyst_cluster": 17
+    }
+  },
+  "Nether": {
+    "generation_ms": 46.8068,
+    "tiles": 7116,
+    "new_materials": {
+      "Biome_blackstone": 3781,
+      "Biome_basalt_side": 1834,
+      "Biome_crimson_nylium": 78,
+      "Biome_magma_0": 45,
+      "Biome_warped_nylium": 7,
+      "Biome_warped_fungus": 4,
+      "Biome_crimson_fungus": 4
+    }
+  },
+  "End": {
+    "generation_ms": 42.0028,
+    "tiles": 4510,
+    "new_materials": {
+      "Biome_end_stone_bricks": 101,
+      "Biome_purpur_pillar_side": 67
+    }
+  },
+  "Iceland": {
+    "generation_ms": 30.7861,
+    "tiles": 11418,
+    "new_materials": {
+      "Biome_packed_ice": 4452,
+      "Biome_powder_snow": 69,
+      "Biome_blue_ice": 878
+    }
+  }
+}

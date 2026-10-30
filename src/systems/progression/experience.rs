@@ -1,29 +1,29 @@
-use bevy::prelude::*;
+use crate::components::enemy::EnemyType;
 use crate::components::experience::*;
 use crate::components::hero::Hero;
 use crate::components::resource::ResourceType;
-use crate::components::enemy::EnemyType;
-use crate::events::xp_events::*;
+use crate::events::block_events::BlockDestroyed;
 use crate::events::damage_events::EntityDied;
 use crate::events::resource_events::ResourceCollected;
-use crate::events::block_events::BlockDestroyed;
-use crate::states::GameState;
+use crate::events::xp_events::*;
+use bevy::prelude::*;
 
 pub struct ExperiencePlugin;
 
 impl Plugin for ExperiencePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_message::<XpGained>()
+        app.add_message::<XpGained>()
             .add_message::<LevelUp>()
-            .add_systems(Update,
+            .add_systems(
+                Update,
                 (
                     award_xp_for_mob_kills,
                     award_xp_for_resources,
                     award_xp_for_blocks,
                     apply_xp_gains,
                     update_xp_bar_ui,
-                ).run_if(in_state(GameState::Playing))
+                )
+                    .run_if(in_state(crate::states::InGame)),
             );
 
         info!("ExperiencePlugin loaded");
@@ -39,6 +39,11 @@ fn award_xp_for_mob_kills(
     for event in death_events.read() {
         if let Ok(enemy) = enemy_query.get(event.entity) {
             let xp_amount = match enemy.enemy_type {
+                EnemyType::Bat => 8,
+                EnemyType::Spider => 18,
+                EnemyType::Witch => 25,
+                EnemyType::Miner => 30,
+                EnemyType::Sentinel => 30,
                 EnemyType::Skeleton => 15,
                 EnemyType::Pigman => 10,
                 EnemyType::Yeti => 20,
@@ -46,6 +51,13 @@ fn award_xp_for_mob_kills(
                 EnemyType::Enderman => 30,
                 EnemyType::Ghast => 35, // Flying enemy worth good XP
                 EnemyType::Dragon => 100,
+                EnemyType::Blaze | EnemyType::Shulker | EnemyType::Breeze => 30,
+                EnemyType::Slime | EnemyType::Silverfish => 8,
+                EnemyType::Creeper
+                | EnemyType::Bogged
+                | EnemyType::Husk
+                | EnemyType::MagmaCube
+                | EnemyType::Stray => 18,
             };
 
             xp_events.write(XpGained {
@@ -53,7 +65,10 @@ fn award_xp_for_mob_kills(
                 source: XpSource::MobKill,
             });
 
-            info!("💀 Mob killed! Awarded {} XP for {:?}", xp_amount, enemy.enemy_type);
+            info!(
+                "💀 Mob killed! Awarded {} XP for {:?}",
+                xp_amount, enemy.enemy_type
+            );
         }
     }
 }
@@ -130,10 +145,9 @@ fn update_xp_bar_ui(
 
         // Update level text
         if let Ok(mut text) = level_text_query.single_mut() {
-            text.0 = format!("Level {} ({}/{})",
-                experience.level,
-                experience.current_xp,
-                experience.xp_to_next_level
+            text.0 = format!(
+                "Level {} ({}/{})",
+                experience.level, experience.current_xp, experience.xp_to_next_level
             );
         }
     }

@@ -1,7 +1,7 @@
-use bevy::prelude::*;
-use crate::components::enemy::{Health, Enemy};
-use crate::components::hero::Hero;
+use crate::components::enemy::{Enemy, Health};
 use crate::components::health_ui::HealthBar;
+use crate::components::hero::Hero;
+use bevy::prelude::*;
 
 /// Spawn health bars for entities with Health component
 pub fn spawn_health_bars(
@@ -25,11 +25,11 @@ pub fn spawn_health_bars(
 
         // Determine offset based on entity type
         let offset_y = if hero_query.contains(entity) {
-            40.0  // Hero offset
+            40.0 // Hero offset
         } else if enemy_query.contains(entity) {
-            30.0  // Enemy offset
+            30.0 // Enemy offset
         } else {
-            30.0  // Default offset
+            30.0 // Default offset
         };
 
         // Spawn a health bar entity
@@ -59,7 +59,7 @@ pub fn update_health_bars(
             bar_transform.translation = Vec3::new(
                 target_transform.translation.x,
                 target_transform.translation.y + health_bar.offset_y,
-                100.0,  // High Z to render on top
+                100.0, // High Z to render on top
             );
 
             // Only update text when health changed (performance optimization)

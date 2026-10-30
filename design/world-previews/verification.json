@@ -1,0 +1,225 @@
+{
+  "samples": 24,
+  "repeat_checks": 8,
+  "median_generation_ms": 26.55,
+  "max_generation_ms": 132.17,
+  "median_including_startup_ms": 69.53,
+  "results": [
+    {
+      "biome": "Plains",
+      "seed": 7,
+      "cells": 9271,
+      "landmarks": 2,
+      "tree_cells": 78,
+      "generation_ms": 23.7,
+      "including_startup_ms": 652.97
+    },
+    {
+      "biome": "Plains",
+      "seed": 81,
+      "cells": 9873,
+      "landmarks": 3,
+      "tree_cells": 19,
+      "generation_ms": 23.69,
+      "including_startup_ms": 66.18
+    },
+    {
+      "biome": "Plains",
+      "seed": 921,
+      "cells": 8128,
+      "landmarks": 1,
+      "tree_cells": 60,
+      "generation_ms": 25.52,
+      "including_startup_ms": 68.38
+    },
+    {
+      "biome": "Forest",
+      "seed": 7,
+      "cells": 8534,
+      "landmarks": 2,
+      "tree_cells": 739,
+      "generation_ms": 131.25,
+      "including_startup_ms": 172.37
+    },
+    {
+      "biome": "Forest",
+      "seed": 81,
+      "cells": 8882,
+      "landmarks": 5,
+      "tree_cells": 770,
+      "generation_ms": 132.17,
+      "including_startup_ms": 172.77
+    },
+    {
+      "biome": "Forest",
+      "seed": 921,
+      "cells": 8548,
+      "landmarks": 3,
+      "tree_cells": 650,
+      "generation_ms": 129.32,
+      "including_startup_ms": 172.1
+    },
+    {
+      "biome": "Desert",
+      "seed": 7,
+      "cells": 7216,
+      "landmarks": 7,
+      "tree_cells": 0,
+      "generation_ms": 26.53,
+      "including_startup_ms": 73.55
+    },
+    {
+      "biome": "Desert",
+      "seed": 81,
+      "cells": 7444,
+      "landmarks": 2,
+      "tree_cells": 0,
+      "generation_ms": 25.85,
+      "including_startup_ms": 69.34
+    },
+    {
+      "biome": "Desert",
+      "seed": 921,
+      "cells": 7668,
+      "landmarks": 5,
+      "tree_cells": 0,
+      "generation_ms": 29.56,
+      "including_startup_ms": 73.84
+    },
+    {
+      "biome": "Mountains",
+      "seed": 7,
+      "cells": 8505,
+      "landmarks": 6,
+      "tree_cells": 0,
+      "generation_ms": 22.88,
+      "including_startup_ms": 67.58
+    },
+    {
+      "biome": "Mountains",
+      "seed": 81,
+      "cells": 7221,
+      "landmarks": 1,
+      "tree_cells": 0,
+      "generation_ms": 21.45,
+      "including_startup_ms": 66.89
+    },
+    {
+      "biome": "Mountains",
+      "seed": 921,
+      "cells": 8274,
+      "landmarks": 5,
+      "tree_cells": 0,
+      "generation_ms": 23.39,
+      "including_startup_ms": 69.26
+    },
+    {
+      "biome": "Underground",
+      "seed": 7,
+      "cells": 11230,
+      "landmarks": 3,
+      "tree_cells": 0,
+      "generation_ms": 27.04,
+      "including_startup_ms": 75.18
+    },
+    {
+      "biome": "Underground",
+      "seed": 81,
+      "cells": 10867,
+      "landmarks": 7,
+      "tree_cells": 0,
+      "generation_ms": 28.82,
+      "including_startup_ms": 74.4
+    },
+    {
+      "biome": "Underground",
+      "seed": 921,
+      "cells": 11069,
+      "landmarks": 4,
+      "tree_cells": 0,
+      "generation_ms": 27.85,
+      "including_startup_ms": 72.75
+    },
+    {
+      "biome": "Nether",
+      "seed": 7,
+      "cells": 4786,
+      "landmarks": 5,
+      "tree_cells": 0,
+      "generation_ms": 28.46,
+      "including_startup_ms": 69.71
+    },
+    {
+      "biome": "Nether",
+      "seed": 81,
+      "cells": 6050,
+      "landmarks": 5,
+      "tree_cells": 0,
+      "generation_ms": 28.16,
+      "including_startup_ms": 69.29
+    },
+    {
+      "biome": "Nether",
+      "seed": 921,
+      "cells": 5885,
+      "landmarks": 2,
+      "tree_cells": 0,
+      "generation_ms": 26.58,
+      "including_startup_ms": 66.84
+    },
+    {
+      "biome": "End",
+      "seed": 7,
+      "cells": 5082,
+      "landmarks": 7,
+      "tree_cells": 0,
+      "generation_ms": 27.94,
+      "including_startup_ms": 70.92
+    },
+    {
+      "biome": "End",
+      "seed": 81,
+      "cells": 5112,
+      "landmarks": 5,
+      "tree_cells": 0,
+      "generation_ms": 26.61,
+      "including_startup_ms": 65.86
+    },
+    {
+      "biome": "End",
+      "seed": 921,
+      "cells": 3762,
+      "landmarks": 3,
+      "tree_cells": 0,
+      "generation_ms": 26.04,
+      "including_startup_ms": 68.6
+    },
+    {
+      "biome": "Iceland",
+      "seed": 7,
+      "cells": 9284,
+      "landmarks": 9,
+      "tree_cells": 0,
+      "generation_ms": 23.59,
+      "including_startup_ms": 68.42
+    },
+    {
+      "biome": "Iceland",
+      "seed": 81,
+      "cells": 8777,
+      "landmarks": 4,
+      "tree_cells": 0,
+      "generation_ms": 21.99,
+      "including_startup_ms": 63.85
+    },
+    {
+      "biome": "Iceland",
+      "seed": 921,
+      "cells": 9718,
+      "landmarks": 1,
+      "tree_cells": 0,
+      "generation_ms": 19.63,
+      "including_startup_ms": 207.52
+    }
+  ]
+}

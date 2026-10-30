@@ -1,8 +1,4 @@
-# Fast linker for Windows
-[target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
-
-# Cargo aliases for development
-[alias]
-dev = "run --features bevy/dynamic_linking"
-dev-release = "run --release"
+[env]
+DLSS_SDK = { value = "../../south-balcony-twin/vendor/DLSS", relative = true }
+VULKAN_SDK = { value = "../../south-balcony-twin/vendor/Vulkan-Headers", relative = true }
+LIBCLANG_PATH = { value = "../../south-balcony-twin/vendor/clang-runtime/clang/native", relative = true }

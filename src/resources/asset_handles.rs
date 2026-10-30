@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::world_serialization::WorldAsset;
 
 #[derive(Resource, Default)]
 pub struct GameTextures {
@@ -11,6 +12,11 @@ pub struct GameTextures {
 
 #[derive(Resource, Default)]
 pub struct EnemyTextures {
+    pub ghast: Handle<Image>,
+    pub ghast_shooting: Handle<Image>,
+    pub bat: Handle<Image>,
+    pub spider: Handle<Image>,
+    pub enderman: Handle<Image>,
     pub skeleton: Handle<Image>,
     pub skeleton2: Handle<Image>,
     pub yeti: Handle<Image>,
@@ -25,12 +31,7 @@ pub struct ProjectileTextures {
 
 #[derive(Resource, Default)]
 pub struct ProjectileModels {
-    pub arrow: Handle<Scene>,  // GLB/GLTF arrow model
-}
-
-#[derive(Resource, Default)]
-pub struct EnemyModels {
-    pub dragon: Handle<Scene>,  // GLB/GLTF dragon model
+    pub arrow: Handle<WorldAsset>, // GLB/GLTF arrow model
 }
 
 #[derive(Resource, Default)]
@@ -98,13 +99,13 @@ pub struct BlockTextures {
 /// Block texture atlases for directional blocks (4x1 layout: top|bottom|sides|front)
 #[derive(Resource, Default)]
 pub struct BlockAtlases {
-    pub pumpkin: Handle<Image>,     // Pumpkin atlas: pumpkin_top | pumpkin_top | pumpkin_side | carved_pumpkin
-    pub oak_log: Handle<Image>,     // Oak log atlas: oak_log_top | oak_log_top | oak_log | oak_log
-    pub oak_leaves: Handle<Image>,  // Oak leaves atlas: oak_leaves | oak_leaves | oak_leaves | oak_leaves
-    pub melon: Handle<Image>,       // Melon atlas: melon_top | melon_top | melon_side | melon_side
-    pub tnt: Handle<Image>,         // TNT atlas: tnt_top | tnt_bottom | tnt_side | tnt_side
-    pub sandstone: Handle<Image>,   // Sandstone atlas: sandstone_top | sandstone_bottom | sandstone | sandstone
-    pub cactus: Handle<Image>,      // Cactus atlas: cactus_top | cactus_bottom | cactus_side | cactus_side
+    pub pumpkin: Handle<Image>, // Pumpkin atlas: pumpkin_top | pumpkin_top | pumpkin_side | carved_pumpkin
+    pub oak_log: Handle<Image>, // Oak log atlas: oak_log_top | oak_log_top | oak_log | oak_log
+    pub oak_leaves: Handle<Image>, // Oak leaves atlas: oak_leaves | oak_leaves | oak_leaves | oak_leaves
+    pub melon: Handle<Image>,      // Melon atlas: melon_top | melon_top | melon_side | melon_side
+    pub tnt: Handle<Image>,        // TNT atlas: tnt_top | tnt_bottom | tnt_side | tnt_side
+    pub sandstone: Handle<Image>, // Sandstone atlas: sandstone_top | sandstone_bottom | sandstone | sandstone
+    pub cactus: Handle<Image>, // Cactus atlas: cactus_top | cactus_bottom | cactus_side | cactus_side
 }
 
 /// Explosion animation frames (16 frames total)
@@ -122,6 +123,7 @@ pub struct EffectTextures {
 /// Lootbox reward icons
 #[derive(Resource, Default, Clone)]
 pub struct LootboxIcons {
+    pub teleport: Handle<Image>,
     pub monster_horde: Handle<Image>,
     // pub treasure_rain: Handle<Image>,  // REMOVED
     pub travelers_arrive: Handle<Image>,
@@ -145,19 +147,14 @@ pub struct HeartTextures {
 
 #[derive(Resource, Default)]
 pub struct DamageStageTextures {
-    pub stages: [Handle<Image>; 9],  // destroy_stage_0 through destroy_stage_8
+    pub stages: [Handle<Image>; 9], // destroy_stage_0 through destroy_stage_8
 }
 
 /// Cache for damage overlay materials and mesh (prevents 7k+ material/mesh leak!)
 #[derive(Resource, Default)]
 pub struct DamageOverlayCache {
-    pub materials: Vec<Handle<StandardMaterial>>,  // One material per damage stage (0-8)
-    pub mesh: Option<Handle<Mesh>>,  // Single unit rectangle mesh shared by all overlays
-}
-
-#[derive(Resource)]
-pub struct DragonAnimation {
-    pub fly: Handle<AnimationClip>,  // Built-in fly animation from GLB
+    pub materials: Vec<Handle<crate::systems::block_damage_overlay_system::CrackMaterial>>,
+    pub mesh: Option<Handle<Mesh>>, // Single unit rectangle mesh shared by all overlays
 }
 
 /// Hero sound effects

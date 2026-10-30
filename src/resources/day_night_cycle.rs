@@ -20,22 +20,6 @@ impl DayNightCycle {
         self.current_time < (self.cycle_duration / 2.0)
     }
 
-    pub fn is_night(&self) -> bool {
-        !self.is_day()
-    }
-
-    pub fn get_time_of_day(&self) -> &str {
-        if self.is_day() {
-            "Day"
-        } else {
-            "Night"
-        }
-    }
-
-    pub fn get_progress(&self) -> f32 {
-        self.current_time / self.cycle_duration
-    }
-
     pub fn update(&mut self, delta: f32) {
         self.current_time = (self.current_time + delta) % self.cycle_duration;
     }

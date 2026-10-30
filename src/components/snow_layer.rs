@@ -3,7 +3,7 @@ use bevy::prelude::*;
 /// Snow accumulation on block surfaces - 4 stages
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SnowLayer {
-    pub stage: u8,  // 0 = none, 1 = light dusting, 2 = partial, 3 = mostly covered, 4 = fully covered
+    pub stage: u8, // 0 = none, 1 = light dusting, 2 = partial, 3 = mostly covered, 4 = fully covered
 }
 
 impl SnowLayer {
@@ -15,9 +15,9 @@ impl SnowLayer {
     pub fn add_snow(&mut self) -> bool {
         if self.stage < 4 {
             self.stage += 1;
-            true  // Changed
+            true // Changed
         } else {
-            false  // Already max
+            false // Already max
         }
     }
 
@@ -25,9 +25,9 @@ impl SnowLayer {
     pub fn melt(&mut self) -> bool {
         if self.stage > 0 {
             self.stage -= 1;
-            true  // Changed
+            true // Changed
         } else {
-            false  // Already clear
+            false // Already clear
         }
     }
 
@@ -36,16 +36,9 @@ impl SnowLayer {
         self.stage > 0
     }
 
-    /// Get alpha for visual overlay (0.0 = invisible, 1.0 = opaque)
-    pub fn get_alpha(&self) -> f32 {
-        match self.stage {
-            0 => 0.0,
-            1 => 0.25,  // Light dusting
-            2 => 0.50,  // Partial
-            3 => 0.75,  // Mostly covered
-            4 => 1.0,   // Fully covered
-            _ => 0.0,
-        }
+    /// Thickness in world units; the block itself is 64 units high.
+    pub fn thickness(&self) -> f32 {
+        self.stage.min(4) as f32 * 2.0
     }
 }
 

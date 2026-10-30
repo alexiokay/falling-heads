@@ -36,3 +36,19 @@ pub struct VolumeSliderBar;
 
 #[derive(Component)]
 pub struct VolumeSliderLabel;
+
+#[derive(Component)]
+pub struct SettingsControl;
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum SettingsPage {
+    #[default]
+    General,
+    Graphics,
+    GameModes,
+}
+#[derive(Resource, Default)]
+pub struct SettingsNavigation(pub SettingsPage);
+#[derive(Component)]
+pub struct SettingsPageRoot(pub SettingsPage);
+#[derive(Component)]
+pub struct SettingsTab(pub SettingsPage);

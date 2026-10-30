@@ -6,7 +6,6 @@ use std::collections::HashMap;
 #[derive(Resource, Default)]
 pub struct DamageCooldown {
     pub last_damage_time: HashMap<Entity, f32>,
-    pub last_attacker_damage_time: HashMap<Entity, f32>, // Track when each attacker last dealt damage
 }
 
 impl DamageCooldown {
@@ -20,20 +19,6 @@ impl DamageCooldown {
 
     pub fn record_damage(&mut self, entity: Entity, current_time: f32) {
         self.last_damage_time.insert(entity, current_time);
-    }
-
-    /// Check if an attacker (hero/villager) can deal damage (prevents rapid multi-block damage)
-    pub fn can_attacker_damage(&self, attacker: Entity, current_time: f32, cooldown_seconds: f32) -> bool {
-        if let Some(&last_time) = self.last_attacker_damage_time.get(&attacker) {
-            current_time - last_time >= cooldown_seconds
-        } else {
-            true // Never attacked before
-        }
-    }
-
-    /// Record that an attacker dealt damage
-    pub fn record_attacker_damage(&mut self, attacker: Entity, current_time: f32) {
-        self.last_attacker_damage_time.insert(attacker, current_time);
     }
 }
 
@@ -58,9 +43,19 @@ impl MeleeAttackCooldown {
     pub fn record_hit(&mut self, enemy_entity: Entity, current_time: f32) {
         self.last_hit_time.insert(enemy_entity, current_time);
     }
+}
 
-    /// Clean up dead enemies from tracking (optional, prevents memory leak)
-    pub fn cleanup_dead(&mut self, alive_enemies: &std::collections::HashSet<Entity>) {
-        self.last_hit_time.retain(|&enemy, _| alive_enemies.contains(&enemy));
-    }
+/// Drops cooldown entries for despawned entities (mined blocks, dead enemies),
+/// which otherwise pile up for the whole session.
+pub fn prune_cooldowns(
+    mut damage: ResMut<DamageCooldown>,
+    mut melee: ResMut<MeleeAttackCooldown>,
+    alive: Query<()>,
+) {
+    damage
+        .last_damage_time
+        .retain(|&entity, _| alive.contains(entity));
+    melee
+        .last_hit_time
+        .retain(|&entity, _| alive.contains(entity));
 }

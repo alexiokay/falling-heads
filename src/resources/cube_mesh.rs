@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::prelude::*;
 
 /// UV layout for directional block textures
 /// STANDARD 4x1 horizontal atlas: [top | bottom | sides | front]
@@ -35,10 +35,10 @@ impl UVLayout {
     pub fn standard_4x1(top: usize, bottom: usize, sides: usize, front: usize) -> Self {
         // Convert texture indices to UV regions (0.0-0.25, 0.25-0.5, 0.5-0.75, 0.75-1.0)
         let regions = [
-            (0.0, 0.0, 0.25, 1.0),    // Slot 0
-            (0.25, 0.0, 0.5, 1.0),    // Slot 1
-            (0.5, 0.0, 0.75, 1.0),    // Slot 2
-            (0.75, 0.0, 1.0, 1.0),    // Slot 3
+            (0.0, 0.0, 0.25, 1.0), // Slot 0
+            (0.25, 0.0, 0.5, 1.0), // Slot 1
+            (0.5, 0.0, 0.75, 1.0), // Slot 2
+            (0.75, 0.0, 1.0, 1.0), // Slot 3
         ];
 
         UVLayout::Directional {
@@ -52,45 +52,45 @@ impl UVLayout {
     /// Pumpkin: [pumpkin_top | pumpkin_top | pumpkin_side | pumpkin_front]
     /// Atlas slots: [0:top, 1:bottom(=top), 2:sides, 3:front(carved)]
     pub fn pumpkin() -> Self {
-        Self::standard_4x1(0, 0, 2, 3)  // top reused for bottom
+        Self::standard_4x1(0, 0, 2, 3) // top reused for bottom
     }
 
     /// Oak Log: [log_top | log_top | log | log]
     /// Atlas slots: [0:top, 1:bottom(=top), 2:sides(bark), 3:front(=bark)]
     /// If front texture missing, it uses sides texture
     pub fn oak_log() -> Self {
-        Self::standard_4x1(0, 0, 2, 2)  // top reused for bottom, sides reused for front
+        Self::standard_4x1(0, 0, 2, 2) // top reused for bottom, sides reused for front
     }
 
     /// Oak Leaves: [leaves | leaves | leaves | leaves]
     /// Atlas slots: All use same leaves texture (slot 0)
     /// Uniform leaves texture on all sides
     pub fn oak_leaves() -> Self {
-        Self::standard_4x1(0, 0, 0, 0)  // Same texture on all faces
+        Self::standard_4x1(0, 0, 0, 0) // Same texture on all faces
     }
 
     /// Melon: [melon_top | melon_top | melon_side | melon_side]
     /// Atlas slots: [0:top, 1:bottom(=top), 2:sides, 3:front(=sides)]
     pub fn melon() -> Self {
-        Self::standard_4x1(0, 0, 2, 2)  // top reused for bottom, sides reused for front
+        Self::standard_4x1(0, 0, 2, 2) // top reused for bottom, sides reused for front
     }
 
     /// TNT: [tnt_top | tnt_bottom | tnt_side | tnt_side]
     /// Atlas slots: [0:top, 1:bottom, 2:sides, 3:front(=sides)]
     pub fn tnt() -> Self {
-        Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
+        Self::standard_4x1(0, 1, 2, 2) // top, bottom, sides for all 4 sides
     }
 
     /// Cactus: [cactus_top | cactus_bottom | cactus_side | cactus_side]
     /// Atlas slots: [0:top, 1:bottom, 2:sides, 3:front(=sides)]
     pub fn cactus() -> Self {
-        Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
+        Self::standard_4x1(0, 1, 2, 2) // top, bottom, sides for all 4 sides
     }
 
     /// Sandstone: [sandstone_top | sandstone_bottom | sandstone | sandstone]
     /// Atlas slots: [0:top, 1:bottom, 2:sides, 3:front(=sides)]
     pub fn sandstone() -> Self {
-        Self::standard_4x1(0, 1, 2, 2)  // top, bottom, sides for all 4 sides
+        Self::standard_4x1(0, 1, 2, 2) // top, bottom, sides for all 4 sides
     }
 }
 
@@ -164,25 +164,21 @@ pub fn create_uv_cube(size: f32, uv_layout: UVLayout) -> Mesh {
         [half, half, half],
         [half, half, -half],
         [-half, half, -half],
-
         // Bottom face (-Y) - Fixed winding order
         [-half, -half, -half],
         [half, -half, -half],
         [half, -half, half],
         [-half, -half, half],
-
         // Front face (+Z) - VISIBLE from camera (fixed winding order)
         [half, -half, half],
         [half, half, half],
         [-half, half, half],
         [-half, -half, half],
-
         // Right face (+X) - Fixed winding order for correct backface culling
         [half, -half, -half],
         [half, half, -half],
         [half, half, half],
         [half, -half, half],
-
         // Left face (-X) - Fixed winding order for correct backface culling
         [-half, -half, half],
         [-half, half, half],
@@ -228,31 +224,36 @@ pub fn create_uv_cube(size: f32, uv_layout: UVLayout) -> Mesh {
         UVLayout::Uniform => {
             // All faces use full texture (0,0) to (1,1) - 5 faces, no back
             let mut uv_data = Vec::with_capacity(20);
-            uv_data.extend_from_slice(&uv_top_bottom(full_texture));      // Top
-            uv_data.extend_from_slice(&uv_top_bottom(full_texture));      // Bottom
-            uv_data.extend_from_slice(&uv_front(full_texture));           // Front
-            uv_data.extend_from_slice(&uv_right(full_texture));           // Right
-            uv_data.extend_from_slice(&uv_left(full_texture));            // Left
+            uv_data.extend_from_slice(&uv_top_bottom(full_texture)); // Top
+            uv_data.extend_from_slice(&uv_top_bottom(full_texture)); // Bottom
+            uv_data.extend_from_slice(&uv_front(full_texture)); // Front
+            uv_data.extend_from_slice(&uv_right(full_texture)); // Right
+            uv_data.extend_from_slice(&uv_left(full_texture)); // Left
             uv_data
         }
-        UVLayout::Directional { top, bottom, sides, front } => {
+        UVLayout::Directional {
+            top,
+            bottom,
+            sides,
+            front,
+        } => {
             // Standard 4x1 atlas for ALL directional blocks
             // Missing textures handled by reusing available slots
             let mut uv_data = Vec::with_capacity(20);
-            uv_data.extend_from_slice(&uv_top_bottom(top));          // Top
-            uv_data.extend_from_slice(&uv_top_bottom(bottom));       // Bottom
-            uv_data.extend_from_slice(&uv_front(front));             // Front (visible from camera)
-            uv_data.extend_from_slice(&uv_right(sides));             // Right
-            uv_data.extend_from_slice(&uv_left(sides));              // Left
+            uv_data.extend_from_slice(&uv_top_bottom(top)); // Top
+            uv_data.extend_from_slice(&uv_top_bottom(bottom)); // Bottom
+            uv_data.extend_from_slice(&uv_front(front)); // Front (visible from camera)
+            uv_data.extend_from_slice(&uv_right(sides)); // Right
+            uv_data.extend_from_slice(&uv_left(sides)); // Left
             uv_data
         }
     };
 
     // Indices for 5 faces (no back face), 2 triangles per face
     let indices = vec![
-        0, 1, 2, 2, 3, 0,       // Top
-        4, 5, 6, 6, 7, 4,       // Bottom
-        8, 9, 10, 10, 11, 8,    // Front (visible)
+        0, 1, 2, 2, 3, 0, // Top
+        4, 5, 6, 6, 7, 4, // Bottom
+        8, 9, 10, 10, 11, 8, // Front (visible)
         12, 13, 14, 14, 15, 12, // Right
         16, 17, 18, 18, 19, 16, // Left
     ];
@@ -265,4 +266,62 @@ pub fn create_uv_cube(size: f32, uv_layout: UVLayout) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
     .with_inserted_indices(Indices::U32(indices))
+}
+
+/// Cactus artwork has a one-texel transparent border on its 16-texel body.
+/// Match the geometry to that body, and crop the padding rather than leaving
+/// full-width side planes detached from the inset visible front.
+pub fn create_cactus_mesh() -> Mesh {
+    let mut mesh = create_uv_cube(64.0, UVLayout::cactus());
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x3(points)) =
+        mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    {
+        for p in points {
+            p[0] *= 0.875;
+            p[2] *= 0.875;
+        }
+    }
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) =
+        mesh.attribute_mut(Mesh::ATTRIBUTE_UV_0)
+    {
+        for (i, uv) in uvs.iter_mut().enumerate() {
+            let slot = if i < 4 {
+                0.0
+            } else if i < 8 {
+                1.0
+            } else {
+                2.0
+            };
+            let local_u = (uv[0] - slot * 0.25) * 4.0;
+            uv[0] = (slot + 0.0625 + local_u * 0.875) * 0.25;
+            if i < 8 {
+                uv[1] = 0.0625 + uv[1] * 0.875;
+            }
+        }
+    }
+    mesh
+}
+#[cfg(test)]
+mod cactus_tests {
+    use super::*;
+    #[test]
+    fn cactus_faces_meet_at_the_visible_body_edges() {
+        let mesh = create_cactus_mesh();
+        let bevy::mesh::VertexAttributeValues::Float32x3(p) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap()
+        else {
+            panic!()
+        };
+        assert!(
+            p.iter()
+                .all(|v| v[0].abs() == 28.0 && v[1].abs() == 32.0 && v[2].abs() == 28.0)
+        );
+        assert_eq!(p[1], p[9]);
+        let bevy::mesh::VertexAttributeValues::Float32x2(uv) =
+            mesh.attribute(Mesh::ATTRIBUTE_UV_0).unwrap()
+        else {
+            panic!()
+        };
+        assert!((uv[8][0] - 0.515625).abs() < 0.0001);
+    }
 }
