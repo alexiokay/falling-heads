@@ -130,7 +130,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python inspect_glb.py <path_to_glb_file>")
         print("\nExample:")
-        print("  python inspect_glb.py assets/models/minecraft_ender_hydra_3_headed_ender_dragon.glb")
+        print("  python inspect_glb.py assets/models/projectiles/arrow2.glb")
         sys.exit(1)
 
     inspect_glb(sys.argv[1])
