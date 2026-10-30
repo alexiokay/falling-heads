@@ -81,6 +81,7 @@ pub(crate) mod plant_rules;
 pub(crate) mod slime_physics;
 pub(crate) mod slime_rift;
 
+pub(crate) mod asset_packs;
 pub(crate) mod extra_powers;
 pub(crate) mod game_modes;
 pub(crate) mod play_styles;

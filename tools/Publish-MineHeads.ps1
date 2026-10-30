@@ -56,9 +56,11 @@ $shortcut = $shell.CreateShortcut((Join-Path $desktop 'MineHeads - Play.lnk'))
 $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
 $shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $PSScriptRoot 'Launch-MineHeads.ps1') + '"'
 $shortcut.WorkingDirectory = $gameRoot
-# Game icon (tools/Make-Icon.ps1); the assets copy above already contains it.
-$icon = Join-Path $release 'assets/icon/mineheads.ico'
-$shortcut.IconLocation = if (Test-Path -LiteralPath $icon) { $icon + ',0' } else { (Join-Path $release 'MineHeads.exe') + ',0' }
+# Game icon (tools/Make-Icon.ps1) from a theme pack in the assets copy above;
+# an installed theme's icon wins over the free pack's.
+$icon = Get-ChildItem -Path (Join-Path $release 'assets/packs/*/icon/mineheads.ico') -ErrorAction SilentlyContinue |
+    Sort-Object { $_.Directory.Parent.Name -eq 'free' }, { $_.Directory.Parent.Name } | Select-Object -First 1
+$shortcut.IconLocation = if ($icon) { $icon.FullName + ',0' } else { (Join-Path $release 'MineHeads.exe') + ',0' }
 $shortcut.Description = 'Play the latest verified MineHeads build'
 $shortcut.Save()
 $manifest | ConvertTo-Json

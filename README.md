@@ -128,13 +128,34 @@ falling-heads/
 │   ├── utils/          # Utilities
 │   ├── config/         # Configuration
 │   └── states.rs       # Game states
-├── assets/             # Game assets
+├── assets/
+│   ├── packs/free/     # Free theme pack: textures, sounds, models (public)
+│   ├── packs/<name>/   # Other theme packs (installed locally, not in git)
+│   ├── shaders/        # Shared by every pack
+│   └── configs/        # Shared by every pack
 ├── tests/              # Tests
 └── docs/               # Documentation
     ├── GAME_DESIGN.md
     ├── ARCHITECTURE.md
     └── IMPLEMENTATION_PLAN.md
 ```
+
+## 🎨 Theme packs
+
+Textures, sounds and models come from a **theme pack** in `assets/packs/<name>/`, laid out like
+`assets/` itself (`textures/`, `audio/`, `models/`, `icon/`) with a `pack.json`:
+
+```json
+{ "name": "Winter", "author": "you", "license": "CC0", "extends": "free", "credits": [] }
+```
+
+The game looks for each file in the active pack, then the packs it `extends`, then the free
+pack, so a pack only needs the files it changes. Pick the pack under **Settings > Theme** (applies
+on the next start), or set `MINEHEADS_PACK=<name>` for one run.
+
+This repository ships only the **free pack**. Its stand-in art comes from
+`tools/Make-FreePack.ps1`, which never overwrites files already in the pack, so replace
+stand-ins with your own or CC0 art one file at a time.
 
 ## 🛠️ Development
 
@@ -153,7 +174,9 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed development ro
 
 ## 📝 License
 
-MIT OR Apache-2.0
+MIT OR Apache-2.0 for the code. The free pack lists its own credits and licences in
+`assets/packs/free/pack.json`. MineHeads is a fan project and is not affiliated with Mojang or
+Microsoft; no Minecraft assets are included.
 
 ## 🤝 Contributing
 

@@ -1,0 +1,11 @@
+tnt_rain: Minecraft-style 64x64 pixel tileable sky icon, view of "TNT Rain" storm.  TNT blocks falling from scattered positions across the upper half, emerging from dark gray-purple stormy haze. Heavy diagonal blue rain streaks, sfaint white fog wisps, soft dithering. Pure blocky low-res voxel aesthetic, high contrast, no solid blocks or entities, transparent edges for seamless tiling, ominous and intense thunderstorm mood. gameart , fantasy, Cub3W0rld , pixel art
+
+
+travelers: Minecraft-style 32x32 pixel icon, friendly "Villager Travelers" incoming. Small group of 3-5 tiny villagers (1-2px scale: bald heads with big noses, brown robes/green tunics, backpacks, one holding a map) approaching from bottom-center toward viewer, slight overlap, cheerful waving arms and happy expressions, motion lines for forward movement. Pure blocky low-res voxel aesthetic, high contrast, soft dithering, no background, transparent background, warm welcoming traveler vibe. real minecraft world background environment
+
+ gameart , fantasy, Cub3W0rld , pixel art.
+
+
+treasure: Minecraft-style 32x32 pixel icon, overflowing "Mega Chest Treasure". Massive central treasure chest (blocky oak wood with iron bands, wide-open lid, golden glow inside) bursting with stacked loot: diamonds, emeralds, netherite ingots, enchanted books, golden apples, totems of undying spilling out in piles and arcs. Subtle sparkles, motion lines for explosive overflow. Pure blocky low-res voxel aesthetic, high contrast, soft dithering, no background, transparent background, epic and tempting mega-loot vibe. 
+
+ gameart , fantasy, Cub3W0rld , pixel art

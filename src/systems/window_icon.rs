@@ -1,4 +1,4 @@
-//! Window and taskbar icon (`assets/icon/mineheads.png`, made by
+//! Window and taskbar icon (`icon/mineheads.png` from the theme pack, made by
 //! `tools/Make-Icon.ps1`). Bevy has no icon setting, so it is applied to the
 //! native window once the image has loaded.
 use bevy::ecs::system::NonSendMarker;

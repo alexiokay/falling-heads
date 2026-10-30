@@ -143,6 +143,8 @@ fn main() {
             || arg == "--visual-smoke-test"
     });
 
+    // Theme packs: must be registered before DefaultPlugins adds the AssetPlugin.
+    systems::asset_packs::install(&mut app);
     systems::native_gpu::prepare(&mut app);
     app.add_plugins(
         DefaultPlugins
@@ -201,6 +203,7 @@ fn main() {
     .add_plugins(systems::bats::BatPlugin)
     .add_plugins(systems::play_styles::PlayStylePlugin)
     .add_plugins(systems::game_modes::GameModesPlugin)
+    .add_plugins(systems::asset_packs::AssetPacksPlugin)
     .add_plugins(systems::extra_powers::ExtraPowersPlugin)
     .add_plugins(systems::window_icon::WindowIconPlugin)
     .add_plugins(systems::ui::loading_screen::LoadingScreenPlugin)

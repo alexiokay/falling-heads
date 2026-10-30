@@ -16,3 +16,9 @@ __pycache__/
 !/vendor/Streamline-2.14.16/license.txt
 # Local machine settings
 /.claude/settings.local.json
+# Theme packs that may not be redistributed stay on this PC only
+/assets/packs/minecraft/
+# Saved theme pick
+/asset-pack.json
+# Design references that copy Minecraft/Faithful art stay on this PC only
+/design/private/

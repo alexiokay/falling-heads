@@ -45,6 +45,7 @@ pub enum SettingsPage {
     General,
     Graphics,
     GameModes,
+    Theme,
 }
 #[derive(Resource, Default)]
 pub struct SettingsNavigation(pub SettingsPage);

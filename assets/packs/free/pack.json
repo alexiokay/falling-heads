@@ -1,0 +1,10 @@
+{
+  "name": "MineHeads Free",
+  "author": "alexiokay",
+  "license": "Own work unless credited below",
+  "credits": [
+    "Biome music, rocket, laser, burst, shield and roulette sounds: alexiokay (AI-assisted)",
+    "Lootbox icons: alexiokay (AI-generated, prompts in textures/ui/lootbox/prompts.txt)",
+    "Arrow model: alexiokay (Blender)"
+  ]
+}

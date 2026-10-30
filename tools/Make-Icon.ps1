@@ -1,11 +1,11 @@
 # Builds the MineHeads icon from the game's own textures:
-# assets/icon/mineheads.png (256x256) and assets/icon/mineheads.ico (16-256 px).
+# assets/packs/minecraft/icon/mineheads.png (256x256) and mineheads.ico (16-256 px).
 # The hero head falls toward a row of blocks on a night-blue rounded tile.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
-$tex = Join-Path $root 'assets/textures'
-$out = Join-Path $root 'assets/icon'
+$tex = Join-Path $root 'assets/packs/minecraft/textures'
+$out = Join-Path $root 'assets/packs/minecraft/icon'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 function Load($rel) { [System.Drawing.Image]::FromFile((Join-Path $tex $rel)) }
