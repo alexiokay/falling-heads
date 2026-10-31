@@ -79,6 +79,10 @@ fn probe(world: &mut World) {
         crate::systems::slime_rift::probe::run(world);
         return;
     }
+    if std::env::args().any(|a| a == "--pack-switch-test") {
+        crate::pack_switch_probe::run(world);
+        return;
+    }
     if std::env::args().any(|a| a == "--powers-test") {
         crate::powers_probe::run(world);
         return;

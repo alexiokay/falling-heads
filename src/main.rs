@@ -29,6 +29,8 @@ mod head_size_probe;
 #[cfg(feature = "probes")]
 mod overhaul_probe;
 #[cfg(feature = "probes")]
+mod pack_switch_probe;
+#[cfg(feature = "probes")]
 mod polish_probe;
 #[cfg(feature = "probes")]
 mod powers_probe;
@@ -446,6 +448,7 @@ fn initialize_material_cache(
     mut cache: ResMut<MaterialCache>,
     block_textures: Option<Res<BlockTextures>>,
     mut images: ResMut<Assets<Image>>,
+    mut derived: Option<ResMut<systems::asset_packs::DerivedImages>>,
 ) {
     // Only run once
     if !cache.materials.is_empty() {
@@ -586,6 +589,60 @@ fn initialize_material_cache(
     let cactus_atlas_handle = images.add(cactus_atlas);
 
     info!("Generated block atlases: pumpkin, oak_log, oak_leaves, melon, tnt, sandstone, cactus");
+
+    // Rebuild these atlases in place when a theme pack switch reloads their faces.
+    if let Some(derived) = derived.as_mut() {
+        let t = &block_textures;
+        for (atlas, faces) in [
+            (
+                &pumpkin_atlas_handle,
+                [
+                    &t.pumpkin_top,
+                    &t.pumpkin_top,
+                    &t.pumpkin_side,
+                    &t.pumpkin_front,
+                ],
+            ),
+            (
+                &oak_log_atlas_handle,
+                [&t.oak_log_top, &t.oak_log_top, &t.oak_log, &t.oak_log],
+            ),
+            (
+                &oak_leaves_atlas_handle,
+                [&t.oak_leaves, &t.oak_leaves, &t.oak_leaves, &t.oak_leaves],
+            ),
+            (
+                &melon_atlas_handle,
+                [&t.melon_top, &t.melon_top, &t.melon_side, &t.melon_side],
+            ),
+            (
+                &tnt_atlas_handle,
+                [&t.tnt_top, &t.tnt_bottom, &t.tnt_side, &t.tnt_side],
+            ),
+            (
+                &sandstone_atlas_handle,
+                [
+                    &t.sandstone_top,
+                    &t.sandstone_bottom,
+                    &t.sandstone,
+                    &t.sandstone,
+                ],
+            ),
+            (
+                &cactus_atlas_handle,
+                [
+                    &t.cactus_top,
+                    &t.cactus_bottom,
+                    &t.cactus_side,
+                    &t.cactus_side,
+                ],
+            ),
+        ] {
+            derived.add(atlas.clone(), faces.map(Clone::clone).to_vec(), |f| {
+                crate::systems::atlas_generator::create_atlas_4x1(f[0], f[1], f[2], f[3])
+            });
+        }
+    }
 
     // Store atlases as a resource
     commands.insert_resource(crate::resources::asset_handles::BlockAtlases {

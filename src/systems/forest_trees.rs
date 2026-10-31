@@ -81,6 +81,7 @@ fn prepare_materials(
     mut images: ResMut<Assets<Image>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut cache: ResMut<MaterialCache>,
+    mut derived: Option<ResMut<super::asset_packs::DerivedImages>>,
 ) {
     if cache.materials.is_empty() || cache.forest_floor.is_some() {
         return;
@@ -111,6 +112,16 @@ fn prepare_materials(
             &source[i + 2],
             &source[i + 2],
         ));
+        // Rebuilt in place when a theme pack switch reloads the species textures.
+        if let Some(derived) = derived.as_mut() {
+            let (log, top, leaf) = (&textures.0[i], &textures.0[i + 1], &textures.0[i + 2]);
+            derived.add(bark.clone(), vec![top.clone(), log.clone()], |f| {
+                atlas(f[0], f[0], f[1], f[1])
+            });
+            derived.add(leaves.clone(), vec![leaf.clone()], |f| {
+                atlas(f[0], f[0], f[0], f[0])
+            });
+        }
         for (is_leaf, texture, color) in [(false, bark, Color::WHITE), (true, leaves, tint)] {
             cache.tree_materials.insert(
                 (species, is_leaf),
@@ -129,17 +140,15 @@ fn prepare_materials(
             );
         }
     }
-    // Grass top is a greyscale biome-tinted texture. Tint its pixels in the atlas,
-    // leaving the dirt sides brown rather than tinting the entire ground cube.
-    let mut top = source[6].clone();
-    if let Some(data) = top.data.as_mut() {
-        for rgba in data.chunks_exact_mut(4) {
-            rgba[0] = (rgba[0] as f32 * 0.48) as u8;
-            rgba[1] = (rgba[1] as f32 * 0.66) as u8;
-            rgba[2] = (rgba[2] as f32 * 0.30) as u8;
-        }
+    let floor = images.add(forest_floor(&source[6], &source[7], &source[8]));
+    if let Some(derived) = derived.as_mut() {
+        let t = &textures.0;
+        derived.add(
+            floor.clone(),
+            vec![t[6].clone(), t[7].clone(), t[8].clone()],
+            |f| forest_floor(f[0], f[1], f[2]),
+        );
     }
-    let floor = images.add(atlas(&top, &source[8], &source[7], &source[7]));
     cache.forest_floor = Some(mats.add(StandardMaterial {
         base_color_texture: Some(floor),
         perceptual_roughness: 0.95,
@@ -385,6 +394,21 @@ pub fn spawn(
             Transform::from_xyz(p.x, p.y, -10.),
         ));
     }
+}
+
+/// Grass-topped soil atlas. Grass top is a greyscale biome-tinted texture: tint
+/// its pixels in the atlas, leaving the dirt sides brown rather than tinting the
+/// entire ground cube.
+fn forest_floor(grass_top: &Image, grass_side: &Image, dirt: &Image) -> Image {
+    let mut top = grass_top.clone();
+    if let Some(data) = top.data.as_mut() {
+        for rgba in data.as_chunks_mut::<4>().0 {
+            rgba[0] = (rgba[0] as f32 * 0.48) as u8;
+            rgba[1] = (rgba[1] as f32 * 0.66) as u8;
+            rgba[2] = (rgba[2] as f32 * 0.30) as u8;
+        }
+    }
+    super::atlas_generator::create_atlas_4x1(&top, dirt, grass_side, grass_side)
 }
 
 #[cfg(test)]

@@ -150,8 +150,9 @@ Textures, sounds and models come from a **theme pack** in `assets/packs/<name>/`
 ```
 
 The game looks for each file in the active pack, then the packs it `extends`, then the free
-pack, so a pack only needs the files it changes. Pick the pack under **Settings > Theme** (applies
-on the next start), or set `MINEHEADS_PACK=<name>` for one run.
+pack, so a pack only needs the files it changes. Pick the pack under **Settings > Theme**: it switches while you play
+(textures, sounds and models reload) and is remembered, or set `MINEHEADS_PACK=<name>` for one run.
+New pack folders are found when the game starts.
 
 This repository ships only the **free pack**. Most of its art is from Kenney's CC0 packs
 (`tools/Apply-Kenney.ps1` with the table `tools/kenney-map.csv`; unzip the packs into

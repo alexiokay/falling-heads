@@ -212,7 +212,7 @@
   "dead_code | src/resources/asset_handles.rs | field `container` is never read",
   "dead_code | src/resources/asset_handles.rs | field `penguin` is never read",
   "dead_code | src/resources/asset_handles.rs | fields `fallbig` and `fallsmall` are never read",
-  "dead_code | src/resources/asset_handles.rs | fields `pumpkin`, `oak_log`, `oak_leaves`, `melon`, `sandstone`, and `cactus` are never read",
+  "dead_code | src/resources/asset_handles.rs | fields `oak_leaves`, `melon`, `sandstone`, and `cactus` are never read",
   "dead_code | src/resources/asset_handles.rs | fields `tnt` and `nether_bg` are never read",
   "dead_code | src/resources/asset_handles.rs | multiple fields are never read",
   "dead_code | src/resources/damage_cooldown.rs | field `last_attacker_damage_time` is never read",
