@@ -153,9 +153,10 @@ The game looks for each file in the active pack, then the packs it `extends`, th
 pack, so a pack only needs the files it changes. Pick the pack under **Settings > Theme** (applies
 on the next start), or set `MINEHEADS_PACK=<name>` for one run.
 
-This repository ships only the **free pack**. Its stand-in art comes from
-`tools/Make-FreePack.ps1`, which never overwrites files already in the pack, so replace
-stand-ins with your own or CC0 art one file at a time.
+This repository ships only the **free pack**. Most of its art is from Kenney's CC0 packs
+(`tools/Apply-Kenney.ps1` with the table `tools/kenney-map.csv`; unzip the packs into
+`target/kenney/<pack>/files/` first). The rest are stand-ins from `tools/Make-FreePack.ps1`, which
+never overwrites files already in the pack, so replace them with your own or CC0 art one at a time.
 
 ## 🛠️ Development
 
