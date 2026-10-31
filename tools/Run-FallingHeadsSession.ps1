@@ -1,5 +1,5 @@
 # Called only after launcher integrity checks; also used by diagnostics self-tests.
-function Invoke-MineHeadsSession {
+function Invoke-FallingHeadsSession {
     param([string]$Executable,[string]$GameRoot,[string]$BuildVersion,[string]$BuildHash,
         [string[]]$GameArguments=@(),[string]$SessionDirectory)
     if (-not $SessionDirectory) {
@@ -10,10 +10,10 @@ function Invoke-MineHeadsSession {
     $report=[ordered]@{build=$BuildVersion;sha256=$BuildHash;executable=$Executable;startedUtc=[DateTime]::UtcNow.ToString('o');status='starting'}
     $reportPath=Join-Path $SessionDirectory 'launcher.json'
     $report | ConvertTo-Json | Set-Content -LiteralPath $reportPath -Encoding UTF8
-    $oldSession=$env:MINEHEADS_SESSION_DIR
+    $oldSession=$env:FALLING_HEADS_SESSION_DIR
     $oldBacktrace=$env:RUST_BACKTRACE
     try {
-        $env:MINEHEADS_SESSION_DIR=$SessionDirectory
+        $env:FALLING_HEADS_SESSION_DIR=$SessionDirectory
         $env:RUST_BACKTRACE='full'
         $start=@{FilePath=$Executable;WorkingDirectory=$GameRoot;WindowStyle='Hidden';PassThru=$true;
             RedirectStandardOutput=(Join-Path $SessionDirectory 'stdout.log');RedirectStandardError=(Join-Path $SessionDirectory 'stderr.log')}
@@ -53,7 +53,7 @@ function Invoke-MineHeadsSession {
         $report | ConvertTo-Json | Set-Content -LiteralPath $reportPath -Encoding UTF8
         throw
     } finally {
-        $env:MINEHEADS_SESSION_DIR=$oldSession
+        $env:FALLING_HEADS_SESSION_DIR=$oldSession
         $env:RUST_BACKTRACE=$oldBacktrace
     }
 }

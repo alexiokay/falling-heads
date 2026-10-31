@@ -1,4 +1,4 @@
-# MineHeads: deepen the existing eight biomes
+# Falling Heads: deepen the existing eight biomes
 
 ## Implemented in this pass
 
@@ -15,7 +15,7 @@
 
 Verified PNG headers: `assets/textures/resources/redstone.png`, `assets/textures/blocks/general/redstone_ore.png`, and `assets/textures/blocks/nether/obsidian.png` are all 64 by 64 pixels.
 
-The MineHeads and adjacent communityGaming search did not find `pack.mcmeta` or dedicated redstone-wire, repeater, comparator, piston, lever or portal textures. This does not establish that there is no resource pack anywhere else on the computer. Current wires/plate are procedural geometry; portal fill is a shader. Dedicated mechanism art should be added as an internally consistent set before expanding to a building interface.
+The Falling Heads and adjacent communityGaming search did not find `pack.mcmeta` or dedicated redstone-wire, repeater, comparator, piston, lever or portal textures. This does not establish that there is no resource pack anywhere else on the computer. Current wires/plate are procedural geometry; portal fill is a shader. Dedicated mechanism art should be added as an internally consistent set before expanding to a building interface.
 
 ## Biome direction (implemented slices listed below)
 
@@ -62,7 +62,7 @@ The current natural generator uses skeletons in several biomes, Yeti in Iceland,
 
 ## Weather, fluid continuity and encounter update (2026-10-23)
 
-Implemented in code; validation results are recorded in MINEHEADS_UPGRADE_2026-10-23.md:
+Implemented in code; validation results are recorded in FALLING_HEADS_UPGRADE_2026-10-23.md:
 
 - [x] Falling fluid spans complete cell height; pool lips join adjoining falling sheets. Short-lived transport traces bridge simulation ticks. Rendering and immersion use identical sections.
 - [x] Rain collects finite water on local exposed ledges (maximum twelve deposits of two volume units per weather reaction; no infinite source).
@@ -204,7 +204,7 @@ THQ confirms Gothic 1 Remake uses Unreal Engine 5, but its public release page d
 - https://dev.epicgames.com/documentation/en-us/unreal-engine/add-post-process-volumes
 - https://dev.epicgames.com/documentation/en-us/unreal-engine/local-fog-volumes-in-unreal-engine
 
-MineHeads' current update uses per-biome sun/fill/background/fog colors, smooth lighting transitions and inexpensive world-anchored mist behind foreground terrain. It is not volumetric light scattering and does not add light shafts. A stronger forest look would also need foreground/background vegetation layers and a more distinctive forest tile palette; fog alone cannot make stone corridors into a forest.
+Falling Heads' current update uses per-biome sun/fill/background/fog colors, smooth lighting transitions and inexpensive world-anchored mist behind foreground terrain. It is not volumetric light scattering and does not add light shafts. A stronger forest look would also need foreground/background vegetation layers and a more distinctive forest tile palette; fog alone cannot make stone corridors into a forest.
 
 ## Atmosphere and supported vegetation update (2026-10-23)
 
@@ -243,7 +243,7 @@ Structures and the dragon background breach remain the earlier design proposals 
 Follow-up lighting preference: the user wanted the upper-left glow softened, not removed. The accepted follow-up restores moderate backdrop reflectance (0.30) with roughness 0.62, keeping the directional gradient while reducing the original wash. Verified in native and RT forest captures, build 20261023-232813-64c58744c1. This supersedes the zero-reflectance backdrop values described above.
 
 ### Implemented: denser forest layout and gentler weather (23 October follow-up)
-Forest terrain now keeps broad soil footing with rolling tops and staggered gullies, with up to two spaced, grounded trees per chunk. Forest bands are 20 chunks deep and biome entry selects the upper third. This replaces the previous high-fracture cave layout that left mostly empty space and very few viable tree sites. Rain/snow preserve diffuse fill and backdrop brightness; only rain wets materials. See MINEHEADS_UPGRADE_2026-10-23.md for test evidence and installed build status.
+Forest terrain now keeps broad soil footing with rolling tops and staggered gullies, with up to two spaced, grounded trees per chunk. Forest bands are 20 chunks deep and biome entry selects the upper third. This replaces the previous high-fracture cave layout that left mostly empty space and very few viable tree sites. Rain/snow preserve diffuse fill and backdrop brightness; only rain wets materials. See FALLING_HEADS_UPGRADE_2026-10-23.md for test evidence and installed build status.
 
 Structures and the dragon's background breach remain design proposals awaiting the user's choice; this update does not implement either.
 

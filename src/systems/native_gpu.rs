@@ -241,7 +241,7 @@ fn configure(
             }
         }
         info!(
-            "MINEHEADS GPU mode={mode} SR_supported={} RR_supported={}",
+            "FALLING_HEADS GPU mode={mode} SR_supported={} RR_supported={}",
             status.sr, status.rr
         );
     }
@@ -673,7 +673,7 @@ fn gpu_probe(world: &mut World) {
             assert_eq!(status.mode, 1);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-gpu-dlss.png"));
+                .observe(save_to_disk("falling-heads-gpu-dlss.png"));
         }
         1 => {
             world.resource_mut::<GraphicsSettings>().ray_tracing = true;
@@ -684,7 +684,7 @@ fn gpu_probe(world: &mut World) {
             assert!(world.query::<&RaytracingMesh3d>().iter(world).count() > 10);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-gpu-raytracing.png"));
+                .observe(save_to_disk("falling-heads-gpu-raytracing.png"));
         }
         3 => {
             world.resource_mut::<GraphicsSettings>().dlss = false;
@@ -693,7 +693,7 @@ fn gpu_probe(world: &mut World) {
             assert_eq!(status.mode, 2);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-gpu-dlaa.png"));
+                .observe(save_to_disk("falling-heads-gpu-dlaa.png"));
         }
         5 => {
             world.resource_mut::<GraphicsSettings>().ray_tracing = false;
@@ -703,7 +703,7 @@ fn gpu_probe(world: &mut World) {
             assert_eq!(world.query::<&RaytracingMesh3d>().iter(world).count(), 0);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-gpu-raster.png"));
+                .observe(save_to_disk("falling-heads-gpu-raster.png"));
         }
         7 => {
             world.resource_mut::<GraphicsSettings>().dlss = true;
@@ -712,7 +712,7 @@ fn gpu_probe(world: &mut World) {
             assert_eq!(status.mode, 1);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-gpu-dlss-restored.png"));
+                .observe(save_to_disk("falling-heads-gpu-dlss-restored.png"));
         }
         9 => {
             eprintln!(

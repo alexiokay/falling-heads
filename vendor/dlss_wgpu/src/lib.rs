@@ -79,5 +79,5 @@ pub use nvsdk_ngx::{DlssError, DlssFeatureFlags, DlssPerfQualityMode};
 #[cfg(not(feature = "mock"))]
 pub use sdk::DlssSdk;
 
-// MineHeads integration: coordinate a shared NGX runtime with Streamline.
+// FallingHeads integration: coordinate a shared NGX runtime with Streamline.
 pub use sdk::set_external_ngx_shutdown;

@@ -1,5 +1,5 @@
-# Builds the MineHeads icon from the game's own textures:
-# assets/packs/minecraft/icon/mineheads.png (256x256) and mineheads.ico (16-256 px).
+# Builds the FallingHeads icon from the game's own textures:
+# assets/packs/minecraft/icon/falling-heads.png (256x256) and falling-heads.ico (16-256 px).
 # The hero head falls toward a row of blocks on a night-blue rounded tile.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -70,7 +70,7 @@ $g.SmoothingMode = 'AntiAlias'
 $g.DrawPath((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(140, 160, 200, 255)), 3), $tile)
 $g.Dispose()
 
-$png = Join-Path $out 'mineheads.png'
+$png = Join-Path $out 'falling-heads.png'
 $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
 
 # ICO with PNG-encoded entries
@@ -88,7 +88,7 @@ $entries = foreach ($s in $sizes) {
     , @($s, $ms.ToArray())
 }
 $bmp.Dispose()
-$fs = [System.IO.File]::Create((Join-Path $out 'mineheads.ico'))
+$fs = [System.IO.File]::Create((Join-Path $out 'falling-heads.ico'))
 $w = New-Object System.IO.BinaryWriter $fs
 $w.Write([UInt16]0); $w.Write([UInt16]1); $w.Write([UInt16]$entries.Count)
 $offset = 6 + 16 * $entries.Count

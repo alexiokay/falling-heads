@@ -3,7 +3,7 @@
 # Run output: logs, smoke-test screenshots and the local settings copy
 /logs
 *.log
-/mineheads-*.png
+/falling-heads-*.png
 /graphics-settings.json
 /game-settings.json
 # Python tool caches

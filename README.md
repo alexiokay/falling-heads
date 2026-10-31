@@ -1,4 +1,4 @@
-# MineHeads - Falling Block Breaker
+# Falling Heads - Falling Block Breaker
 
 A 3D isometric infinite falling game built with Bevy 0.20.0 where Minecraft-style heads descend through an endless procedurally generated world of destructible blocks.
 
@@ -27,7 +27,7 @@ Control a falling hero as it bounces through an infinite chunk-based world with 
 - Rust 1.97.1 or higher
 - Bevy 0.20.0 and Avian 0.8.0 (registry dependencies)
 
-See [the upgrade and validation checklist](MINEHEADS_UPGRADE_2026-10-23.md) for current fixes, validation limits and gameplay proposals.
+See [the upgrade and validation checklist](FALLING_HEADS_UPGRADE_2026-10-23.md) for current fixes, validation limits and gameplay proposals.
 
 ### Building
 ```bash
@@ -49,7 +49,7 @@ Five crates are patched from `vendor/` (`bevy_pbr`, `bevy_solari`,
 `bevy_anti_alias`, `wgpu-hal`, `dlss_wgpu`; see `[patch.crates-io]` in
 `Cargo.toml`). Every Bevy or wgpu upgrade needs those patches ported again.
 
-Settings are saved per user in `%APPDATA%\MineHeads\` (`game-settings.json`,
+Settings are saved per user in `%APPDATA%\FallingHeads\` (`game-settings.json`,
 `graphics-settings.json`). Test, probe and benchmark launches never overwrite them.
 
 ### Running
@@ -70,8 +70,8 @@ curl -X POST http://localhost:3029/command \
 
 If Windows reports the port as forbidden, it is inside a reserved range
 (`netsh interface ipv4 show excludedportrange protocol=tcp`; Hyper-V, WSL and
-Docker reserve these). Start the game with `MINEHEADS_API_PORT` set to a free
-port, or reserve 3029 for MineHeads as admin.
+Docker reserve these). Start the game with `FALLING_HEADS_API_PORT` set to a free
+port, or reserve 3029 for Falling Heads as admin.
 
 ### Play styles
 Each viewer chooses how their heads play the ball. The choice is remembered,
@@ -151,7 +151,7 @@ Textures, sounds and models come from a **theme pack** in `assets/packs/<name>/`
 
 The game looks for each file in the active pack, then the packs it `extends`, then the free
 pack, so a pack only needs the files it changes. Pick the pack under **Settings > Theme**: it switches while you play
-(textures, sounds and models reload) and is remembered, or set `MINEHEADS_PACK=<name>` for one run.
+(textures, sounds and models reload) and is remembered, or set `FALLING_HEADS_PACK=<name>` for one run.
 New pack folders are found when the game starts.
 
 This repository ships only the **free pack**. Most of its art is from Kenney's CC0 packs
@@ -177,7 +177,7 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed development ro
 ## 📝 License
 
 MIT OR Apache-2.0 for the code. The free pack lists its own credits and licences in
-`assets/packs/free/pack.json`. MineHeads is a fan project and is not affiliated with Mojang or
+`assets/packs/free/pack.json`. Falling Heads is a fan project and is not affiliated with Mojang or
 Microsoft; no Minecraft assets are included.
 
 ## 🤝 Contributing

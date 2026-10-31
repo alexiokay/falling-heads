@@ -4,7 +4,7 @@ $gameRoot=Split-Path -Parent $PSScriptRoot
 Push-Location $gameRoot
 try {
     & cargo build --locked
-    if ($LASTEXITCODE) { throw 'MineHeads build failed.' }
+    if ($LASTEXITCODE) { throw 'FallingHeads build failed.' }
     $sdk=Join-Path $gameRoot '../../south-balcony-twin/vendor/DLSS'
     foreach ($name in @('nvngx_dlss.dll','nvngx_dlssd.dll')) {
         Copy-Item -LiteralPath (Join-Path $sdk "lib/Windows_x86_64/rel/$name") -Destination (Join-Path $gameRoot "target/debug/$name")

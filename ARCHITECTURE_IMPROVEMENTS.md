@@ -25,13 +25,13 @@ Terrain candidates, expanded bounds, contacts, damaged-block sets and chunk-biom
 
 ## Verification and maintenance
 
-`tools/Check-MineHeadsArchitecture.ps1` checks the recorded compiler version, formats the explicitly cleaned modules, runs Clippy against a diagnostic baseline, and runs tests. `-Build` also builds; `-Native` adds water, snow/ghast and 370 named-villager checks. Updating the warning baseline is explicit (`-UpdateBaseline`), never automatic during a normal check. Legacy compiler/style warnings remain visible; no blanket lint/unsafe allowance was introduced.
+`tools/Check-FallingHeadsArchitecture.ps1` checks the recorded compiler version, formats the explicitly cleaned modules, runs Clippy against a diagnostic baseline, and runs tests. `-Build` also builds; `-Native` adds water, snow/ghast and 370 named-villager checks. Updating the warning baseline is explicit (`-UpdateBaseline`), never automatic during a normal check. Legacy compiler/style warnings remain visible; no blanket lint/unsafe allowance was introduced.
 
 A manually dispatched GitHub workflow targets a prepared Windows runner with the native SDK, patched crates and offline dependency cache. It has not been executed on GitHub. `tools/build-environment.json` records the tested toolchain; Cargo.lock and the vendored patches pin Rust dependencies. External SDK paths in .cargo/config.toml still require provisioning on another machine.
 
 `native/SAFETY.md` records the FFI ownership and schedule assumptions. Matching Rust/C++ ABI assertions now guard structure size and field offsets. Full driver/device-loss correctness is not claimed. The launcher stress run still emits Avian mass/inertia warnings also present in the 24 October launcher log; their origin requires separate investigation. They were not hidden, and this pass does not claim every runtime warning is resolved.
 
-The release profile now retains crash symbols and uses thin LTO. `tools/Build-MineHeadsOptimized.ps1` builds a full-optimization application candidate with the existing optimized engine dependencies, assertions and PDBs for a practical before-distribution benchmark. Distribution must name the actual tested binary; do not infer that a release profile or an FPS improvement has been validated merely because configuration exists.
+The release profile now retains crash symbols and uses thin LTO. `tools/Build-FallingHeadsOptimized.ps1` builds a full-optimization application candidate with the existing optimized engine dependencies, assertions and PDBs for a practical before-distribution benchmark. Distribution must name the actual tested binary; do not infer that a release profile or an FPS improvement has been validated merely because configuration exists.
 
 ---
 

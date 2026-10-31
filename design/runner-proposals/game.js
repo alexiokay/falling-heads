@@ -16,7 +16,7 @@ const world=new THREE.Group();scene.add(world);
 const geometryCache=new Map();
 function box(x,y,z,w,h,d,mat,parent=world){const key=[w,h,d].join(',');let geo=geometryCache.get(key);if(!geo){geo=new THREE.BoxGeometry(w,h,d);const uv=geo.attributes.uv;const sizes=[[d,h],[d,h],[w,d],[w,d],[w,h],[w,h]];for(let face=0;face<6;face++)for(let j=0;j<4;j++){const i=face*4+j;uv.setXY(i,uv.getX(i)*Math.max(1,sizes[face][0]/1.5),uv.getY(i)*Math.max(1,sizes[face][1]/1.5));}geometryCache.set(key,geo);}const m=new THREE.Mesh(geo,mats[mat]||colors[mat]);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
 const head=new THREE.Group();scene.add(head);box(0,0,0,.92,.92,.92,'hair',head);
-// The face stays readable from the chase camera, just like the heads in MineHeads.
+// The face stays readable from the chase camera, just like the heads in FallingHeads.
 const face=new THREE.Mesh(new THREE.PlaneGeometry(.925,.925),mats.hero);face.position.z=.467;head.add(face);
 const shadow=new THREE.Mesh(new THREE.CircleGeometry(.55,24),new THREE.MeshBasicMaterial({color:0x172c25,transparent:true,opacity:.3,depthWrite:false}));shadow.rotation.x=-Math.PI/2;scene.add(shadow);
 const arch=new THREE.Group();world.add(arch);

@@ -1,13 +1,13 @@
 @echo off
-REM MineHeads Release Script - Simple batch version
+REM FallingHeads Release Script - Simple batch version
 setlocal
 
 set VERSION=0.2.5
-set DIST_FOLDER=MineHeads-v%VERSION%-Windows
+set DIST_FOLDER=FallingHeads-v%VERSION%-Windows
 
 echo.
 echo ========================================
-echo   Building MineHeads v%VERSION%
+echo   Building FallingHeads v%VERSION%
 echo ========================================
 echo.
 
@@ -42,7 +42,7 @@ REM Step 5: Create README.txt
 echo [4/5] Creating README.txt...
 (
 echo ===========================================
-echo        MineHeads v%VERSION% - Windows
+echo        FallingHeads v%VERSION% - Windows
 echo ===========================================
 echo.
 echo SYSTEM REQUIREMENTS:

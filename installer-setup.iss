@@ -1,7 +1,7 @@
-; MineHeads Installer Script for Inno Setup
+; FallingHeads Installer Script for Inno Setup
 ; Download Inno Setup: https://jrsoftware.org/isdl.php
 
-#define MyAppName "MineHeads"
+#define MyAppName "Falling Heads"
 #define MyAppVersion "0.2.5"
 #define MyAppPublisher "Your Name"
 #define MyAppExeName "falling-heads.exe"
@@ -15,7 +15,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=installer-output
-OutputBaseFilename=MineHeads-v{#MyAppVersion}-Setup
+OutputBaseFilename=FallingHeads-v{#MyAppVersion}-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

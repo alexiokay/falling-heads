@@ -2,7 +2,7 @@ param()
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 Set-Location $root
-$running=Get-Process -Name MineHeads,falling-heads,depth-verification,mechanism-verification -ErrorAction SilentlyContinue
+$running=Get-Process -Name FallingHeads,falling-heads,depth-verification,mechanism-verification -ErrorAction SilentlyContinue
 if($running){throw 'Close the running game before the depth benchmark.'}
 $settings=Join-Path $root 'graphics-settings.json'
 $saved=if(Test-Path -LiteralPath $settings){[IO.File]::ReadAllBytes($settings)}else{$null}

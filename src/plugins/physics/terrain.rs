@@ -224,10 +224,7 @@ pub(super) fn check_all_entity_block_collisions(
             let Ok((_, t, kind, _, snow, tile)) = block_query.get(e) else {
                 continue;
             };
-            if *kind == BlockType::Cobweb
-                || tile.is_some_and(|tile| tile.decorative())
-                || crate::systems::plant_rules::soft(*kind, tile)
-            {
+            if crate::systems::plant_rules::passable(*kind, tile) {
                 continue;
             }
             let (center, block_half) = block_contact_bounds(t.translation, snow);

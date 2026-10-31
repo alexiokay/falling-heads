@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 const GAME_SETTINGS_FILE: &str = "game-settings.json";
 
-/// Settings files live in the per-user config folder (%APPDATA%\MineHeads on
+/// Settings files live in the per-user config folder (%APPDATA%\FallingHeads on
 /// Windows), which stays writable when the game is installed under Program
 /// Files. The old file next to the working directory is still read once.
 pub fn settings_path(file: &str) -> PathBuf {
@@ -12,7 +12,27 @@ pub fn settings_path(file: &str) -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
-    base.map_or_else(|| PathBuf::from(file), |b| b.join("MineHeads").join(file))
+    base.map_or_else(
+        || PathBuf::from(file),
+        |b| {
+            migrate_old_folder(&b);
+            b.join("FallingHeads").join(file)
+        },
+    )
+}
+
+/// The game was called MineHeads before: move its settings folder over once.
+fn migrate_old_folder(base: &std::path::Path) {
+    static DONE: std::sync::Once = std::sync::Once::new();
+    DONE.call_once(|| {
+        let (old, new) = (base.join("MineHeads"), base.join("FallingHeads"));
+        if old.is_dir()
+            && !new.exists()
+            && let Err(e) = std::fs::rename(&old, &new)
+        {
+            warn!("Cannot move settings from {}: {e}", old.display());
+        }
+    });
 }
 
 /// Reads a settings file from the user config folder, falling back to the

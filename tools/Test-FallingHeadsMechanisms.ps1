@@ -2,7 +2,7 @@ param()
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 Set-Location $root
-if(Get-Process -Name MineHeads,falling-heads -ErrorAction SilentlyContinue){throw 'Close the running game before the native probe.'}
+if(Get-Process -Name FallingHeads,falling-heads -ErrorAction SilentlyContinue){throw 'Close the running game before the native probe.'}
 $env:BEVY_ASSET_ROOT=$root
 $exe=Join-Path $root 'target/debug/mechanism-verification.exe'
 Copy-Item -LiteralPath 'target/optimized-candidate/falling-heads.exe' -Destination $exe

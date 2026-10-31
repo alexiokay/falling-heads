@@ -1,4 +1,4 @@
-# MineHeads performance notes — 23 October 2026
+# Falling Heads performance notes — 23 October 2026
 
 ## Measurements and limits
 

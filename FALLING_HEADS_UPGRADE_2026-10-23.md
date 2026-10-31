@@ -1,4 +1,4 @@
-# MineHeads upgrade and visual fixes — 23 October 2026
+# Falling Heads upgrade and visual fixes — 23 October 2026
 
 This is a delivery checklist, not a claim that the whole game's backlog is finished.
 
@@ -14,7 +14,7 @@ This is a delivery checklist, not a claim that the whole game's backlog is finis
 - [x] MIRROR uses a faceted 3D shell with a pixel-grid enchanted-glass shader, stepped highlights and restrained teal/ivory colours. The smooth sci-fi/iridescent shader has been replaced.
 - [x] Removed BURST's old white rectangle visual path and MIRROR's old four-frame animation components. Shared meshes replace per-frame BURST mesh allocation.
 - [x] Corrected the custom additive shader's premultiplied blending; transparent texture pixels no longer produce solid colour spikes.
-- [x] Desktop MineHeads shortcut continues to point to the rebuilt executable.
+- [x] Desktop Falling Heads shortcut continues to point to the rebuilt executable.
 
 ## Gameplay boundaries
 
@@ -25,7 +25,7 @@ Bounce vectors, restitution, targeting, burst collision dimensions, barrier refl
 - Seventeen automated tests pass, including validated drop spawns, swept terrain contacts, repeated-frame bounce stability, developer-panel layout restoration and six-face shell coverage: damage stages; duplicate damage events; snow cap scaling; cell coverage; cap resize/melt lifecycle; biome destinations; teleport completion/camera/collision synchronization.
 - Hidden native full smoke run passed all eight biome teleport assertions and rendered gameplay, damage, snow, pause/settings and energy material paths without shader errors.
 - Separate hidden VFX capture exercises BURST while firing together with MIRROR. It caught and drove the additive blending correction.
-- Screenshots: mineheads-smoke-world.png, mineheads-smoke-snow.png, mineheads-smoke-pause.png, mineheads-smoke-settings.png and mineheads-smoke-energy.png.
+- Screenshots: falling-heads-smoke-world.png, falling-heads-smoke-snow.png, falling-heads-smoke-pause.png, falling-heads-smoke-settings.png and falling-heads-smoke-energy.png.
 - Visual inspection is not a complete user-input/playthrough test. Cactus flicker across camera motion and snowfall on every block type still need extended gameplay observation.
 - The short --vfx-smoke-test run validates energy rendering only; its completion message now says so.
 - Existing dead-code warnings and Avian sensor-body mass/inertia warnings remain. Those need a separate physics audit before altering mechanics.
@@ -65,7 +65,7 @@ Dependency audit: cargo update --dry-run reports zero compatible updates. Avian 
 
 ### Follow-up verification
 
-At the earlier UI/material checkpoint, eight tests passed. The newer Escape/snow/damage checkpoint below supersedes that count. The native 3D shell rendered without shader errors and was inspected in mineheads-smoke-energy.png. A hidden pointer-input test passed Escape, Resume, Tab, Rain, Settings, the developer-mode toggle, Back and Escape-to-resume. The final normal executable was rebuilt at target/debug/falling-heads.exe; the desktop shortcut uses that path.
+At the earlier UI/material checkpoint, eight tests passed. The newer Escape/snow/damage checkpoint below supersedes that count. The native 3D shell rendered without shader errors and was inspected in falling-heads-smoke-energy.png. A hidden pointer-input test passed Escape, Resume, Tab, Rain, Settings, the developer-mode toggle, Back and Escape-to-resume. The final normal executable was rebuilt at target/debug/falling-heads.exe; the desktop shortcut uses that path.
 
 The barrier is a true geometric energy shell with procedural surface waves, a view-dependent Fresnel rim and a specular highlight. It is not a ray-traced reflecting mirror or a scene-refraction simulation.
 
@@ -80,7 +80,7 @@ Dark crack opacity and restrained earthy edge contrast were increased without re
 ### Final delivery verification
 
 - [x] All 13 automated tests pass, including empty-backdrop hover, active snowfall/exposure, non-solid cobweb exclusion, and actual hero contact with snow.
-- [x] Hidden native input test passes empty-background hover, a 15-second pause, window resize, Escape, Resume, Tab, weather selection, Settings, developer toggle, Back and resume. Capture: mineheads-ui-long-pause.png.
+- [x] Hidden native input test passes empty-background hover, a 15-second pause, window resize, Escape, Resume, Tab, weather selection, Settings, developer toggle, Back and resume. Capture: falling-heads-ui-long-pause.png.
 - [x] Final normal executable rebuilt successfully after closure of the previous game. The desktop shortcut targets target/debug/falling-heads.exe. A normal game process started after this rebuild was observed; it was left running.
 - [x] Dark cracks inspected at two damage stages on rotated netherrack, stone and sand, including side faces.
 
@@ -98,7 +98,7 @@ Build evidence: regression-final-build.log. Test evidence: regression-tests.log 
 - [x] Snow now grows on local ledges with two clear cells overhead during active snowfall. This intentionally replaces the previous global highest-loaded-block rule, which prevented visible accumulation in this vertically scrolling world. Tight covered gaps remain bare; distant roofs do not suppress every chamber below them.
 - [x] Cracks have a pale chipped edge around a dark core on all six faces, increasing contrast on both light and dark textures.
 
-Validation: 17 tests pass (voxel-followup-tests.log). A hidden native run passed all eight biome teleports and produced 337 snow caps from actual weather, without manually inserting layers (voxel-native-errors.log). Native screenshots: mineheads-smoke-snow.png, mineheads-smoke-energy.png, mineheads-smoke-laser.png. The final native menu check passed background hover, long pause, resize, Escape, Resume, Tab, weather selection, Settings, developer toggle and Back (voxel-ui.log). The final VFX run rendered Mirror, Burst and Laser without shader errors (voxel-final-vfx-errors.log). The normal target/debug/falling-heads.exe has been replaced with the verified build; SHA-256 matches the tested executable, and the desktop shortcut still targets this normal path. Extended play can still reveal additional cases; these checks do not prove that every rendering/contact defect is eliminated.
+Validation: 17 tests pass (voxel-followup-tests.log). A hidden native run passed all eight biome teleports and produced 337 snow caps from actual weather, without manually inserting layers (voxel-native-errors.log). Native screenshots: falling-heads-smoke-snow.png, falling-heads-smoke-energy.png, falling-heads-smoke-laser.png. The final native menu check passed background hover, long pause, resize, Escape, Resume, Tab, weather selection, Settings, developer toggle and Back (voxel-ui.log). The final VFX run rendered Mirror, Burst and Laser without shader errors (voxel-final-vfx-errors.log). The normal target/debug/falling-heads.exe has been replaced with the verified build; SHA-256 matches the tested executable, and the desktop shortcut still targets this normal path. Extended play can still reveal additional cases; these checks do not prove that every rendering/contact defect is eliminated.
 
 ## Current checkpoint: responsive teleport, crowd assistance, liquids and flowing Mirror
 
@@ -112,9 +112,9 @@ This checkpoint supersedes earlier effect colours and test counts above.
 - [x] Laser has a white core and neutral cool edge. Crack highlights are thinner-looking and less bright while the dark core remains.
 - [x] Added deterministic finite-volume water/lava simulation on the block grid, independent of its renderer. Water flows faster; lava flows more slowly. Finite sources fill and spread through loaded space. Liquids have animated pixel shaders and actual volume-dependent visible depth.
 - [x] Body immersion applies drag and buoyancy. Lava burns; water extinguishes burning. Water/lava contact creates mineable obsidian. Nether generation includes lava and occasional water sources; selected other biomes generate water.
-- [x] Existing obsidian asset is assets/textures/blocks/nether/obsidian.png. The searched MineHeads/communityGaming directories contain loose Minecraft-style textures; no complete resource pack with pack.mcmeta was found there.
+- [x] Existing obsidian asset is assets/textures/blocks/nether/obsidian.png. The searched FallingHeads/communityGaming directories contain loose Minecraft-style textures; no complete resource pack with pack.mcmeta was found there.
 
-Validation: 24 automated tests pass (gameplay-followup-tests.log). The final full native smoke passed all eight biome destination assertions, with request-to-commit times of 0.220–0.240 seconds on this machine, and generated 333 natural snow caps. It exercised pause/settings and rendered the new shaders without errors (gameplay-final-errors.log). Controlled screenshots show joined cactus faces and separate water/lava basins (mineheads-smoke-liquids.png), and the portal (mineheads-smoke-teleport.png). Test timings are not a guarantee on every machine or world seed.
+Validation: 24 automated tests pass (gameplay-followup-tests.log). The final full native smoke passed all eight biome destination assertions, with request-to-commit times of 0.220–0.240 seconds on this machine, and generated 333 natural snow caps. It exercised pause/settings and rendered the new shaders without errors (gameplay-final-errors.log). Controlled screenshots show joined cactus faces and separate water/lava basins (falling-heads-smoke-liquids.png), and the portal (falling-heads-smoke-teleport.png). Test timings are not a guarantee on every machine or world seed.
 
 Liquid scope: this is a game-style cellular simulation with eight depth levels per block, not a general 3D fluid solver. Unloaded fluid state is retained for the running session; disk persistence and large-world streaming memory budgets remain future work. Crowded-head assistance is targeted and does not guarantee that every generated enclosure has an exit.
 
@@ -133,7 +133,7 @@ Delivery: the final magic-ribbon shader passed the hidden native VFX run (gamepl
 
 Regression coverage added: thin-wall/corner sweeps, a fast arrow in the actual collision system, scaled-parent attachment and expiry, vertical falling-flow geometry, and closed/leaking/unloaded pool boundaries. Native checks also compare the rendered username to the current head/camera projection each frame.
 
-Validation and delivery for this follow-up: all 31 tests pass (presentation-flow-tests.log). The full native run passed eight biome teleports, snowfall, pause/settings and same-frame label assertions (presentation-flow-errors.log). A later effects run exposed a queued attachment targeting an entity that could already be gone; arrow attachment now checks both entities atomically when the command applies, with a regression for target/arrow removal. The final native VFX run passed energy, water/lava, embedded-arrow and same-frame label rendering (presentation-final-errors.log), without a shader or command error. Screenshots: mineheads-smoke-energy.png, mineheads-smoke-laser.png, mineheads-smoke-waterfall.png and mineheads-smoke-liquids.png. The normal desktop-shortcut executable has been replaced after confirming the game was closed; its SHA-256 matches the tested final executable. No visible game was launched.
+Validation and delivery for this follow-up: all 31 tests pass (presentation-flow-tests.log). The full native run passed eight biome teleports, snowfall, pause/settings and same-frame label assertions (presentation-flow-errors.log). A later effects run exposed a queued attachment targeting an entity that could already be gone; arrow attachment now checks both entities atomically when the command applies, with a regression for target/arrow removal. The final native VFX run passed energy, water/lava, embedded-arrow and same-frame label rendering (presentation-final-errors.log), without a shader or command error. Screenshots: falling-heads-smoke-energy.png, falling-heads-smoke-laser.png, falling-heads-smoke-waterfall.png and falling-heads-smoke-liquids.png. The normal desktop-shortcut executable has been replaced after confirming the game was closed; its SHA-256 matches the tested final executable. No visible game was launched.
 
 The barrier's style remains an artistic choice for user feedback. The corrected depth ordering is separate from that appearance choice. Liquid sources are finite and eight-level; these changes do not claim an infinite waterfall or a general-purpose 3D fluid simulation.
 
@@ -170,7 +170,7 @@ Validation: 38 automated tests pass (atmosphere-tests.log), including immediate 
 - [ ] Player-built branching redstone circuits, levers, repeaters, pistons, dispensers and pumps remain future work. The shipped mechanism is a fixed plate/wire/portal ruin, not full Minecraft redstone.
 - [ ] Full per-biome encounters/enemies and persistent circuit/ruin changes across chunk regeneration remain pending; detailed priorities are in the development plan.
 
-Validation: 44 tests pass (portals-tests.log). The full hidden native run passed all eight biome destinations, snowfall, menu schedules and the pressure-plate portal journey (portals-errors.log). The final effects run passed the updated label/render path, arrows, fluid gallery, pressure plate, portal dwell and safe destination (portals-final-errors.log), without shader or command errors. Portal and liquid screenshots were inspected. After the user closed MineHeads, target/debug/falling-heads.exe was replaced and its SHA-256 matched the tested portals executable. The desktop shortcut still targets this path. No visible game was launched.
+Validation: 44 tests pass (portals-tests.log). The full hidden native run passed all eight biome destinations, snowfall, menu schedules and the pressure-plate portal journey (portals-errors.log). The final effects run passed the updated label/render path, arrows, fluid gallery, pressure plate, portal dwell and safe destination (portals-final-errors.log), without shader or command errors. Portal and liquid screenshots were inspected. After the user closed Falling Heads, target/debug/falling-heads.exe was replaced and its SHA-256 matched the tested portals executable. The desktop shortcut still targets this path. No visible game was launched.
 
 ## 2026-10-23 — connected spills, weather powers, biome mechanisms and versioned desktop builds
 
@@ -182,7 +182,7 @@ Completed:
 - WATERBUCKET/LAVABUCKET API commands and dev buttons, finite sixteen-unit pour, shared eight-second cooldown, terrain/type checks and feedback. Command labels fit the panel.
 - Desert pressure-plate arrow traps and Underground relay doors generate in reserved, non-overlapping chunk footprints. Doors hold open for actors/items/liquid; projectile art scale cannot enlarge the doorway sensor. Trap arrows remain non-mining and are globally capped at 24.
 - Portals and new devices migrated entirely to one synchronous directed circuit graph; the old fixed-chain signal function was removed.
-- Desktop shortcut migrated to tools/Launch-MineHeads.ps1. tools/Publish-MineHeads.ps1 publishes a separate executable + asset snapshot and switches the active manifest atomically. Current sessions need not close for publication; next launch uses the latest release.
+- Desktop shortcut migrated to tools/Launch-FallingHeads.ps1. tools/Publish-FallingHeads.ps1 publishes a separate executable + asset snapshot and switches the active manifest atomically. Current sessions need not close for publication; next launch uses the latest release.
 - BIOME_DEVELOPMENT_PLAN.md updated with completed versus pending encounters and a detailed SpongeBob-inspired underwater proposal. No underwater assets/enemies were enabled by this proposal. No original streaming-channel name could be verified in the searched source/project notes.
 
 Validation:
@@ -214,7 +214,7 @@ Completed:
 Validation:
 - 59 automated tests passed, including persistent water, bounded varied arrow embedding, portal activation with no frame/plate, rare placement, independently serialized graphics settings and actual camera-component toggling (graphics-tests-final.log).
 - Final delivery native effects run passed same-frame moving labels, portal destination, relay/Desert traps, articulated dragon flight and joint hierarchy; screenshots checked for portal layering, improved wings and day/night lighting (graphics-delivery-native-errors.log).
-- Native UI pointer test passed long pause, resize, Escape/Resume, Tab, weather selection, Settings, dev toggle and Back. Graphics panel screenshot inspected at 720x1180 (graphics-final-ui-errors.log, mineheads-ui-graphics.png). This UI test preceded only the final portal hierarchy ownership change.
+- Native UI pointer test passed long pause, resize, Escape/Resume, Tab, weather selection, Settings, dev toggle and Back. Graphics panel screenshot inspected at 720x1180 (graphics-final-ui-errors.log, falling-heads-ui-graphics.png). This UI test preceded only the final portal hierarchy ownership change.
 - No shader/runtime errors appeared in those native test logs. Existing 123 compiler warnings remain; the build is not warning-free.
 - Publisher verified executable SHA256 and all 302 asset copies. The actual Windows PowerShell launcher resolves the installed build successfully.
 
@@ -314,11 +314,11 @@ Completed the interrupted changes from chat 01a12c82-6a54-7490-b996-63ffb327b280
 The interrupted test had used Hero as a unit struct. Corrected its fixture to supply Hero fields, then completed validation:
 - cargo test --offline: 90 passed, 0 failed (target/surface-fixes-tests-out.log).
 - Build succeeded with 129 warnings; no compiler errors (target/visual-build-err.log).
-- tools/Test-MineHeadsVisual.ps1 -Tag surface-fixes: exit 0, no reported shader/runtime errors, clean Streamline shutdown, all required fresh captures present (target/surface-fixes-run-out.log and target/surface-fixes-err.log).
+- tools/Test-FallingHeadsVisual.ps1 -Tag surface-fixes: exit 0, no reported shader/runtime errors, clean Streamline shutdown, all required fresh captures present (target/surface-fixes-run-out.log and target/surface-fixes-err.log).
 - Inspected target/surface-fixes-dragon-fire.png and target/surface-fixes-dragon-turn-middle.png: surface flames, block textures, branch silhouette and intermediate dragon pose render correctly.
 - The visual probe uses DLSS/native raster modes with frame generation and ray tracing disabled. This run does not establish that earlier FG glare/shadow flicker is resolved, or independently validate this update in ray tracing.
 
-Installed version: 20261023-214843-f243ada06a. SHA256: F243ADA06AEC5C514846069EC096540AAD56092307C2BCA2CE6A9F746CD717E0. Publisher verified 306 assets and runtime DLL copies; launcher ResolveOnly passed. Restart MineHeads - Play to load this build.
+Installed version: 20261023-214843-f243ada06a. SHA256: F243ADA06AEC5C514846069EC096540AAD56092307C2BCA2CE6A9F746CD717E0. Publisher verified 306 assets and runtime DLL copies; launcher ResolveOnly passed. Restart Falling Heads - Play to load this build.
 
 ## 2026-10-23 — dragon turning animation and flight momentum
 
@@ -326,7 +326,7 @@ Replaced constant-rate yaw with an exact critically damped angular response. Rev
 
 Validation: 91 unit tests passed, including equal turn response at 30/60/120/144 FPS and preserved angular momentum when retargeted. Final build succeeded with 129 warnings. The hidden renderer probe exited 0 with clean Streamline shutdown; fresh quarter/middle/completed-turn and fire captures were inspected. Throughout the sampled turn, actual transformed hit-mesh vertices were checked to remain finite and in front of terrain. Evidence: target/organic-turn-tests-out.log, target/organic-turn-run-out.log, target/organic-turn-err.log, target/organic-turn-dragon-turn-*.png and target/organic-turn-dragon-fire.png. This probe does not test ray tracing or generated frames.
 
-Installed version: 20261023-220119-d475b0cf56. SHA256: D475B0CF5656A5D872EE9E9143FAF1176402AD10BE3BFCD190EDD303C4633F8A. Launcher integrity check passed. Restart MineHeads - Play to use the new animation.
+Installed version: 20261023-220119-d475b0cf56. SHA256: D475B0CF5656A5D872EE9E9143FAF1176402AD10BE3BFCD190EDD303C4633F8A. Launcher integrity check passed. Restart Falling Heads - Play to use the new animation.
 
 ## 2026-10-23 — replace outlined block fire with transient breath wash
 
@@ -336,7 +336,7 @@ GroundFire remains separate gameplay state for combustible blocks only, retainin
 
 Validation: 93 tests passed in target/fire-wash-tests-out.log, including first-surface occlusion, neighbor exposure, visual/gameplay separation, fixed transforms during fade, destroyed-owner cleanup and material cleanup over repeated impacts. Final build succeeded with 128 warnings. The focused connected-wall probe passed burst-on/release/off checks and captured target/fire-wash-final-fire-*.png. The final full renderer probe passed (target/fire-wash-dragon-run-out.log, target/fire-wash-dragon-err.log); inspected the actual dragon breath capture at target/fire-wash-dragon-dragon-fire.png. Both render runs exited 0 with clean Streamline shutdown and no reported shader/runtime errors. Focused scene uses native raster; full probe includes native and DLSS modes. Ray tracing and generated frames were not covered in this validation.
 
-Installed version: 20261023-221635-8fdf004fc1. SHA256: 8FDF004FC11DD8413DE4FFEC3B31CD3C9A5657CC39F4FC9BCDB8168F47D575CC. Publisher and launcher integrity checks passed. Restart MineHeads - Play to load the update.
+Installed version: 20261023-221635-8fdf004fc1. SHA256: 8FDF004FC11DD8413DE4FFEC3B31CD3C9A5657CC39F4FC9BCDB8168F47D575CC. Publisher and launcher integrity checks passed. Restart Falling Heads - Play to load the update.
 
 ## 2026-10-23 — biome atmosphere and supported plants; next-feature designs
 
@@ -355,7 +355,7 @@ Validation:
 - Frame generation is disabled in this probe; it does not validate FG or extended performance/balance. Mist is a layered shader effect, not volumetric light scattering.
 - Publisher verified 306 assets, executable and nine runtime DLLs; launcher ResolveOnly passed. No user's running game was stopped or relaunched.
 
-Per the user's choice, biome structures and dragon background breach are designed only in BIOME_DEVELOPMENT_PLAN.md. The rectangular fire presentation remains unresolved and is explicitly listed for a separate visual revision. Restart MineHeads - Play to load this update.
+Per the user's choice, biome structures and dragon background breach are designed only in BIOME_DEVELOPMENT_PLAN.md. The rectangular fire presentation remains unresolved and is explicitly listed for a separate visual revision. Restart Falling Heads - Play to load this update.
 
 ## 2026-10-23 — replace blanket fog with actual local forest banks
 
@@ -370,7 +370,7 @@ Fog now appears in sparse forest pockets above actual floors, allows foliage and
 
 Validation: 96 unit tests passed (target/local-fog-tests-out.log). Final code build succeeded with 123 warnings. Final shader/renderer probe exited 0, no reported shader/runtime errors or panics, clean Streamline shutdown (target/local-fog-release-run-out.log, target/local-fog-release-err.log). Inspected fresh native fog-on/off and RT images in target/local-fog-release-forest-*.png: local soft banks, clear surrounding air and successful toggle. Existing physics mass/inertia warnings remain. Frame generation and long-session performance were not covered. This is local ground mist, not full volumetric lighting or a distant 3D forest.
 
-Publisher verified 306 assets, executable and nine runtime DLLs; launcher ResolveOnly passed. No user's game was stopped. Restart MineHeads - Play for this correction.
+Publisher verified 306 assets, executable and nine runtime DLLs; launcher ResolveOnly passed. No user's game was stopped. Restart Falling Heads - Play for this correction.
 
 ## Forest trees and reduced glare — verified build 20261023-231629-8867c85af2
 
@@ -393,11 +393,11 @@ Accepted evidence:
 - target/forest-lighting-final-run-out.log and target/forest-lighting-final-err.log
 - target/forest-lighting-final-{nether-day,nether-night,forest-mist,forest-clear,forest-rt}.png
 
-Installed locally through Publish-MineHeads.ps1, with 319 verified assets and 9 verified runtime DLLs. Launcher resolution verified:
+Installed locally through Publish-FallingHeads.ps1, with 319 verified assets and 9 verified runtime DLLs. Launcher resolution verified:
 - Build: 20261023-231629-8867c85af2
 - SHA-256: 8867C85AF23C8FE0F2D7E1CB1BD33472BC99D71686FD93310FDBB0066973F6D7
-- Executable: builds/20261023-231629-8867c85af2/MineHeads.exe
-- Restart MineHeads - Play to use it. No existing user game process was stopped or relaunched.
+- Executable: builds/20261023-231629-8867c85af2/FallingHeads.exe
+- Restart Falling Heads - Play to use it. No existing user game process was stopped or relaunched.
 
 Structures and the dragon background breach remain design-only proposals. The previously reported rectangular dragon-fire effect is still a separate unresolved visual issue.
 
@@ -407,7 +407,7 @@ User clarified that the upper-left light should be reduced, not removed. Restore
 
 Built offline and visually checked the real hidden forest probe in native and ray-traced rendering. Inspected all three captures: target/soft-corner-glow-trees-natural.png, target/soft-corner-glow-trees-species.png, and target/soft-corner-glow-trees-rt.png. The upper-left gradient is visible again with a softer falloff and readable background texture. Probe exit 0, completion assertions passed, clean Streamline shutdown, no rendering validation errors. Existing compiler and Avian warnings remain. This material-value adjustment was verified by build and render checks; the full unit suite was not rerun.
 
-Installed locally and verified launcher resolution. Build 20261023-232813-64c58744c1; SHA-256 64C58744C1D7DFF74D669AD3BF4F5D474102537C98170A37E67CB9311F885C25. All 319 assets and 9 runtime DLLs verified. Restart MineHeads - Play to use the update; no running user game was stopped.
+Installed locally and verified launcher resolution. Build 20261023-232813-64c58744c1; SHA-256 64C58744C1D7DFF74D669AD3BF4F5D474102537C98170A37E67CB9311F885C25. All 319 assets and 9 runtime DLLs verified. Restart Falling Heads - Play to use the update; no running user game was stopped.
 
 ## Forest density, precipitation lighting, and intermittent RT patches (completed)
 
@@ -418,9 +418,9 @@ Installed locally and verified launcher resolution. Build 20261023-232813-64c587
 - A runtime A/B probe increased Solari's ray epsilon from 0.001 to 0.064 (64 world units per block); the large blotches disappeared in the inspected corrected sequences and returned when restoring 0.001. Bevy Solari 0.20.0 is now vendored with this one shader calibration and its original licenses. Camera cuts also reset Solari lighting history.
 - Evidence so far: target/forest-weather-pass1-forest-density-{clear,snow,rain}.png, target/rt-flicker-before/, target/rt-flicker-bias/. Metric masks from the first probe include camera movement and are screening aids, not definitive pass/fail pixel counts.
 
-Final validation: all 101 unit tests passed (target/forest-weather-final-tests-out.log). The final executable passed two continuous RT probes at large positive and negative world coordinates: 255 and 256 captures respectively in target/rt-verified-positive/ and target/rt-verified-negative/. All 511 frames were inspected in contact sheets, with suspect frames inspected at full resolution. No large intermittent black patches appeared in these checks. Stages cover stationary/moving cameras, Quality/DLAA, and toggling the FG setting; hidden windows do not validate actual interpolated display frames. Both probes exited cleanly without renderer validation errors and with successful Streamline shutdown. Existing compiler and physics warnings remain. The reproducible runner is tools/Test-MineHeadsRayTracing.ps1.
+Final validation: all 101 unit tests passed (target/forest-weather-final-tests-out.log). The final executable passed two continuous RT probes at large positive and negative world coordinates: 255 and 256 captures respectively in target/rt-verified-positive/ and target/rt-verified-negative/. All 511 frames were inspected in contact sheets, with suspect frames inspected at full resolution. No large intermittent black patches appeared in these checks. Stages cover stationary/moving cameras, Quality/DLAA, and toggling the FG setting; hidden windows do not validate actual interpolated display frames. Both probes exited cleanly without renderer validation errors and with successful Streamline shutdown. Existing compiler and physics warnings remain. The reproducible runner is tools/Test-FallingHeadsRayTracing.ps1.
 
-Installed build: 20261024-000502-be133d8229. SHA-256: BE133D8229DAE2DBE633D3A3540284E129F7A92DEF060468DD2368849AB7CDEC. Published 319 assets and nine runtime DLLs, including the vendored Solari license notices. Active manifest and launcher resolution verified. Restart MineHeads - Play to use the update. No existing user game was stopped or relaunched. Structures and the dragon breach remain design-only.
+Installed build: 20261024-000502-be133d8229. SHA-256: BE133D8229DAE2DBE633D3A3540284E129F7A92DEF060468DD2368849AB7CDEC. Published 319 assets and nine runtime DLLs, including the vendored Solari license notices. Active manifest and launcher resolution verified. Restart Falling Heads - Play to use the update. No existing user game was stopped or relaunched. Structures and the dragon breach remain design-only.
 
 ## Camera-aware torch coverage and DLSS 4.5 Performance — 24 October
 
@@ -428,4 +428,4 @@ Installed build 20261024-002148-41463cdb74 (SHA-256 41463CDB746CE7FDDCFB989B0300
 
 Added an optional persisted DLSS 4.5 Performance setting for raster Super Resolution. Quality remains default. Ray Reconstruction retains its own Quality/DLAA behavior; the UI explains that 4.5 Performance requires DLSS ON and RT OFF. Official DLSS 5 exists, but no public NR SDK/runtime was found in NVIDIA's public developer downloads; no fake 4.5/5 switch or leaked/injected DLLs were installed. Research and primary sources are in MODLOG.md.
 
-103 tests passed. Six fresh scene captures and the graphics-settings capture inspected; native, wide/standard viewport sizes, camera motion, SR Performance and RT all passed the gallery's visible-light assertions. Probe exited 0 with successful Streamline shutdown. 319 assets and nine runtime DLLs verified by publisher, active launcher resolution confirmed. Restart MineHeads - Play. Witch, biome landmarks, dragon background breach and egg reward are still proposals, not implemented features.
+103 tests passed. Six fresh scene captures and the graphics-settings capture inspected; native, wide/standard viewport sizes, camera motion, SR Performance and RT all passed the gallery's visible-light assertions. Probe exited 0 with successful Streamline shutdown. 319 assets and nine runtime DLLs verified by publisher, active launcher resolution confirmed. Restart Falling Heads - Play. Witch, biome landmarks, dragon background breach and egg reward are still proposals, not implemented features.

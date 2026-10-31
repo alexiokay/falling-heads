@@ -1,4 +1,4 @@
-name: MineHeads architecture checks
+name: FallingHeads architecture checks
 on:
   workflow_dispatch:
 permissions:
@@ -11,4 +11,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: Format, lint, tests and native build
         shell: pwsh
-        run: ./tools/Check-MineHeadsArchitecture.ps1 -Build
+        run: ./tools/Check-FallingHeadsArchitecture.ps1 -Build

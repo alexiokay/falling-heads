@@ -79,6 +79,14 @@ fn probe(world: &mut World) {
         crate::systems::slime_rift::probe::run(world);
         return;
     }
+    if std::env::args().any(|a| a == "--ghost-floor-test") {
+        crate::ghost_floor_probe::run(world);
+        return;
+    }
+    if std::env::args().any(|a| a == "--theme-ui-test") {
+        crate::pack_switch_probe::run_ui(world);
+        return;
+    }
     if std::env::args().any(|a| a == "--pack-switch-test") {
         crate::pack_switch_probe::run(world);
         return;

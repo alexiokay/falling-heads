@@ -124,7 +124,7 @@ fn probe(
             if !probe.portal_captured && elapsed - probe.since > 0.25 {
                 commands
                     .spawn(Screenshot::primary_window())
-                    .observe(save_to_disk("mineheads-smoke-teleport.png"));
+                    .observe(save_to_disk("falling-heads-smoke-teleport.png"));
                 probe.portal_captured = true;
             }
             return;
@@ -148,13 +148,13 @@ fn probe(
         0 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-world.png"));
+                .observe(save_to_disk("falling-heads-smoke-world.png"));
         }
         1..=8 => {
             if probe.step == 7 {
                 commands
                     .spawn(Screenshot::primary_window())
-                    .observe(save_to_disk("mineheads-smoke-nether.png"));
+                    .observe(save_to_disk("falling-heads-smoke-nether.png"));
             }
             let biome = BIOMES[probe.step - 1];
             teleport.target = Some(Vec3::new(
@@ -179,7 +179,7 @@ fn probe(
             eprintln!("SMOKE natural snow caps: {}", snow.iter().count());
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-snow.png"));
+                .observe(save_to_disk("falling-heads-smoke-snow.png"));
         }
         11 => {
             state.set(GameState::Paused);
@@ -187,13 +187,13 @@ fn probe(
         12 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-pause.png"));
+                .observe(save_to_disk("falling-heads-smoke-pause.png"));
             state.set(GameState::Settings);
         }
         13 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-settings.png"));
+                .observe(save_to_disk("falling-heads-smoke-settings.png"));
         }
         14 => {
             state.set(GameState::Playing);
@@ -217,7 +217,7 @@ fn probe(
         16 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-energy.png"));
+                .observe(save_to_disk("falling-heads-smoke-energy.png"));
         }
         17 => {
             if let Some(queue) = crate::plugins::external_api_plugin::get_command_queue() {
@@ -232,7 +232,7 @@ fn probe(
         18 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-laser.png"));
+                .observe(save_to_disk("falling-heads-smoke-laser.png"));
         }
         19..=20 => {}
         21 => {
@@ -242,12 +242,12 @@ fn probe(
         22 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-waterfall.png"));
+                .observe(save_to_disk("falling-heads-smoke-waterfall.png"));
         }
         23 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-liquids.png"));
+                .observe(save_to_disk("falling-heads-smoke-liquids.png"));
         }
         24 => {
             probe.portal_expected = Some(crate::systems::world_portals::next_biome(
@@ -258,7 +258,7 @@ fn probe(
         25 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-world-portal.png"));
+                .observe(save_to_disk("falling-heads-smoke-world-portal.png"));
         }
         26 => {
             let mut t = *hero;
@@ -283,7 +283,7 @@ fn probe(
             commands.queue(crate::systems::dragon_flyover::smoke_verify);
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-dragon.png"));
+                .observe(save_to_disk("falling-heads-smoke-dragon.png"));
         }
         30 => {
             commands.queue(|world: &mut World| {
@@ -295,7 +295,7 @@ fn probe(
         31 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-night.png"));
+                .observe(save_to_disk("falling-heads-smoke-night.png"));
         }
         32 => {
             commands.queue(crate::systems::dragon_flyover::smoke_breath);
@@ -303,7 +303,7 @@ fn probe(
         33 => {
             commands
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-smoke-dragon-breath.png"));
+                .observe(save_to_disk("falling-heads-smoke-dragon-breath.png"));
         }
         34 => {
             commands.queue(crate::systems::dragon_flyover::smoke_damage);

@@ -70,12 +70,12 @@ impl LauncherApiOptions {
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// Default API port. Set MINEHEADS_API_PORT to use another one (e.g. when
+/// Default API port. Set FALLING_HEADS_API_PORT to use another one (e.g. when
 /// Windows has reserved a range containing 3029 for Hyper-V/WSL/Docker).
 const DEFAULT_API_PORT: u16 = 3029;
 
 fn api_addr() -> String {
-    let port = std::env::var("MINEHEADS_API_PORT")
+    let port = std::env::var("FALLING_HEADS_API_PORT")
         .ok()
         .and_then(|p| p.trim().parse::<u16>().ok())
         .unwrap_or(DEFAULT_API_PORT);
@@ -330,7 +330,7 @@ fn start_api_server() {
                     error!("API server disabled: cannot bind {api_addr}: {e}");
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
                         error!(
-                            "Windows may have reserved this port (see `netsh interface ipv4 show \n                             excludedportrange protocol=tcp`). Set MINEHEADS_API_PORT to a free port, \n                             or reserve this one for MineHeads as admin."
+                            "Windows may have reserved this port (see `netsh interface ipv4 show \n                             excludedportrange protocol=tcp`). Set FALLING_HEADS_API_PORT to a free port, \n                             or reserve this one for FallingHeads as admin."
                         );
                     }
                     return;
@@ -910,10 +910,11 @@ fn spawn_thunder_strikes(
             }
         }
 
-        // Play thunder sound (using explosion sound)
+        // Same thunder crack as the BOLT power, heard from where it strikes.
         commands.spawn((
-            AudioPlayer::new(asset_server.load("audio/sfx/explode/explode1.ogg")),
-            PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(0.8)),
+            AudioPlayer::new(asset_server.load("audio/powers/bolt.ogg")),
+            PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(0.75)),
+            crate::systems::audio::effects::SoundAt(impact_pos.xy()),
         ));
     }
 }

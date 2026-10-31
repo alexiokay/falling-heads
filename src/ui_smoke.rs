@@ -79,7 +79,7 @@ fn probe(world: &mut World) {
             state(world, GameState::Paused);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-ui-pause.png"));
+                .observe(save_to_disk("falling-heads-ui-pause.png"));
             move_pointer(world, Vec2::new(15., 100.));
         }
         2 => {
@@ -93,7 +93,7 @@ fn probe(world: &mut World) {
             );
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-ui-long-pause.png"));
+                .observe(save_to_disk("falling-heads-ui-long-pause.png"));
             hover::<ResumeButton>(world);
         }
         3 | 7 | 11 | 14 | 17 | 20 | 23 => {
@@ -128,7 +128,7 @@ fn probe(world: &mut World) {
             );
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-ui-dev.png"));
+                .observe(save_to_disk("falling-heads-ui-dev.png"));
             // First weather button is Clear; select by marker + type through a temporary marker.
             let entity = world
                 .query::<(Entity, &WeatherControlButton)>()
@@ -165,7 +165,7 @@ fn probe(world: &mut World) {
             assert!(world.resource::<SettingsNavigation>().0 == SettingsPage::Graphics);
             world
                 .spawn(Screenshot::primary_window())
-                .observe(save_to_disk("mineheads-ui-graphics.png"));
+                .observe(save_to_disk("falling-heads-ui-graphics.png"));
             let tab = world
                 .query::<(Entity, &SettingsTab)>()
                 .iter(world)

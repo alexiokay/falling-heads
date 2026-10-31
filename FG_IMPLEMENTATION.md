@@ -64,7 +64,7 @@ Executable SHA256: `06C27AA322C3BBAB7AA0C08B3D3CDA238F555C4A71F60F4635B216DC6A14
 - `target/fg-release-verified-err.log`: pause, resize, SR/RR/native/FG-off transitions passed, exit 0 and slShutdown result=0. Hidden run correctly generated zero extra presents; focused 2× proof remains run9.
 - `target/release82-tests-out.log`: 82 passed, 0 failed.
 - Publisher verified the executable, all 305 assets, all 9 NVIDIA runtime DLL hashes and licenses. Desktop launcher ResolveOnly points to this exact release.
-- User's running game was not closed or replaced; next MineHeads - Play launch selects the update.
+- User's running game was not closed or replaced; next Falling Heads - Play launch selects the update.
 - Final snow fixture: 180 particles, median 5.460 ms, p95 6.141 ms (FG off), versus baseline median 12.214 ms / p95 13.257 ms. This is a measured scene result, not a promise for every level/GPU load.
 
 Open: higher Multi Frame Generation modes, profiling the user's exact crowded snow scenario, persistent world changes and proposed biome expansion. Current burning behavior is preserved.
@@ -120,7 +120,7 @@ Confirmed second source defect: `update_background` repositioned the entire grid
 
 Correction: background tiles carry stable integer world coordinates. On movement/resize the system retains every in-range tile entity and transform, discards only tiles outside the padded rectangle and spawns missing edge cells. The cache compares actual grid center/dimensions. Odd dimensions now produce the full requested grid, and initial tiles are world-aligned. Background textures, lighting, materials and shadow quality are unchanged. The update is explicitly ordered after camera following.
 
-`target/bg-stability-tests-out.log`: two ECS regression tests passed, exercising camera movement plus archetype reordering, retained entity/transform identity, idle frames, odd grid dimensions, resizing and a distant teleport. `tools/Test-MineHeadsFG.ps1 -BackgroundMotion` additionally pans the real camera and asserts resident-tile positions every frame across rendering-mode switches. Runtime result and publication follow below.
+`target/bg-stability-tests-out.log`: two ECS regression tests passed, exercising camera movement plus archetype reordering, retained entity/transform identity, idle frames, odd grid dimensions, resizing and a distant teleport. `tools/Test-FallingHeadsFG.ps1 -BackgroundMotion` additionally pans the real camera and asserts resident-tile positions every frame across rendering-mode switches. Runtime result and publication follow below.
 
 
 ### Background stability release result

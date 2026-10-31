@@ -8,7 +8,7 @@ $builds = Join-Path $gameRoot 'builds'
 $release = Join-Path $builds $version
 if (Test-Path -LiteralPath $release) { throw 'Release already exists; publication never overwrites an installed release.' }
 New-Item -ItemType Directory -Path $release -Force | Out-Null
-Copy-Item -LiteralPath $sourceExe -Destination (Join-Path $release 'MineHeads.exe')
+Copy-Item -LiteralPath $sourceExe -Destination (Join-Path $release 'FallingHeads.exe')
 # Keep matching symbols beside this immutable binary. Otherwise the next build
 # replaces target/debug's PDB and future panic stacks lose their source lines.
 $symbols = Join-Path (Split-Path -Parent $sourceExe) 'falling_heads.pdb'
@@ -16,7 +16,7 @@ if (Test-Path -LiteralPath $symbols) {
     Copy-Item -LiteralPath $symbols -Destination (Join-Path $release 'falling_heads.pdb')
 }
 Copy-Item -LiteralPath (Join-Path $gameRoot 'assets') -Destination (Join-Path $release 'assets') -Recurse
-if ((Get-FileHash -LiteralPath (Join-Path $release 'MineHeads.exe') -Algorithm SHA256).Hash -ne $hash) { throw 'Copied executable failed integrity verification.' }
+if ((Get-FileHash -LiteralPath (Join-Path $release 'FallingHeads.exe') -Algorithm SHA256).Hash -ne $hash) { throw 'Copied executable failed integrity verification.' }
 $runtimeDlls = [ordered]@{}
 foreach ($dll in @('nvngx_dlss.dll','nvngx_dlssd.dll','sl.interposer.dll','sl.common.dll','sl.dlss_g.dll','sl.reflex.dll','sl.pcl.dll','nvngx_dlssg.dll','NvLowLatencyVk.dll')) {
     $sourceDll = Join-Path (Split-Path -Parent $sourceExe) $dll
@@ -52,15 +52,18 @@ if (Test-Path -LiteralPath $active) {
 } else { [IO.File]::Move($staged,$active) }
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut((Join-Path $desktop 'MineHeads - Play.lnk'))
+$shortcut = $shell.CreateShortcut((Join-Path $desktop 'Falling Heads - Play.lnk'))
 $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
-$shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $PSScriptRoot 'Launch-MineHeads.ps1') + '"'
+$shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $PSScriptRoot 'Launch-FallingHeads.ps1') + '"'
 $shortcut.WorkingDirectory = $gameRoot
 # Game icon (tools/Make-Icon.ps1) from a theme pack in the assets copy above;
 # an installed theme's icon wins over the free pack's.
-$icon = Get-ChildItem -Path (Join-Path $release 'assets/packs/*/icon/mineheads.ico') -ErrorAction SilentlyContinue |
+$icon = Get-ChildItem -Path (Join-Path $release 'assets/packs/*/icon/falling-heads.ico') -ErrorAction SilentlyContinue |
     Sort-Object { $_.Directory.Parent.Name -eq 'free' }, { $_.Directory.Parent.Name } | Select-Object -First 1
-$shortcut.IconLocation = if ($icon) { $icon.FullName + ',0' } else { (Join-Path $release 'MineHeads.exe') + ',0' }
-$shortcut.Description = 'Play the latest verified MineHeads build'
+$shortcut.IconLocation = if ($icon) { $icon.FullName + ',0' } else { (Join-Path $release 'FallingHeads.exe') + ',0' }
+$shortcut.Description = 'Play the latest verified Falling Heads build'
 $shortcut.Save()
+# The game was called MineHeads before; drop its old shortcut.
+$oldShortcut = Join-Path $desktop 'MineHeads - Play.lnk'
+if (Test-Path -LiteralPath $oldShortcut) { Remove-Item -LiteralPath $oldShortcut }
 $manifest | ConvertTo-Json

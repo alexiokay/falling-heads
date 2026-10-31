@@ -1,5 +1,5 @@
 //! Switches for optional parts of the game (Settings > Game modes). Saved per
-//! user in `%APPDATA%\MineHeads\game-modes.json`; everything is on by default.
+//! user in `%APPDATA%\FallingHeads\game-modes.json`; everything is on by default.
 //! Each part checks its switch where it starts (spawning, triggering).
 use crate::components::settings_menu::{SettingsPage, SettingsPageRoot, ToggleButtonText};
 use crate::resources::settings::{persistence_enabled, read_settings_file, write_settings_file};

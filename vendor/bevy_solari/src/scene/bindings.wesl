@@ -98,7 +98,7 @@ const LIGHT_NOT_PRESENT_THIS_FRAME = 0xFFFFFFFFu;
 @group(0) @binding(17) var environment_map_sampler: sampler;
 @group(0) @binding(18) var<storage> environment_map_light: EnvironmentMapLight;
 
-// MineHeads uses 64 world units per block. The stock millimetre epsilon falls
+// FallingHeads uses 64 world units per block. The stock millimetre epsilon falls
 // below G-buffer world-position reconstruction error at our camera distance
 // and large scrolling coordinates, causing temporal self-intersection patches.
 // Scale the origin offset and intersection interval together (0.001 * 64).

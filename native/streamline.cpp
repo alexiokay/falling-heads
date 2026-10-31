@@ -1,4 +1,4 @@
-// MineHeads' narrow C ABI around the version-pinned NVIDIA Streamline C++ API.
+// FallingHeads' narrow C ABI around the version-pinned NVIDIA Streamline C++ API.
 // No SDK structures cross the Rust/C++ boundary. The verified module is process-lived.
 #include "streamline.h"
 #include <windows.h>
@@ -90,7 +90,7 @@ extern "C" void* mh_fg_init(const wchar_t* plugins, const wchar_t* logs) {
         pref.featuresToLoad = features; pref.numFeaturesToLoad = 3;
         pref.pathsToPlugins = &plugins; pref.numPathsToPlugins = 1;
         pref.pathToLogsAndData = logs;
-        pref.engine = sl::EngineType::eCustom; pref.engineVersion = "Bevy 0.20.0 / MineHeads 0.2.5";
+        pref.engine = sl::EngineType::eCustom; pref.engineVersion = "Bevy 0.20.0 / FallingHeads 0.2.5";
         pref.projectId = "2a6ed339-f7f5-4a33-940a-5e7e9adc6137";
         pref.renderAPI = sl::RenderAPI::eVulkan;
         // Use the verified, packaged versions for reproducible validation, not OTA plugins.

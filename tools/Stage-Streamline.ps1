@@ -5,7 +5,7 @@ $sdk=Join-Path $root 'vendor/Streamline-2.14.16'
 $runtime=Join-Path $sdk 'bin/x64'
 $destinationPath=[IO.Path]::GetFullPath($Destination)
 New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
-# Production files only. Existing SR/RR runtimes are staged by Build-MineHeads.
+# Production files only. Existing SR/RR runtimes are staged by Build-FallingHeads.
 $names=@('sl.interposer.dll','sl.common.dll','sl.dlss_g.dll','sl.reflex.dll','sl.pcl.dll','nvngx_dlssg.dll','NvLowLatencyVk.dll')
 foreach($name in $names) {
     $source=Join-Path $runtime $name

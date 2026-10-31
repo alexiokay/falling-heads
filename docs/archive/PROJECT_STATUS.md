@@ -370,7 +370,7 @@ C:\Users\alexispace\Desktop\webdev\communityGaming\falling-heads\
 ---
 
 ## 📦 GitHub Repository
-**Published:** https://github.com/alexiokay/BevyCommunityGame-MineHeads.git
+**Published:** https://github.com/alexiokay/BevyCommunityGame-FallingHeads.git
 - Initial commit with full feature set
 - 66 files, 10,363+ lines of code
 - Ready for community contributions

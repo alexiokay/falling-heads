@@ -44,6 +44,8 @@ impl Plugin for ExtraPowersPlugin {
                         golem_ai.after(crate::plugins::physics_plugin::PhysicsSet::AI),
                         blow_wind,
                         black_holes,
+                        spin_parts,
+                        spiral_matter,
                         ice_age,
                         bees,
                         fuss,
@@ -67,7 +69,7 @@ struct Art {
     golem: Handle<StandardMaterial>,
     bee_face: Handle<Mesh>,
     bee: Handle<StandardMaterial>,
-    hole: Handle<StandardMaterial>,
+    hole: HoleArt,
     sounds: Sounds,
 }
 
@@ -126,12 +128,43 @@ fn setup(
     let anvil = texture("textures/powers/anvil_side.png", false);
     let golem = texture("textures/powers/iron_golem.png", false);
     let bee = texture("textures/powers/bee.png", false);
-    let hole = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.04, 0.0, 0.08),
-        emissive: LinearRgba::rgb(1.2, 0.2, 2.4),
-        unlit: true,
-        ..default()
-    });
+    // Black hole layers: additive glow and swirls around a black core.
+    let mut glow = |path: &str, color: Color, strength: f32| {
+        materials.add(StandardMaterial {
+            base_color: color,
+            base_color_texture: Some(server.load(path.to_string())),
+            emissive: color.to_linear() * strength,
+            unlit: true,
+            alpha_mode: AlphaMode::Add,
+            ..default()
+        })
+    };
+    let hole = HoleArt {
+        glow: glow(
+            "textures/powers/blackhole_glow.png",
+            Color::srgb(0.55, 0.15, 1.0),
+            1.5,
+        ),
+        swirl: glow(
+            "textures/powers/blackhole_swirl.png",
+            Color::srgb(0.85, 0.25, 1.0),
+            2.0,
+        ),
+        disk: glow(
+            "textures/powers/blackhole_disk.png",
+            Color::srgb(1.0, 0.55, 0.15),
+            3.0,
+        ),
+        spark: server.load("textures/powers/blackhole_spark.png"),
+        core: materials.add(StandardMaterial {
+            base_color: Color::BLACK,
+            unlit: true,
+            ..default()
+        }),
+        sphere: meshes.add(Sphere::new(0.5).mesh().uv(32, 16)),
+        disc: meshes.add(Circle::new(0.5)),
+        ring: meshes.add(Annulus::new(0.46, 0.5)),
+    };
     let sound = |name: &str| server.load(format!("audio/powers/{name}.ogg"));
     commands.insert_resource(Art {
         quad: meshes.add(Rectangle::new(1.0, 1.0)),
@@ -189,6 +222,33 @@ fn by(name: &str, user: &str) -> String {
     format!("{name}! (from {user})")
 }
 
+/// Meshes and materials for the black hole: core, glow, swirls and sparks.
+struct HoleArt {
+    core: Handle<StandardMaterial>,
+    glow: Handle<StandardMaterial>,
+    swirl: Handle<StandardMaterial>,
+    disk: Handle<StandardMaterial>,
+    spark: Handle<Image>,
+    sphere: Handle<Mesh>,
+    disc: Handle<Mesh>,
+    ring: Handle<Mesh>,
+}
+
+/// A black hole layer that turns in place.
+#[derive(Component)]
+struct Spin(f32);
+
+/// Matter spiralling into a black hole along its tilted disk.
+#[derive(Component)]
+struct Spiral {
+    center: Vec3,
+    angle: f32,
+    radius: f32,
+}
+
+/// The accretion disk is tilted towards the camera: its height is squashed.
+const DISK_TILT: f32 = 0.38;
+
 /// Short-lived visual: fades out, optionally drifting and spinning.
 #[derive(Component)]
 struct Fx {
@@ -196,6 +256,8 @@ struct Fx {
     max: f32,
     velocity: Vec3,
     spin: f32,
+    /// Scale gained per second (shockwaves and flashes grow as they fade).
+    grow: f32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -223,6 +285,7 @@ fn spawn_fx(
             max: life,
             velocity,
             spin: 0.0,
+            grow: 0.0,
         },
         Mesh3d(mesh.clone()),
         MeshMaterial3d(material),
@@ -253,6 +316,11 @@ fn fade_fx(
         }
         t.translation += f.velocity * dt;
         t.rotate_z(f.spin * dt);
+        if f.grow != 0.0 {
+            let g = 1.0 + f.grow * dt;
+            t.scale.x *= g;
+            t.scale.y *= g;
+        }
         if let Some(mut m) = materials.get_mut(&material.0) {
             m.base_color.set_alpha((f.life / f.max).clamp(0.0, 1.0));
         }
@@ -312,6 +380,8 @@ const FEATHER_SECONDS: f32 = 8.0;
 const SHRINK_SECONDS: f32 = 10.0;
 const WIND_SECONDS: f32 = 3.0;
 const ICE_AGE_SECONDS: f32 = 15.0;
+/// Water within this distance of the hero freezes when an ice age starts.
+const ICE_AGE_FREEZE_RADIUS: f32 = 1600.0;
 const FUSS_SECONDS: f32 = 5.0;
 
 type Heads = Or<(With<Hero>, With<Villager>)>;
@@ -341,6 +411,7 @@ fn start_simple(
     friends: Query<Entity, Heads>,
     mut weather: ResMut<crate::components::weather::ActiveWeather>,
     modes: Option<Res<crate::systems::game_modes::GameModes>>,
+    mut freeze: MessageWriter<crate::systems::fluids::FreezeWaterNear>,
 ) {
     let now = time.elapsed_secs();
     let hero_at = actors
@@ -391,8 +462,17 @@ fn start_simple(
                     weather.intensity = 0.85;
                     weather.duration_remaining = ICE_AGE_SECONDS;
                 }
+                // Lakes and pools freeze over for the whole ice age (10 steps a second).
+                freeze.write(crate::systems::fluids::FreezeWaterNear {
+                    center: hero_at.xy(),
+                    radius: ICE_AGE_FREEZE_RADIUS,
+                    ticks: (ICE_AGE_SECONDS * 10.0) as u16 + 30,
+                });
                 play(&mut commands, &art.sounds.ice, hero_at, 0.7, 0.8);
-                announce(&mut notice, by("ICE AGE: slippery floors", user));
+                announce(
+                    &mut notice,
+                    by("ICE AGE: slippery floors, frozen water", user),
+                );
             }
             P::Fuss => {
                 fuss_state.until = now + FUSS_SECONDS;
@@ -520,7 +600,61 @@ struct Golem {
 
 #[derive(Component)]
 struct BlackHole {
+    born: f32,
     pop_at: f32,
+}
+
+/// Seconds a black hole takes to open and to collapse before it pops.
+const HOLE_OPEN: f32 = 0.5;
+const HOLE_CLOSE: f32 = 0.35;
+/// Core size in world units when fully open.
+const HOLE_SIZE: f32 = 64.0;
+
+fn spawn_black_hole(commands: &mut Commands, art: &HoleArt, at: Vec3, now: f32) {
+    let layer = |mesh: &Handle<Mesh>, material: &Handle<StandardMaterial>, size: f32, z: f32| {
+        (
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            Transform::from_xyz(0.0, 0.0, z).with_scale(Vec3::splat(size)),
+            bevy::light::NotShadowCaster,
+        )
+    };
+    commands
+        .spawn((
+            BlackHole {
+                born: now,
+                pop_at: now + HOLE_SECONDS,
+            },
+            Transform::from_translation(at).with_scale(Vec3::ZERO),
+            Visibility::Inherited,
+        ))
+        .with_children(|hole| {
+            // Child offsets are scaled by the hole's size, so depth steps stay tiny.
+            // Purple halo, then a magenta swirl turning against the disk. Each swirl
+            // texture is a crescent: two half a turn apart make a full ring.
+            hole.spawn(layer(&art.disc, &art.glow, 4.4, -0.03));
+            for start in [0.0, std::f32::consts::PI] {
+                let mut swirl = layer(&art.disc, &art.swirl, 3.2, -0.02);
+                swirl.2.rotate_z(start);
+                hole.spawn((swirl, Spin(-1.6)));
+            }
+            // Hot accretion disk, tilted towards the camera.
+            hole.spawn((
+                Transform::from_xyz(0.0, 0.0, -0.01)
+                    .with_rotation(Quat::from_rotation_z(0.22))
+                    .with_scale(Vec3::new(1.0, DISK_TILT, 1.0)),
+                Visibility::Inherited,
+            ))
+            .with_children(|disk| {
+                for start in [0.0, std::f32::consts::PI] {
+                    let mut ring = layer(&art.disc, &art.disk, 3.0, 0.0);
+                    ring.2.rotate_z(start);
+                    disk.spawn((ring, Spin(3.2)));
+                }
+            });
+            // The black core sits in front of everything it swallows.
+            hole.spawn(layer(&art.sphere, &art.core, 1.0, 0.02));
+        });
 }
 
 #[derive(Component)]
@@ -600,14 +734,7 @@ fn start_spawned(
             P::BlackHole => {
                 let side = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
                 let p = Vec3::new(at.x + side * 280.0, at.y + 140.0, 40.0);
-                commands.spawn((
-                    BlackHole {
-                        pop_at: now + HOLE_SECONDS,
-                    },
-                    Mesh3d(art.cube.clone()),
-                    MeshMaterial3d(art.hole.clone()),
-                    Transform::from_translation(p).with_scale(Vec3::splat(70.0)),
-                ));
+                spawn_black_hole(&mut commands, &art.hole, p, now);
                 play(&mut commands, &art.sounds.hole, p, 0.8, 0.7);
                 announce(&mut notice, by("BLACK HOLE", user));
             }
@@ -812,20 +939,7 @@ fn black_holes(
                 }
             }
             play(&mut commands, &art.sounds.hole_pop, center, 0.9, 0.8);
-            for i in 0..16 {
-                let a = i as f32 * std::f32::consts::TAU / 16.0;
-                spawn_fx(
-                    &mut commands,
-                    &mut materials,
-                    &art.quad,
-                    Color::srgba(0.7, 0.3, 1.0, 0.9),
-                    center,
-                    Vec2::splat(14.0),
-                    a,
-                    Vec3::new(a.cos(), a.sin(), 0.0) * 700.0,
-                    0.6,
-                );
-            }
+            pop_black_hole(&mut commands, &mut materials, &art, center);
             commands.entity(e).despawn();
             continue;
         }
@@ -839,24 +953,181 @@ fn black_holes(
                 v.y = (v.y + pull.y).clamp(-650.0, 650.0);
             }
         }
-        // Spin and pulse; swirl particles drawn in.
-        t.rotate_z(dt * 4.0);
-        let pulse = 70.0 + (now * 9.0).sin() * 8.0;
-        t.scale = Vec3::splat(pulse);
-        if rng.random_bool(0.5) {
-            let a = rng.random_range(0.0..std::f32::consts::TAU);
-            let from = center + Vec3::new(a.cos(), a.sin(), 0.0) * 320.0;
-            spawn_fx(
-                &mut commands,
-                &mut materials,
-                &art.quad,
-                Color::srgba(0.6, 0.2, 1.0, 0.8),
-                from,
-                Vec2::splat(10.0),
-                a,
-                (center - from) * 1.8,
-                0.5,
-            );
+        // Open, breathe, then collapse into the pop.
+        let opening = ((now - hole.born) / HOLE_OPEN).clamp(0.0, 1.0);
+        let closing = ((hole.pop_at - now) / HOLE_CLOSE).clamp(0.0, 1.0);
+        let ease = |x: f32| 1.0 - (1.0 - x).powi(3);
+        let breathe = 1.0 + (now * 7.0).sin() * 0.04;
+        t.scale = Vec3::splat(HOLE_SIZE * ease(opening) * ease(closing) * breathe);
+        // Matter streams in along the disk while it is open.
+        if closing >= 1.0 {
+            for _ in 0..2 {
+                let angle = rng.random_range(0.0..std::f32::consts::TAU);
+                let color = if rng.random_bool(0.35) {
+                    Color::srgba(1.0, 0.7, 0.35, 0.95)
+                } else {
+                    Color::srgba(0.7, 0.3, 1.0, 0.9)
+                };
+                let material = materials.add(StandardMaterial {
+                    base_color: color,
+                    base_color_texture: Some(art.hole.spark.clone()),
+                    emissive: color.to_linear() * 3.0,
+                    unlit: true,
+                    alpha_mode: AlphaMode::Add,
+                    ..default()
+                });
+                commands.spawn((
+                    Spiral {
+                        center,
+                        angle,
+                        radius: rng.random_range(260.0..420.0),
+                    },
+                    Mesh3d(art.quad.clone()),
+                    MeshMaterial3d(material),
+                    Transform::from_translation(center).with_scale(Vec3::new(26.0, 6.0, 1.0)),
+                    bevy::light::NotShadowCaster,
+                ));
+            }
+        }
+    }
+}
+
+/// One additive flash or ring that grows while it fades.
+#[allow(clippy::too_many_arguments)]
+fn spawn_burst(
+    commands: &mut Commands,
+    materials: &mut Assets<StandardMaterial>,
+    mesh: &Handle<Mesh>,
+    color: Color,
+    center: Vec3,
+    size: f32,
+    life: f32,
+    grow: f32,
+) {
+    let material = materials.add(StandardMaterial {
+        base_color: color,
+        emissive: color.to_linear() * 4.0,
+        unlit: true,
+        alpha_mode: AlphaMode::Add,
+        ..default()
+    });
+    commands.spawn((
+        Fx {
+            life,
+            max: life,
+            velocity: Vec3::ZERO,
+            spin: 0.0,
+            grow,
+        },
+        Mesh3d(mesh.clone()),
+        MeshMaterial3d(material),
+        Transform::from_translation(center + Vec3::Z * 2.0).with_scale(Vec3::splat(size)),
+        bevy::light::NotShadowCaster,
+    ));
+}
+
+/// Flash, shockwave ring over the pull radius and a ring of sparks.
+fn pop_black_hole(
+    commands: &mut Commands,
+    materials: &mut Assets<StandardMaterial>,
+    art: &Art,
+    center: Vec3,
+) {
+    let flash = Color::srgba(1.0, 0.9, 1.0, 1.0);
+    spawn_burst(
+        commands,
+        materials,
+        &art.hole.disc,
+        flash,
+        center,
+        90.0,
+        0.25,
+        9.0,
+    );
+    // The ring reaches the pull radius as it fades.
+    let ring_life = 0.55;
+    let ring_grow = ((HOLE_RADIUS * 2.0 / 40.0).powf(1.0 / (ring_life * 60.0)) - 1.0) * 60.0;
+    let ring = Color::srgba(0.75, 0.4, 1.0, 0.9);
+    spawn_burst(
+        commands,
+        materials,
+        &art.hole.ring,
+        ring,
+        center,
+        40.0,
+        ring_life,
+        ring_grow,
+    );
+    for i in 0..24 {
+        let a = i as f32 * std::f32::consts::TAU / 24.0;
+        let color = if i % 3 == 0 {
+            Color::srgba(1.0, 0.75, 0.4, 0.95)
+        } else {
+            Color::srgba(0.75, 0.35, 1.0, 0.9)
+        };
+        spawn_fx(
+            commands,
+            materials,
+            &art.quad,
+            color,
+            center,
+            Vec2::new(30.0, 6.0),
+            a,
+            Vec3::new(a.cos(), a.sin(), 0.0) * 820.0,
+            0.6,
+        );
+    }
+}
+
+/// Turns the black hole's swirl layers.
+fn spin_parts(time: Res<Time>, mut parts: Query<(&Spin, &mut Transform)>) {
+    for (spin, mut t) in &mut parts {
+        t.rotate_z(spin.0 * time.delta_secs());
+    }
+}
+
+/// Moves matter around and into the hole, faster and hotter as it falls in.
+fn spiral_matter(
+    mut commands: Commands,
+    time: Res<Time>,
+    holes: Query<&Transform, (With<BlackHole>, Without<Spiral>)>,
+    mut matter: Query<(
+        Entity,
+        &mut Spiral,
+        &mut Transform,
+        &MeshMaterial3d<StandardMaterial>,
+    )>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut s, mut t, material) in &mut matter {
+        // Follow the hole; when it pops the stream ends with it.
+        let Some(hole) = holes
+            .iter()
+            .find(|h| h.translation.distance(s.center) < 1.0)
+        else {
+            commands.entity(e).despawn();
+            continue;
+        };
+        s.angle += dt * (2.0 + 700.0 / s.radius.max(20.0));
+        s.radius -= dt * (90.0 + 26000.0 / s.radius.max(20.0));
+        if s.radius < HOLE_SIZE * 0.45 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let offset = Vec2::new(s.angle.cos(), s.angle.sin() * DISK_TILT) * s.radius;
+        t.translation = hole.translation + offset.extend(0.5);
+        // Point along the orbit.
+        let tangent = Vec2::new(-s.angle.sin(), s.angle.cos() * DISK_TILT);
+        t.rotation = Quat::from_rotation_z(tangent.y.atan2(tangent.x));
+        let heat = (1.0 - s.radius / 420.0).clamp(0.0, 1.0);
+        t.scale = Vec3::new(18.0 + 22.0 * heat, 5.0 + 2.0 * heat, 1.0);
+        if let Some(mut m) = materials.get_mut(&material.0) {
+            let near = Color::srgba(1.0, 0.85, 0.6, 1.0).to_linear();
+            let far = Color::srgba(0.65, 0.25, 1.0, 0.85).to_linear();
+            let mixed = far.mix(&near, heat);
+            m.base_color = mixed.into();
+            m.emissive = mixed * (2.0 + 3.0 * heat);
         }
     }
 }

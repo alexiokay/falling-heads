@@ -3,11 +3,11 @@ $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 if(-not $Executable){$Executable=Join-Path $root 'target/debug/falling-heads.exe'}
 $Executable=(Resolve-Path -LiteralPath $Executable).Path
-. (Join-Path $PSScriptRoot 'Run-MineHeadsSession.ps1')
+. (Join-Path $PSScriptRoot 'Run-FallingHeadsSession.ps1')
 $testRoot=Join-Path $root ('target/diagnostics-verification-'+(Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
 foreach($mode in @('clean','panic')) {
     $directory=Join-Path $testRoot $mode
-    Invoke-MineHeadsSession -Executable $Executable -GameRoot $root -BuildVersion 'diagnostics-self-test' -BuildHash (Get-FileHash -LiteralPath $Executable).Hash -GameArguments @("--diagnostics-test-$mode") -SessionDirectory $directory
+    Invoke-FallingHeadsSession -Executable $Executable -GameRoot $root -BuildVersion 'diagnostics-self-test' -BuildHash (Get-FileHash -LiteralPath $Executable).Hash -GameArguments @("--diagnostics-test-$mode") -SessionDirectory $directory
     $report=Get-Content -LiteralPath (Join-Path $directory 'launcher.json') -Raw | ConvertFrom-Json
     $log=Get-Content -LiteralPath (Join-Path $directory 'runtime.log') -Raw
     if($log -notmatch 'Diagnostics self-test log entry'){throw 'File tracing is missing'}

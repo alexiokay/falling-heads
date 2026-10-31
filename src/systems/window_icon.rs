@@ -1,4 +1,4 @@
-//! Window and taskbar icon (`icon/mineheads.png` from the theme pack, made by
+//! Window and taskbar icon (`icon/falling-heads.png` from the theme pack, made by
 //! `tools/Make-Icon.ps1`). Bevy has no icon setting, so it is applied to the
 //! native window once the image has loaded.
 use bevy::ecs::system::NonSendMarker;
@@ -19,7 +19,7 @@ impl Plugin for WindowIconPlugin {
 struct PendingIcon(Handle<Image>);
 
 fn load_icon(mut commands: Commands, server: Res<AssetServer>) {
-    commands.insert_resource(PendingIcon(server.load("icon/mineheads.png")));
+    commands.insert_resource(PendingIcon(server.load("icon/falling-heads.png")));
 }
 
 /// Runs on the main thread (winit window calls must).

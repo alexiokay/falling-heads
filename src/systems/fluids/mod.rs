@@ -537,10 +537,20 @@ use render::*;
 use runtime::*;
 #[cfg(test)]
 mod tests;
+/// Freeze all water within `radius` of `center` into walkable ice for `ticks`
+/// simulation steps (10 a second). Sent by the ICEAGE power.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct FreezeWaterNear {
+    pub center: Vec2,
+    pub radius: f32,
+    pub ticks: u16,
+}
+
 pub struct FluidPlugin;
 impl Plugin for FluidPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FluidWorld>()
+            .add_message::<FreezeWaterNear>()
             .init_resource::<FluidOccupancy>()
             .init_resource::<FluidRenderRevision>()
             .add_plugins(MaterialPlugin::<FluidMaterial>::default())
@@ -552,6 +562,7 @@ impl Plugin for FluidPlugin {
                     bucket_powers,
                     ingest,
                     frost_projectiles,
+                    freeze_requests,
                     simulate,
                     contact,
                     update_visual_revision,

@@ -10,7 +10,7 @@
 //! Packs switch while the game runs (Settings > Theme or a [`SwitchPack`]
 //! message): the lookup order changes, every loaded texture, sound and model
 //! reloads, and images built from them ([`DerivedImages`]) are rebuilt. The
-//! pick is saved in `asset-pack.json`; `MINEHEADS_PACK=<id>` overrides it for
+//! pick is saved in `asset-pack.json`; `FALLING_HEADS_PACK=<id>` overrides it for
 //! one run. Pack folders are found at startup.
 
 use crate::components::settings_menu::{SettingsPage, SettingsPageRoot, ToggleButtonText};
@@ -235,7 +235,7 @@ impl AssetReader for PackReader {
 pub fn install(app: &mut App) {
     let packs_dir = FileAssetReader::get_base_path().join(PACKS_DIR);
     let installed = installed_packs(&packs_dir);
-    let requested = std::env::var("MINEHEADS_PACK")
+    let requested = std::env::var("FALLING_HEADS_PACK")
         .ok()
         .filter(|v| !v.is_empty())
         .or_else(saved_choice);

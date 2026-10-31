@@ -26,5 +26,5 @@ fn main() {
         .flag("/std:c++17")
         .flag("/EHsc")
         .define("NOMINMAX", None)
-        .compile("mineheads_streamline");
+        .compile("falling_heads_streamline");
 }

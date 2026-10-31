@@ -1,4 +1,4 @@
-# MineHeads Solari patch
+# Falling Heads Solari patch
 
 Base: bevy_solari 0.20.0 from the Cargo registry, MIT/Apache-2.0.
 

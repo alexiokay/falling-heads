@@ -4,7 +4,7 @@ target,source,options
 # target/kenney/<pack>/files (vox=voxel-pack, fx=particle-pack transparent,
 # ani=animal-pack-remastered square, imp=impact-sounds, sci=sci-fi-sounds,
 # rpg=rpg-audio, ui=interface-sounds). options: tint=RRGGBB (colourize),
-# alpha=0..1. Images are resized to the game's size; *_atlas strips are built
+# alpha=0..1, size=WxH (new art the game does not load yet). Images are resized to the game's size; *_atlas strips are built
 # from their base texture. Paths left out keep their stand-in.
 textures/blocks/cactus/cactus_bottom.png,vox:cactus_inside.png,
 textures/blocks/cactus/cactus_side.png,vox:cactus_side.png,
@@ -377,3 +377,7 @@ audio/sfx/mobs/zombie/hurt2.ogg,imp:impactPunch_heavy_004.ogg,
 audio/sfx/projectiles/snowball/hurt1.ogg,imp:footstep_snow_002.ogg,
 audio/sfx/projectiles/snowball/hurt2.ogg,imp:footstep_snow_003.ogg,
 audio/sfx/projectiles/snowball/hurt3.ogg,imp:footstep_snow_004.ogg,
+textures/powers/blackhole_glow.png,fx:light_01.png,size=256x256
+textures/powers/blackhole_swirl.png,fx:twirl_02.png,size=256x256
+textures/powers/blackhole_disk.png,fx:twirl_03.png,size=256x256
+textures/powers/blackhole_spark.png,fx:circle_05.png,size=64x64

@@ -66,7 +66,7 @@ class Handler(SimpleHTTPRequestHandler):
                 with LOCK:
                     if key not in CACHE:
                         start=time.perf_counter()
-                        with tempfile.TemporaryDirectory(prefix='mineheads-preview-') as d:
+                        with tempfile.TemporaryDirectory(prefix='falling-heads-preview-') as d:
                             out=Path(d)/'world.json'
                             result=subprocess.run([str(exe),*args,'--output',str(out)],cwd=ROOT,capture_output=True,timeout=90,creationflags=subprocess.CREATE_NO_WINDOW)
                             if result.returncode: raise RuntimeError(result.stderr.decode(errors='replace')[-2000:])
@@ -86,5 +86,5 @@ class Handler(SimpleHTTPRequestHandler):
     def send_file(self,file):
         raw=file.read_bytes();self.send_response(200);self.send_header('Content-Type',self.guess_type(str(file)));self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
 if __name__=='__main__':
-    print('MineHeads world workbench: http://127.0.0.1:48119',flush=True)
+    print('FallingHeads world workbench: http://127.0.0.1:48119',flush=True)
     ThreadingHTTPServer(('127.0.0.1',48119),Handler).serve_forever()

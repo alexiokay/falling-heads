@@ -1,8 +1,8 @@
-# MineHeads native graphics
+# Falling Heads native graphics
 
 Bevy 0.20.0, Vulkan. This build uses the local SDK installation already used by Commonfield; no second SDK download is required. `.cargo/config.toml` points to `../../south-balcony-twin/vendor/{DLSS,Vulkan-Headers,clang-runtime/clang/native}`. Environment overrides may point to another installation. Commonfield's sources and binaries are not modified.
 
-Build with `tools/Build-MineHeads.ps1`. It performs a locked Cargo build and stages `nvngx_dlss.dll` (SR) plus `nvngx_dlssd.dll` (Ray Reconstruction) beside the executable. The publisher copies and hashes both libraries into the immutable release. NVIDIA's licence is included under assets/licenses. `prettyplease` is locked to 0.2.37, matching Commonfield: bindgen 0.73.1 with prettyplease 0.3.0 mixed incompatible syn 2/3 types.
+Build with `tools/Build-FallingHeads.ps1`. It performs a locked Cargo build and stages `nvngx_dlss.dll` (SR) plus `nvngx_dlssd.dll` (Ray Reconstruction) beside the executable. The publisher copies and hashes both libraries into the immutable release. NVIDIA's licence is included under assets/licenses. `prettyplease` is locked to 0.2.37, matching Commonfield: bindgen 0.73.1 with prettyplease 0.3.0 mixed incompatible syn 2/3 types.
 
 ## Settings and actual rendering
 
@@ -24,7 +24,7 @@ Teleport camera cuts reset DLSS temporal history. Switching rendering modes remo
 
 ## Validation
 
-The opt-in hidden `--gpu-smoke-test` exercises SR → Solari/RR → native-resolution RR → native raster → SR, captures each mode and requires GPU diagnostic timings for actual Solari lighting/world-cache and RR execution. The final renderer, raster-effects, ray-traced-effects and UI runs passed; results and the earlier isolated driver-reset incident are recorded in MINEHEADS_UPGRADE_2026-10-23.md. The fluid regression covers constant airborne width at every row near a supported pool, independent of transient parcel volume.
+The opt-in hidden `--gpu-smoke-test` exercises SR → Solari/RR → native-resolution RR → native raster → SR, captures each mode and requires GPU diagnostic timings for actual Solari lighting/world-cache and RR execution. The final renderer, raster-effects, ray-traced-effects and UI runs passed; results and the earlier isolated driver-reset incident are recorded in FALLING_HEADS_UPGRADE_2026-10-23.md. The fluid regression covers constant airborne width at every row near a supported pool, independent of transient parcel volume.
 
 
 ## Encounter/lighting correction pass

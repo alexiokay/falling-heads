@@ -36,7 +36,7 @@ if($Build -or $Native){
  if($LASTEXITCODE){throw 'Build failed'}
 }
 if($Native){
- & ./tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene water
- & ./tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene snowghast
- & ./tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene crowd -FullSize -Dense -Named
+ & ./tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene water
+ & ./tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene snowghast
+ & ./tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene crowd -FullSize -Dense -Named
 }

@@ -1,4 +1,4 @@
-# MineHeads graphics and environment checklist — 23 October 2026
+# Falling Heads graphics and environment checklist — 23 October 2026
 
 This is a practical catalogue of major modern rendering techniques, not a claim that every possible effect is implemented. Current renderer: Bevy 0.20.0 Vulkan with selectable raster/DLSS or Solari ray-traced lighting plus forward custom materials. A perspective world camera resolves to a texture; a separate native-resolution camera presents that texture, text and UI. The existing 64px art is intentionally retained. Lighting does not add detail absent from the source textures.
 
@@ -56,7 +56,7 @@ All future artistic effects should have genuine settings controls once implement
 
 ## DLSS and ray tracing: actual status
 
-Implemented using the SDK already installed in Commonfield's vendor directory. The earlier global-environment check missed this installation. MineHeads now configures those paths explicitly, includes the SR/RR runtime DLLs in each immutable release, and uses a separate app project ID. See NATIVE_RENDERER.md for build instructions, renderer switching and validation details.
+Implemented using the SDK already installed in Commonfield's vendor directory. The earlier global-environment check missed this installation. Falling Heads now configures those paths explicitly, includes the SR/RR runtime DLLs in each immutable release, and uses a separate app project ID. See NATIVE_RENDERER.md for build instructions, renderer switching and validation details.
 
 DLSS Quality operates in raster mode. Ray tracing enables Solari and DLSS Ray Reconstruction; switching upscaling off in RT mode selects native-resolution RR/DLAA. Turning both off restores native raster/FXAA. Runtime support is checked and the Settings status label reports what is active. NVIDIA Frame Generation is independently selectable at 2×. Its rendered/presented FPS counters distinguish simulation/render work from generated presents. Higher Multi Frame Generation modes are not exposed.
 

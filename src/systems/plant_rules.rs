@@ -30,6 +30,10 @@ pub(crate) fn soft(kind: BlockType, tile: Option<&Tile>) -> bool {
         },
     )
 }
+/// Bodies and dropped items move through cobwebs, plants and decorations.
+pub(crate) fn passable(kind: BlockType, tile: Option<&Tile>) -> bool {
+    kind == BlockType::Cobweb || soft(kind, tile) || tile.is_some_and(|t| t.decorative())
+}
 pub(crate) fn support_offset(kind: BlockType, tile: Option<&Tile>) -> Option<IVec2> {
     if tile == Some(&Tile::DripstoneDown) {
         Some(IVec2::Y)
@@ -42,7 +46,7 @@ pub(crate) fn support_offset(kind: BlockType, tile: Option<&Tile>) -> Option<IVe
     }
 }
 fn solid(kind: BlockType, tile: Option<&Tile>) -> bool {
-    !soft(kind, tile) && kind != BlockType::Cobweb && tile.is_none_or(|t| !t.decorative())
+    !passable(kind, tile)
 }
 #[derive(Default)]
 pub(crate) struct Supports {

@@ -30,6 +30,6 @@ Rain accumulation is limited to two new one-eighth-cell puddle portions every 24
 
 # Verification
 
-Run `cargo test --offline --bin falling-heads`, then `tools/Test-MineHeadsOverhaul.ps1` and `tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene launcher`. The hidden probes exercise landmarks, RT cracks/destruction, the actual slider handler, both launch directions, default/eight villagers, foreground flight through intact terrain, crater clearance, restored hero physics, and runtime SR/RR switches. Screenshots are written under `target/visual-overhaul-*.png` and `target/visual-launcher-*.png`.
+Run `cargo test --offline --bin falling-heads`, then `tools/Test-FallingHeadsOverhaul.ps1` and `tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene launcher`. The hidden probes exercise landmarks, RT cracks/destruction, the actual slider handler, both launch directions, default/eight villagers, foreground flight through intact terrain, crater clearance, restored hero physics, and runtime SR/RR switches. Screenshots are written under `target/visual-overhaul-*.png` and `target/visual-launcher-*.png`.
 
-`tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene refinement` exercises natural forest mist, camera movement, the actual Fire Rain button and the spider model/attack. Launcher captures include three delayed breakup frames per direction. Equipment, fruit and crafting remain proposals in `PROGRESSION_PROPOSAL.md`.
+`tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene refinement` exercises natural forest mist, camera movement, the actual Fire Rain button and the spider model/attack. Launcher captures include three delayed breakup frames per direction. Equipment, fruit and crafting remain proposals in `PROGRESSION_PROPOSAL.md`.

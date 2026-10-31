@@ -70,17 +70,20 @@ $mapped = @{}; $images = 0; $sounds = 0; $atlases = 0
 foreach ($row in $rows) { $mapped[$row.target] = $true }
 foreach ($row in $rows) {
     $to = Join-Path $free $row.target
-    if (-not (Test-Path -LiteralPath $to)) { throw "Game has no file at $($row.target) (run Make-FreePack.ps1 first)" }
     $from = Find-Source $row.source
     $key = ($row.source -split ':')[0]
     $opt = @{}
     foreach ($pair in "$($row.options)" -split '\s+' | Where-Object { $_ }) { $k, $v = $pair -split '=', 2; $opt[$k] = $v }
+    # New art (size=WxH) is created; anything else replaces a file the game already uses.
+    $size = if ($opt.size) { [int[]]($opt.size -split 'x') } else { $null }
+    if (-not $size -and -not (Test-Path -LiteralPath $to)) { throw "Game has no file at $($row.target) (run Make-FreePack.ps1 first, or give size=WxH)" }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
     if ($to -match '\.ogg$') {
         Copy-Item -LiteralPath $from -Destination $to -Force
         $sounds++
         continue
     }
-    $w, $h = Size $to
+    $w, $h = if ($size) { $size[0], $size[1] } else { Size $to }
     Make-Image $from $to $key $opt $w $h
     $images++
     $atlasRel = $row.target -replace '(\.[a-z]+)$', '_atlas$1'

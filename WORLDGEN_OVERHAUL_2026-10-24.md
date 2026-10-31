@@ -1,6 +1,6 @@
 # World generation and visual consistency — 24 October 2026
 
-Published build: **20261024-135904-f10ddcaa1d**. SHA-256: `F10DDCAA1D42B2D895F0044791B5AD1A928FDC54F2E6E21E999DAF3245EE04F3`. Publisher verified 343 assets and nine runtime DLLs; desktop launcher resolution/integrity check passed. The next MineHeads - Play launch uses this version.
+Published build: **20261024-135904-f10ddcaa1d**. SHA-256: `F10DDCAA1D42B2D895F0044791B5AD1A928FDC54F2E6E21E999DAF3245EE04F3`. Publisher verified 343 assets and nine runtime DLLs; desktop launcher resolution/integrity check passed. The next Falling Heads - Play launch uses this version.
 
 ## World workbench
 

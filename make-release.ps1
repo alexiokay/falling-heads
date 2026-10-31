@@ -1,4 +1,4 @@
-# MineHeads Release Script
+# FallingHeads Release Script
 # Creates a distributable ZIP package
 
 param(
@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🚀 Building MineHeads v$Version for distribution..." -ForegroundColor Cyan
+Write-Host "🚀 Building FallingHeads v$Version for distribution..." -ForegroundColor Cyan
 
 # Step 1: Build release
 Write-Host "`n📦 Step 1: Building release executable..." -ForegroundColor Yellow
@@ -19,7 +19,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✅ Build complete!" -ForegroundColor Green
 
 # Step 2: Create distribution folder
-$DistFolder = "MineHeads-v$Version-Windows"
+$DistFolder = "FallingHeads-v$Version-Windows"
 Write-Host "`n📁 Step 2: Creating distribution folder: $DistFolder" -ForegroundColor Yellow
 
 if (Test-Path $DistFolder) {
@@ -56,7 +56,7 @@ Write-Host "`n📝 Step 4: Creating README.txt..." -ForegroundColor Yellow
 
 $ReadmeLines = @(
     "==========================================="
-    "       MineHeads v$Version - Windows"
+    "       FallingHeads v$Version - Windows"
     "==========================================="
     ""
     "SYSTEM REQUIREMENTS:"

@@ -13,4 +13,4 @@ The production renderer is isolated in `src/systems/native_gpu.rs`, the frame-ge
 
 These checks document the application's ownership and ordering assumptions; they do not prove correctness of NVIDIA drivers or every vendored unsafe implementation. Long-running resize/device-loss/concurrent-instance faults remain a separate diagnostic investigation. Do not remove owners, unload the interposer early, move callbacks to unrelated schedules, or add broad `unsafe` allowances to silence errors.
 
-Run `tools/Test-MineHeadsFG.ps1` for the hidden pause/resume/resize/quality/enable-disable verification. Run water and crowded raster/RT scenes separately; compilation or another game instance makes performance measurements unreliable.
+Run `tools/Test-FallingHeadsFG.ps1` for the hidden pause/resume/resize/quality/enable-disable verification. Run water and crowded raster/RT scenes separately; compilation or another game instance makes performance measurements unreliable.

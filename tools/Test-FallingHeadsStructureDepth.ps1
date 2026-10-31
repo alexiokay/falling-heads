@@ -2,11 +2,11 @@ param()
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 Set-Location $root
-if(Get-Process -Name MineHeads,falling-heads,overhaul-verification,depth-verification -ErrorAction SilentlyContinue){throw 'Close MineHeads before the native structure gallery.'}
+if(Get-Process -Name FallingHeads,falling-heads,overhaul-verification,depth-verification -ErrorAction SilentlyContinue){throw 'Close FallingHeads before the native structure gallery.'}
 $settings=Join-Path $root 'graphics-settings.json'
 $saved=if(Test-Path -LiteralPath $settings){[IO.File]::ReadAllBytes($settings)}else{$null}
 try {
-    & ./tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene overhaul
+    & ./tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene overhaul
     $log=Get-Content 'target/overhaul-run-err.log' -Raw
     if($log -notmatch '\[STRUCTURE DEPTH\].*rt=false' -or $log -notmatch '\[STRUCTURE DEPTH\].*rt=true'){throw 'Missing raster/RT solid wall verification'}
 } finally {

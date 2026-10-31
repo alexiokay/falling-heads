@@ -102,7 +102,7 @@ impl Session {
             .and_then(|p| p.parent())
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir()?);
-        let directory = std::env::var_os("MINEHEADS_SESSION_DIR")
+        let directory = std::env::var_os("FALLING_HEADS_SESSION_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
                 root.join("logs")
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn log_rollover_keeps_recent_evidence_and_closes_windows_handles() {
         let directory = std::env::temp_dir().join(format!(
-            "mineheads-log-test-{}-{}",
+            "falling-heads-log-test-{}-{}",
             std::process::id(),
             stamp()
         ));

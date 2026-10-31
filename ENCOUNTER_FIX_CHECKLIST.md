@@ -1,6 +1,6 @@
 ## Architecture cleanup — 27 October 2026
 
-Current installed build: **20261027-032456-b6e29650ed** (MineHeads – Play).
+Current installed build: **20261027-032456-b6e29650ed** (Falling Heads – Play).
 
 - [x] Remove the sphere-contact experiment and restore original rounded-box crowd contacts; preserve appearance over a marginal frame-time difference.
 
@@ -24,7 +24,7 @@ Historical releases and request statuses follow below. See ARCHITECTURE_IMPROVEM
 
 ## Latest snow/ghast correction — 27 October 2026
 
-Current build: **20261027-022021-28f7a87f92** (MineHeads – Play).
+Current build: **20261027-022021-28f7a87f92** (Falling Heads – Play).
 
 - [x] Short supported snow slide before the normal rebound; shared by snow blocks and settled snow layers.
 - [x] Cancel on lost support/teleports; avoid repeated support damage or timer refresh.
@@ -36,7 +36,7 @@ Current build: **20261027-022021-28f7a87f92** (MineHeads – Play).
 
 ## Current water geometry / crowd / architecture review
 
-Installed build: **20261027-014643-5a4309077a**. Available on the next MineHeads - Play launch.
+Installed build: **20261027-014643-5a4309077a**. Available on the next Falling Heads - Play launch.
 
 - [x] Remove separated world-wide water overlay; retain dense water in a single connected volume.
 - [x] Prevent head-occupancy-only changes from rebuilding liquid meshes every rendered frame.
@@ -124,7 +124,7 @@ Previous installed build: **20261024-035006-4bb3b7c7b7**. Its 136 unit tests and
 - [x] Forest mist extends below ledges with a broad irregular fade; foreground terrain naturally hides the lower tail.
 - [x] Crowd optimization: shared villager and heart assets, private damage materials only while hit, linear heart updates, nearby terrain lookups, and fewer bat line-of-sight checks.
 - [x] Research engine practices: GPU instance batching and spatial/visibility/simulation relevance; references and measurements in PERFORMANCE_NOTES.md.
-- [x] Final rendered acceptance and versioned desktop publication: 20261024-035006-4bb3b7c7b7; 338 assets and nine runtime DLLs verified. Restart MineHeads - Play to use it.
+- [x] Final rendered acceptance and versioned desktop publication: 20261024-035006-4bb3b7c7b7; 338 assets and nine runtime DLLs verified. Restart Falling Heads - Play to use it.
 
 ## Earlier implemented requests
 
@@ -161,7 +161,7 @@ The accidentally posted first-screen background request was withdrawn and is exc
 
 # Earlier pass — 23 October 2026
 
-Published as **20261023-162722-4d9d6d7865**. All 75 unit tests and the final hidden native gameplay/renderer checks passed. The desktop **MineHeads - Play** shortcut resolves this immutable build.
+Published as **20261023-162722-4d9d6d7865**. All 75 unit tests and the final hidden native gameplay/renderer checks passed. The desktop **Falling Heads - Play** shortcut resolves this immutable build.
 
 - [x] Portal: reachable interaction and clear prompt; no frame/effect shadows.
 - [x] Bloom: remove scene-wide haze, retain restrained bright-source glow.
@@ -220,7 +220,7 @@ Executable SHA256: `4D9D6D78651F69BF90EBF4CDEECC353F034BDD52F55B3008A1B58C22528F
 
 ## Current release
 
-Superseded by `20261023-195826-06c27aa322`: 82 tests passed; old background appearance restored; detailed dragon, shallow-water freeze/thaw, DLSS torch clustering, steam shadow correction, shadow re-enable and material/weather performance fixes included. Burning unchanged. See FG_IMPLEMENTATION.md and PERFORMANCE_NOTES.md for evidence and remaining scope. MineHeads - Play resolves the current release; existing sessions continue on their original executable.
+Superseded by `20261023-195826-06c27aa322`: 82 tests passed; old background appearance restored; detailed dragon, shallow-water freeze/thaw, DLSS torch clustering, steam shadow correction, shadow re-enable and material/weather performance fixes included. Burning unchanged. See FG_IMPLEMENTATION.md and PERFORMANCE_NOTES.md for evidence and remaining scope. Falling Heads - Play resolves the current release; existing sessions continue on their original executable.
 
 
 ## Dragon readability and turning follow-up (2026-10-23)

@@ -1,4 +1,4 @@
-# 🌍 MineHeads - Complete Biome Guide
+# 🌍 Falling Heads - Complete Biome Guide
 
 ## Overview
 - **7 Total Biomes** with unique terrain, enemies, and resources

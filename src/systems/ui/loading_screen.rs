@@ -63,7 +63,7 @@ fn spawn_loading_screen(mut commands: Commands) {
         ))
         .with_children(|p| {
             p.spawn((
-                Text::new("MINEHEADS"),
+                Text::new("FALLING HEADS"),
                 TextFont {
                     font_size: FontSize::Px(52.0),
                     ..default()

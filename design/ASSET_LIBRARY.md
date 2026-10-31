@@ -46,4 +46,4 @@ Blazes use three fireballs per burst and the existing terrain heat reactions. Cr
 
 Berries heal on contact or drop when broken. Blaze rods and amethyst pickups automatically release a friendly projectile fan toward an enemy; slime pickups give a short speed boost; shulker shells heal. This is automatic pickup behavior, not an equipment/crafting inventory.
 
-The exact generator export and the local preview workbench include these material variants. `tools/Export-BiomeContentPreview.py` exports eight textured, windowless previews to `design/biome-expansion`. Those previews deliberately omit lighting, dynamic fluids and actors; native screenshots are captured separately by `Test-MineHeadsOverhaul.ps1 -Scene content`.
+The exact generator export and the local preview workbench include these material variants. `tools/Export-BiomeContentPreview.py` exports eight textured, windowless previews to `design/biome-expansion`. Those previews deliberately omit lighting, dynamic fluids and actors; native screenshots are captured separately by `Test-FallingHeadsOverhaul.ps1 -Scene content`.

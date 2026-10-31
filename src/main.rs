@@ -25,6 +25,8 @@ mod depth_probe;
 #[cfg(feature = "probes")]
 mod ecology_probe;
 #[cfg(feature = "probes")]
+mod ghost_floor_probe;
+#[cfg(feature = "probes")]
 mod head_size_probe;
 #[cfg(feature = "probes")]
 mod overhaul_probe;
@@ -128,10 +130,10 @@ fn main() {
     } else {
         GameSettings::new()
     };
-    // Test, probe and benchmark runs (or MINEHEADS_QUIET=1): music off, effects
+    // Test, probe and benchmark runs (or FALLING_HEADS_QUIET=1): music off, effects
     // at 5%, so automated checks are not loud.
     let quiet = !resources::settings::persistence_enabled()
-        || std::env::var("MINEHEADS_QUIET").is_ok_and(|v| v != "0");
+        || std::env::var("FALLING_HEADS_QUIET").is_ok_and(|v| v != "0");
     if quiet {
         settings.music_volume = 0.0; // Music fully off in test runs
         settings.effects_volume = 0.05;
@@ -164,7 +166,7 @@ fn main() {
             })
             .set(WindowPlugin {
                 primary_window: Some(Window {
-                    title: "MineHeads".to_string(),
+                    title: "Falling Heads".to_string(),
                     visible: !smoke_test || std::env::args().any(|a| a == "--fg-visible-test"),
                     resolution: WindowResolution::new(720, 1280),
                     present_mode: if settings.vsync_enabled {

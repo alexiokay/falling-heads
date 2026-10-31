@@ -1,4 +1,4 @@
-# MineHeads energy texture prompts — 2026-10-23
+# Falling Heads energy texture prompts — 2026-10-23
 
 Generated with the built-in imagegen tool, with transparent_background=true. The saved PNGs are used directly by the energy material; animation, fading and colour modulation are implemented in the shader.
 

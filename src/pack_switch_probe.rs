@@ -139,3 +139,100 @@ pub fn run(w: &mut World) {
         _ => {}
     }
 }
+
+#[derive(Resource)]
+struct UiProbe {
+    step: usize,
+    since: f32,
+    other: String,
+}
+
+/// `--visual-smoke-test --theme-ui-test`: opens Settings > Theme, saves
+/// `target/visual-pack-theme-page.png`, presses the other pack's button like a
+/// player would and checks the pack switched.
+pub fn run_ui(w: &mut World) {
+    use crate::components::settings_menu::{SettingsNavigation, SettingsPage};
+    use crate::systems::asset_packs::PackButton;
+    use bevy::picking::hover::PickingInteraction;
+    let now = w.resource::<Time<Real>>().elapsed_secs();
+    assert!(now < 90.0, "Theme UI test timed out");
+    if !w.contains_resource::<UiProbe>() {
+        if now < 8.0 {
+            return;
+        }
+        let packs = w.resource::<AssetPacks>();
+        let other = packs
+            .installed
+            .iter()
+            .map(|p| p.id.clone())
+            .find(|id| *id != packs.active)
+            .expect("theme UI test needs two installed packs");
+        w.resource_mut::<NextState<crate::states::GameState>>()
+            .set(crate::states::GameState::Settings);
+        w.insert_resource(UiProbe {
+            step: 0,
+            since: now,
+            other,
+        });
+        return;
+    }
+    let (step, since, other) = {
+        let p = w.resource::<UiProbe>();
+        (p.step, p.since, p.other.clone())
+    };
+    let next = |w: &mut World| {
+        let mut p = w.resource_mut::<UiProbe>();
+        p.step += 1;
+        p.since = now;
+    };
+    match step {
+        0 if now - since > 1.0 => {
+            if let Some(mut nav) = w.get_resource_mut::<SettingsNavigation>() {
+                nav.0 = SettingsPage::Theme;
+            }
+            next(w);
+        }
+        1 if now - since > 1.5 => {
+            let buttons: Vec<String> = w
+                .query::<&PackButton>()
+                .iter(w)
+                .map(|b| b.0.clone())
+                .collect();
+            eprintln!("[THEME UI] pack buttons on the Theme page: {buttons:?}");
+            assert!(
+                buttons.len() >= 2,
+                "Theme page shows {} pack buttons",
+                buttons.len()
+            );
+            capture(w, "theme-page");
+            next(w);
+        }
+        2 if now - since > 1.0 => {
+            let target = w
+                .query::<(Entity, &PackButton)>()
+                .iter(w)
+                .find(|(_, b)| b.0 == other)
+                .map(|(e, _)| e)
+                .expect("button for the other pack");
+            w.entity_mut(target).insert(PickingInteraction::Pressed);
+            next(w);
+        }
+        3 if w.resource::<AssetPacks>().active == other => {
+            eprintln!("[THEME UI] button press switched to {other}");
+            next(w);
+        }
+        3 => assert!(
+            now - since < 10.0,
+            "Pressing the pack button did not switch"
+        ),
+        4 if now - since > 2.0 => {
+            capture(w, "theme-switched");
+            next(w);
+        }
+        5 if now - since > 1.0 => {
+            eprintln!("[THEME UI] passed");
+            w.write_message(AppExit::Success);
+        }
+        _ => {}
+    }
+}

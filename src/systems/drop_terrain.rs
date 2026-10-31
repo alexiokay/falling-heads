@@ -134,7 +134,15 @@ impl Plugin for DropTerrainPlugin {
 
 fn resolve(
     mut commands: Commands,
-    blocks: Query<(&Transform, &BlockType, Option<&SnowLayer>), With<Block>>,
+    blocks: Query<
+        (
+            &Transform,
+            &BlockType,
+            Option<&SnowLayer>,
+            Option<&crate::systems::biome_content::Tile>,
+        ),
+        With<Block>,
+    >,
     mut drops: Query<
         (
             Entity,
@@ -174,8 +182,9 @@ fn resolve(
     }
     if terrain.cells.is_empty() || !changed.is_empty() {
         terrain.cells.clear();
-        for (t, kind, snow) in &blocks {
-            if *kind == BlockType::Cobweb {
+        for (t, kind, snow, tile) in &blocks {
+            // Same rule as heads: items fall through plants, vines and decorations.
+            if crate::systems::plant_rules::passable(*kind, tile) {
                 continue;
             }
             let cell = (t.translation.xy() / BLOCK_SIZE).round().as_ivec2();

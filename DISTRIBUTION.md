@@ -1,4 +1,4 @@
-# MineHeads - Distribution Guide
+# Falling Heads - Distribution Guide
 
 ## 🚀 Building for Release
 
@@ -31,16 +31,16 @@ Your game needs **3 things** to run on another computer:
 
 ```powershell
 # Create distribution folder
-mkdir MineHeads-v0.2.5-Windows
+mkdir FallingHeads-v0.2.5-Windows
 
 # Copy executable
-copy target\release\falling-heads.exe MineHeads-v0.2.5-Windows\
+copy target\release\falling-heads.exe FallingHeads-v0.2.5-Windows\
 
 # Copy assets folder
-xcopy assets MineHeads-v0.2.5-Windows\assets /E /I
+xcopy assets FallingHeads-v0.2.5-Windows\assets /E /I
 
 # Copy README (optional)
-copy README.md MineHeads-v0.2.5-Windows\
+copy README.md FallingHeads-v0.2.5-Windows\
 ```
 
 ### Step 2: Check Dependencies
@@ -58,12 +58,12 @@ dir *.dll
 ### Step 3: Create ZIP Archive
 
 **Option A: Windows Explorer**
-1. Right-click `MineHeads-v0.2.5-Windows` folder
+1. Right-click `FallingHeads-v0.2.5-Windows` folder
 2. Send to → Compressed (zipped) folder
 
 **Option B: PowerShell**
 ```powershell
-Compress-Archive -Path MineHeads-v0.2.5-Windows -DestinationPath MineHeads-v0.2.5-Windows.zip
+Compress-Archive -Path FallingHeads-v0.2.5-Windows -DestinationPath FallingHeads-v0.2.5-Windows.zip
 ```
 
 ---
@@ -73,7 +73,7 @@ Compress-Archive -Path MineHeads-v0.2.5-Windows -DestinationPath MineHeads-v0.2.
 Your final package should look like:
 
 ```
-MineHeads-v0.2.5-Windows/
+FallingHeads-v0.2.5-Windows/
 ├── falling-heads.exe          # Main executable (~50-100 MB)
 ├── assets/                     # Game assets
 │   ├── textures/
@@ -93,7 +93,7 @@ Create a file `README.txt` in your distribution folder:
 
 ```text
 ===========================================
-       MineHeads v0.2.5 - Windows
+       Falling Heads v0.2.5 - Windows
 ===========================================
 
 SYSTEM REQUIREMENTS:
@@ -145,7 +145,7 @@ LICENSE:
 4. Set pricing (free or paid)
 5. Publish!
 
-**Example page**: https://youtu.itch.io/mineheads
+**Example page**: https://youtu.itch.io/falling-heads
 
 ---
 
@@ -164,7 +164,7 @@ git push origin v0.2.5
 
 # Create release on GitHub
 # Go to: https://github.com/[username]/[repo]/releases/new
-# Upload: MineHeads-v0.2.5-Windows.zip
+# Upload: FallingHeads-v0.2.5-Windows.zip
 ```
 
 ---
@@ -267,13 +267,13 @@ Before distributing:
 cargo build --release
 
 # Create distribution folder
-mkdir MineHeads-v0.2.5-Windows
-copy target\release\falling-heads.exe MineHeads-v0.2.5-Windows\
-xcopy assets MineHeads-v0.2.5-Windows\assets /E /I
-copy README.md MineHeads-v0.2.5-Windows\README.txt
+mkdir FallingHeads-v0.2.5-Windows
+copy target\release\falling-heads.exe FallingHeads-v0.2.5-Windows\
+xcopy assets FallingHeads-v0.2.5-Windows\assets /E /I
+copy README.md FallingHeads-v0.2.5-Windows\README.txt
 
 # Create ZIP
-Compress-Archive -Path MineHeads-v0.2.5-Windows -DestinationPath MineHeads-v0.2.5-Windows.zip
+Compress-Archive -Path FallingHeads-v0.2.5-Windows -DestinationPath FallingHeads-v0.2.5-Windows.zip
 
 # Upload to itch.io or GitHub!
 ```

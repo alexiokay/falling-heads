@@ -499,3 +499,31 @@ pub(super) fn update_occupancy(
         }
     }
 }
+
+/// Turns water near a requested point into ice (ICEAGE power).
+pub(super) fn freeze_requests(
+    mut requests: MessageReader<super::FreezeWaterNear>,
+    mut world: ResMut<FluidWorld>,
+    occupancy: Res<FluidOccupancy>,
+) {
+    for request in requests.read() {
+        let water: Vec<Cell> = world
+            .cells
+            .iter()
+            .filter(|(p, v)| {
+                v.kind == Liquid::Water
+                    && v.amount > 0
+                    && Vec2::new(p.0 as f32, p.1 as f32).distance(request.center / 64.0)
+                        <= request.radius / 64.0
+            })
+            .map(|(p, _)| *p)
+            .collect();
+        let frozen = water
+            .into_iter()
+            .filter(|p| world.freeze(*p, request.ticks, &occupancy.0))
+            .count();
+        if frozen > 0 {
+            info!("Ice age froze {frozen} water cells");
+        }
+    }
+}

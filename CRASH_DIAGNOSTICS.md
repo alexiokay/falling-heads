@@ -1,6 +1,6 @@
 # Local crash diagnostics
 
-Use the **MineHeads - Play** desktop shortcut. Every launch creates a separate
+Use the **Falling Heads - Play** desktop shortcut. Every launch creates a separate
 `logs/session-...` directory in the game folder. Nothing is uploaded.
 
 - `launcher.json`: exact build/hash, process ID, start/end time and Windows exit code.
@@ -31,7 +31,7 @@ stdout/stderr and session history are not automatically pruned.
 ## Existing evidence inspected on 26 October 2026
 
 The old shortcut did not redirect console output. Windows Application event 1000
-records a MineHeads crash on 24 October at 04:12:22, build
+records a Falling Heads crash on 24 October at 04:12:22, build
 `20261024-035006-4bb3b7c7b7`, exception `0xc0000409`, offset `0x5b0a821`.
 That exit code alone does not identify the cause. No matching game dump was found
 in the user's CrashDumps folder.
@@ -45,10 +45,10 @@ New reports include memory headroom to help distinguish this from engine/GPU bug
 
 `--diagnostics-test-clean` and `--diagnostics-test-panic` run before graphics/audio
 initialization. The latter deliberately panics in an isolated process. Never use
-it on an existing player session. `tools/Run-MineHeadsSession.ps1` provides the same
+it on an existing player session. `tools/Run-FallingHeadsSession.ps1` provides the same
 monitor used by the launcher for these tests.
 
-Water visual regression: `tools/Test-MineHeadsOverhaul.ps1 -SkipBuild -Scene water`.
+Water visual regression: `tools/Test-FallingHeadsOverhaul.ps1 -SkipBuild -Scene water`.
 It compares fifteen dry/partially submerged/submerged faces at three sizes, two
 camera positions, and raster, DLSS and ray-traced renderer modes.
 

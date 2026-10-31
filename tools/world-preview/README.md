@@ -1,4 +1,4 @@
-# MineHeads world workbench
+# Falling Heads world workbench
 
 Run `tools/Start-WorldPreview.ps1 -Open`, then open `http://127.0.0.1:48119`.
 

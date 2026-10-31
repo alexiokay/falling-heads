@@ -2,7 +2,7 @@ param([switch]$SkipChecks)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 Set-Location $root
-if(-not $SkipChecks){& ./tools/Check-MineHeadsArchitecture.ps1}
+if(-not $SkipChecks){& ./tools/Check-FallingHeadsArchitecture.ps1}
 # Dependencies already use opt-level=3. Optimize only the application while
 # retaining the tested development ABI, assertions and full Windows PDBs.
 # This avoids rebuilding the engine merely to benchmark application optimization.

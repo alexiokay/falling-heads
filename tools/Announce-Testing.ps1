@@ -1,9 +1,9 @@
-# Speaks a short notice so you know automated MineHeads test runs are starting
+# Speaks a short notice so you know automated FallingHeads test runs are starting
 # or finished (their windows are usually hidden). Uses the built-in Windows voice.
-#   & .\tools\Announce-Testing.ps1 -Start   -> "Testing MineHeads"
-#   & .\tools\Announce-Testing.ps1 -End     -> "Ending testing MineHeads"
+#   & .\tools\Announce-Testing.ps1 -Start   -> "Testing Falling Heads"
+#   & .\tools\Announce-Testing.ps1 -End     -> "Ending testing Falling Heads"
 param([switch]$Start, [switch]$End, [string]$Text)
-$message = if ($Text) { $Text } elseif ($End) { 'Ending testing MineHeads' } else { 'Testing MineHeads' }
+$message = if ($Text) { $Text } elseif ($End) { 'Ending testing Falling Heads' } else { 'Testing Falling Heads' }
 try {
     $voice = New-Object -ComObject SAPI.SpVoice
     $voice.Rate = 0
