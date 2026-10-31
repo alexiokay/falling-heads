@@ -4,6 +4,7 @@
 /logs
 *.log
 /falling-heads-*.png
+/mineheads-*.png
 /graphics-settings.json
 /game-settings.json
 # Python tool caches
