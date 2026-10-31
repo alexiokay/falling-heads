@@ -105,7 +105,7 @@ pub(super) fn spawn(
                     },
                     Transform::from_xyz(i as f32 * 64., 0., -10.),
                     Visibility::Inherited,
-                    solid(Vec2::splat(64.), Friction::new(0.1), Restitution::new(0.3)),
+                    solid(Vec3::splat(64.), Friction::new(0.1), Restitution::new(0.3)),
                 ))
                 .id();
             cube_with_top(
@@ -144,7 +144,11 @@ pub(super) fn spawn(
     commands.spawn((
         ChildOf(root),
         Transform::from_translation((centre - pivot).extend(0.)),
-        solid(half * 2., Friction::new(0.1), Restitution::new(0.5)),
+        solid(
+            (half * 2.).extend(64.),
+            Friction::new(0.1),
+            Restitution::new(0.5),
+        ),
     ));
     // Ceiling bracket and the swinging bell (Minecraft proportions x1.25).
     piece(

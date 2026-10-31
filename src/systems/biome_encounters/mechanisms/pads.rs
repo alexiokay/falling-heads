@@ -72,7 +72,7 @@ pub(super) fn spawn(
             },
             Transform::from_translation(centre.extend(-10.)),
             Visibility::Inherited,
-            solid(size, friction, restitution),
+            solid(size.extend(64.), friction, restitution),
         ))
         .id();
     for i in 0..(height / 64.) as i32 {

@@ -560,11 +560,13 @@ pub(crate) fn spawn_placement(
         Gadget::Notes | Gadget::Bell => super::music::spawn(commands, p, (anchor, member), art),
     }
 }
-/// A full static block collider on the Block layer, like the piston housing.
-pub(super) fn solid(size: Vec2, friction: Friction, restitution: Restitution) -> impl Bundle {
+/// A static collider on the Block layer, like the piston housing. `size` is in
+/// the entity's own units: Avian multiplies it by the entity scale, so an entity
+/// already scaled to block size passes `Vec3::ONE`, not 64.
+pub(super) fn solid(size: Vec3, friction: Friction, restitution: Restitution) -> impl Bundle {
     (
         RigidBody::Static,
-        Collider::cuboid(size.x, size.y, 64.),
+        Collider::cuboid(size.x, size.y, size.z),
         CollisionLayers::new(GameLayer::Block, GameLayer::Block.filters()),
         friction,
         restitution,

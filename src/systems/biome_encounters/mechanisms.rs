@@ -330,7 +330,8 @@ fn spawn_selected(commands: &mut Commands, site: Site, art: &MachineArt, slime: 
                 MeshMaterial3d(art.side.clone()),
                 Transform::from_translation(floor + Vec3::Y * 64.).with_scale(Vec3::splat(64.)),
                 RigidBody::Static,
-                Collider::cuboid(64., 64., 64.),
+                // Unit collider: the scale of 64 makes it exactly one block.
+                Collider::cuboid(1., 1., 1.),
                 CollisionLayers::new(GameLayer::Block, GameLayer::Block.filters()),
                 Friction::new(0.1),
                 Restitution::new(0.3),

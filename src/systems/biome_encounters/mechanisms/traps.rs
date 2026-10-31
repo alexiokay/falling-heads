@@ -129,7 +129,7 @@ pub(super) fn spawn(
                 },
                 Transform::from_translation(centre.extend(-10.)),
                 Visibility::Inherited,
-                solid(Vec2::splat(64.), Friction::new(0.1), Restitution::new(0.3)),
+                solid(Vec3::splat(64.), Friction::new(0.1), Restitution::new(0.3)),
             ))
             .id();
         cube_with_top(

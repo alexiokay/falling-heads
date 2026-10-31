@@ -73,7 +73,7 @@ pub(super) fn spawn(
             art.magma.clone()
         }),
         Transform::from_xyz(0., -32., -10.).with_scale(Vec3::splat(64.)),
-        solid(Vec2::splat(64.), Friction::new(0.3), Restitution::new(0.2)),
+        solid(Vec3::ONE, Friction::new(0.3), Restitution::new(0.2)),
     ));
     for i in 0..p.len {
         piece(

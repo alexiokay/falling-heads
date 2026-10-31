@@ -153,9 +153,9 @@ pub fn run(w: &mut World) {
         })
         .collect();
     let mut bodies: Vec<(Entity, Vec2, Vec2, String)> = w
-        .query_filtered::<Body, Without<Flying>>()
+        .query_filtered::<Body, (Without<Flying>, Or<(With<Hero>, With<Villager>, With<Enemy>)>)>()
         .iter(w)
-        .filter(|(_, _, v, ..)| v.0.length() < 3.0)
+        .filter(|(_, _, v, ..)| v.0.y.abs() < 3.0)
         .map(|(e, t, _, aabb, hero, villager, enemy, footprint, body, gravity, parked, children, holds)| {
             let (center, half) = bounds(t, aabb, 30.0);
             let kind = if hero {
@@ -186,12 +186,25 @@ pub fn run(w: &mut World) {
     bodies.extend(
         w.query_filtered::<(Entity, &Transform, &LinearVelocity, Option<&Aabb>), With<Drop>>()
             .iter(w)
-            .filter(|(_, _, v, _)| v.0.length() < 3.0)
+            .filter(|(_, _, v, _)| v.0.y.abs() < 3.0)
             .map(|(e, t, _, aabb)| {
                 let (center, half) = bounds(t, aabb, 16.0);
                 (e, center, half, "drop".to_string())
             }),
     );
+    // Only bodies over loaded terrain count: far ones wait for their chunk on purpose.
+    let loaded: HashMap<Entity, bool> = {
+        let chunks = w.resource::<crate::components::chunk::LoadedChunks>();
+        bodies
+            .iter()
+            .map(|(e, c, h, _)| {
+                let below = *c - Vec2::Y * (h.y + 32.0);
+                let (x, y) =
+                    crate::components::chunk::world_to_chunk_coords(below.x, below.y, 64.0);
+                (*e, chunks.is_loaded(x, y))
+            })
+            .collect()
+    };
     // Water the fluid simulation has at each body (it floats bodies even where none is drawn).
     let water: HashMap<Entity, (bool, bool)> = {
         let fluids = w.get_resource::<crate::systems::fluids::FluidWorld>();
@@ -204,25 +217,29 @@ pub fn run(w: &mut World) {
             })
             .collect()
     };
-    // Physics colliders that are not terrain blocks, with their component names.
-    let collider_ids: Vec<(Entity, Vec2)> = w
-        .query_filtered::<(Entity, &GlobalTransform), (With<avian3d::prelude::Collider>, Without<Block>)>()
+    // Physics colliders that are not terrain blocks, with their bounding boxes.
+    let colliders: Vec<(Entity, Vec2, Vec2, String)> = w
+        .query_filtered::<(
+            Entity,
+            &avian3d::prelude::ColliderAabb,
+            Option<&avian3d::prelude::RigidBody>,
+            Option<&Name>,
+            Has<avian3d::prelude::Sensor>,
+            Has<Hero>,
+            Has<Villager>,
+            Option<&Enemy>,
+        ), Without<Block>>()
         .iter(w)
-        .map(|(e, t)| (e, t.translation().truncate()))
-        .collect();
-    let colliders: Vec<(Entity, Vec2, String)> = collider_ids
-        .into_iter()
-        .map(|(e, c)| {
-            let names: Vec<String> = w
-                .inspect_entity(e)
-                .map(|it| {
-                    it.map(|(_, info)| info.name().shortname().to_string())
-                        .filter(|n| !n.starts_with("Global") && !n.contains("Visibility"))
-                        .take(14)
-                        .collect()
-                })
-                .unwrap_or_default();
-            (e, c, names.join(","))
+        .map(|(e, aabb, body, name, sensor, hero, villager, enemy)| {
+            let (min, max) = (aabb.min.truncate(), aabb.max.truncate());
+            let what = format!(
+                "body {body:?} name {:?} sensor {sensor} hero {hero} villager {villager} enemy {:?} size {:.0}x{:.0}",
+                name.map(|n| n.as_str()),
+                enemy.map(|e| e.enemy_type),
+                max.x - min.x,
+                max.y - min.y
+            );
+            (e, min, max, what)
         })
         .collect();
     let mut p = w.resource_mut::<Probe>();
@@ -238,11 +255,14 @@ pub fn run(w: &mut World) {
     for (entity, center, half, kind) in bodies {
         let at = center.extend(0.0);
         let (seen, since) = *p.still.entry(entity).or_insert((at, now));
-        if seen.distance(at) > 3.0 {
+        if (seen.y - at.y).abs() > 2.0 || (seen.x - at.x).abs() > 900.0 {
             p.still.insert(entity, (at, now));
             continue;
         }
         if now - since < REST || p.reported.contains(&entity) {
+            continue;
+        }
+        if !loaded.get(&entity).copied().unwrap_or(false) {
             continue;
         }
         let feet = center.y - half.y;
@@ -286,12 +306,24 @@ pub fn run(w: &mut World) {
             if !l.contains("mid-air") {
                 return l;
             }
-            let colliders: Vec<String> = colliders
+            let feet = center.y - half.y;
+            let under: Vec<String> = colliders
                 .iter()
-                .filter(|(_, c, _)| c.distance(center) < 260.0)
-                .map(|(e, c, names)| format!("{e:?}@({:.0},{:.0})[{names}]", c.x, c.y))
+                .filter(|(e, min, max, _)| {
+                    *e != entity
+                        && min.x <= center.x + half.x
+                        && max.x >= center.x - half.x
+                        && max.y >= feet - 10.0
+                        && min.y <= feet + 4.0
+                })
+                .map(|(e, min, max, what)| {
+                    format!(
+                        "{e:?} box ({:.0},{:.0})-({:.0},{:.0}) {what}",
+                        min.x, min.y, max.x, max.y
+                    )
+                })
                 .collect();
-            format!("{l}; colliders near: {}", colliders.join(" | "))
+            format!("{l}; colliders under feet: {}", under.join(" | "))
         });
         if let Some(line) = line {
             eprintln!("[GHOST] {line}");

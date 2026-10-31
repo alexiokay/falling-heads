@@ -159,6 +159,19 @@ pub(crate) fn run(world: &mut World) {
             if !super::contraption_probe::run(world, anchor) {
                 return;
             }
+            // Every machine collider stays block-sized. A collider sized in world
+            // units on an entity already scaled to block size becomes a 64x larger
+            // invisible box that holds heads and items in mid-air.
+            let oversized: Vec<String> = world
+                .query_filtered::<(Entity, &avian3d::prelude::ColliderAabb), Without<Block>>()
+                .iter(world)
+                .filter(|(_, aabb)| {
+                    let size = aabb.max - aabb.min;
+                    size.x > 8. * 64. || size.y > 8. * 64.
+                })
+                .map(|(e, aabb)| format!("{e:?} {:?}", aabb.max - aabb.min))
+                .collect();
+            assert!(oversized.is_empty(), "Oversized colliders: {oversized:?}");
             eprintln!(
                 "[MECHANISM TEST] completed: closed/open gate, occupied safety, clear closure, slime extension/rebound/retraction, contraptions (slime pad, honey, dispenser, bubble columns, note blocks, bell stun, TNT tripwire)"
             );
