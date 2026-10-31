@@ -611,6 +611,7 @@ fn camera_follow_action_center(
     hero_query: Query<&Transform, With<Hero>>,
     mut camera_query: Query<&mut Transform, (With<Camera3d>, Without<Hero>)>,
     time: Res<Time>,
+    mut shake: Option<ResMut<crate::systems::extra_powers::CameraShake>>,
 ) {
     let Ok(_hero_transform) = hero_query.single() else {
         return;
@@ -641,11 +642,21 @@ fn camera_follow_action_center(
         let target_camera_x = target_x + offset_x;
         let target_camera_y = target_y + offset_y;
 
+        // Screen shake rides on top of the follow: undo last frame's offset first.
+        if let Some(shake) = shake.as_mut() {
+            camera_transform.translation -= shake.applied.extend(0.0);
+        }
+
         camera_transform.translation.x +=
             (target_camera_x - camera_transform.translation.x) * lerp_factor;
         camera_transform.translation.y +=
             (target_camera_y - camera_transform.translation.y) * lerp_factor;
         camera_transform.translation.z = offset_z;
+        if let Some(shake) = shake.as_mut() {
+            let offset = shake.offset(time.elapsed_secs());
+            camera_transform.translation += offset.extend(0.0);
+            shake.applied = offset;
+        }
 
         // Update camera rotation to always look at action center (Z=0 plane)
         // CRITICAL FIX: Use look_to instead of looking_at to avoid position snapping

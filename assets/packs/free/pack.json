@@ -10,6 +10,7 @@
     "Biome music, rocket, laser, burst, shield and roulette sounds: alexiokay (AI-assisted)",
     "Lootbox icons: alexiokay (AI-generated, prompts in textures/ui/lootbox/prompts.txt)",
     "Arrow model: alexiokay (Blender)",
+    "Rain, snow, hearts and XP bar: alexiokay (tools/Draw-FreePackArt.ps1)",
     "Everything else: generated stand-ins from tools/Make-FreePack.ps1"
   ]
 }

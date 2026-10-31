@@ -25,6 +25,8 @@ pub struct ExtraPowersPlugin;
 impl Plugin for ExtraPowersPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Fuss>()
+            .init_resource::<Quake>()
+            .init_resource::<CameraShake>()
             .init_resource::<Wind>()
             .init_resource::<IceAge>()
             .add_systems(Startup, setup)
@@ -44,6 +46,8 @@ impl Plugin for ExtraPowersPlugin {
                         golem_ai.after(crate::plugins::physics_plugin::PhysicsSet::AI),
                         blow_wind,
                         black_holes,
+                        quake_pulses,
+                        pearl_flight,
                         spin_parts,
                         spiral_matter,
                         ice_age,
@@ -70,6 +74,8 @@ struct Art {
     bee_face: Handle<Mesh>,
     bee: Handle<StandardMaterial>,
     hole: HoleArt,
+    pearl: Handle<StandardMaterial>,
+    dust: Handle<Image>,
     sounds: Sounds,
 }
 
@@ -128,6 +134,7 @@ fn setup(
     let anvil = texture("textures/powers/anvil_side.png", false);
     let golem = texture("textures/powers/iron_golem.png", false);
     let bee = texture("textures/powers/bee.png", false);
+    let pearl = texture("textures/powers/ender_pearl.png", true);
     // Black hole layers: additive glow and swirls around a black core.
     let mut glow = |path: &str, color: Color, strength: f32| {
         materials.add(StandardMaterial {
@@ -183,6 +190,8 @@ fn setup(
         )),
         bee,
         hole,
+        pearl,
+        dust: server.load("textures/powers/quake_dust.png"),
         sounds: Sounds {
             anvil: sound("anvil_land"),
             golem_hit: sound("golem_hit"),
@@ -258,6 +267,8 @@ struct Fx {
     spin: f32,
     /// Scale gained per second (shockwaves and flashes grow as they fade).
     grow: f32,
+    /// Downward pull per second (debris arcs and falls).
+    gravity: f32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -286,6 +297,7 @@ fn spawn_fx(
             velocity,
             spin: 0.0,
             grow: 0.0,
+            gravity: 0.0,
         },
         Mesh3d(mesh.clone()),
         MeshMaterial3d(material),
@@ -314,6 +326,7 @@ fn fade_fx(
             commands.entity(e).despawn();
             continue;
         }
+        f.velocity.y -= f.gravity * dt;
         t.translation += f.velocity * dt;
         t.rotate_z(f.spin * dt);
         if f.grow != 0.0 {
@@ -358,6 +371,48 @@ impl IceAge {
     /// Whether the ice age is on: terrain landings then keep heads on ice.
     pub fn active(&self, now: f32) -> bool {
         now < self.until
+    }
+}
+
+/// EARTHQUAKE: pulses every [`QUAKE_PULSE`] seconds until `until`.
+#[derive(Resource, Default)]
+struct Quake {
+    until: f32,
+    next_pulse: f32,
+}
+
+const QUAKE_SECONDS: f32 = 4.0;
+const QUAKE_PULSE: f32 = 0.5;
+const QUAKE_RADIUS: f32 = 520.0;
+
+/// Screen shake, added on top of the camera follow (`camera_follow_action_center`).
+#[derive(Resource, Default)]
+pub struct CameraShake {
+    until: f32,
+    length: f32,
+    strength: f32,
+    /// Offset added to the camera last frame, removed before the next follow step.
+    pub applied: Vec2,
+}
+
+impl CameraShake {
+    pub fn start(&mut self, now: f32, seconds: f32, strength: f32) {
+        self.until = now + seconds;
+        self.length = seconds;
+        self.strength = strength;
+    }
+
+    /// This frame's offset in world units; it fades out over the shake.
+    pub fn offset(&self, now: f32) -> Vec2 {
+        if now >= self.until || self.length <= 0.0 {
+            return Vec2::ZERO;
+        }
+        let fade = (self.until - now) / self.length;
+        let wobble = Vec2::new(
+            (now * 47.0).sin() + (now * 83.0).sin() * 0.5,
+            (now * 59.0).cos() + (now * 97.0).sin() * 0.5,
+        );
+        wobble * self.strength * fade / 1.5
     }
 }
 
@@ -1018,6 +1073,7 @@ fn spawn_burst(
             velocity: Vec3::ZERO,
             spin: 0.0,
             grow,
+            gravity: 0.0,
         },
         Mesh3d(mesh.clone()),
         MeshMaterial3d(material),
@@ -1202,21 +1258,18 @@ fn spot_is_free(grid: &SpatialHash, blocks: &Query<&Transform, With<Block>>, p: 
 fn start_pearl(
     mut commands: Commands,
     mut powers: MessageReader<PowerActivated>,
+    time: Res<Time>,
     art: Res<Art>,
     grid: Res<SpatialHash>,
     blocks: Query<&Transform, With<Block>>,
-    mut hero: Query<
-        (&mut Transform, &mut Position, &mut LinearVelocity),
-        (With<Hero>, Without<Block>),
-    >,
+    hero: Query<(Entity, &Transform), (With<Hero>, Without<Block>)>,
     mut notice: ResMut<PowerNotice>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for power in powers.read() {
         if power.command.command_type != P::Pearl {
             continue;
         }
-        let Ok((mut t, mut position, mut v)) = hero.single_mut() else {
+        let Ok((hero, t)) = hero.single() else {
             continue;
         };
         let from = t.translation;
@@ -1232,26 +1285,143 @@ fn start_pearl(
             announce(&mut notice, "PEARL found no free spot".into());
             continue;
         };
-        let to = to.extend(from.z);
-        t.translation = to;
-        position.0 = to;
-        v.0 = Vec3::ZERO;
-        for i in 0..12 {
-            let p = from.lerp(to, i as f32 / 11.0) + Vec3::Z * 40.0;
+        // The pearl flies first; the hero follows when it lands.
+        commands.spawn((
+            PearlFlight {
+                hero,
+                from,
+                to: to.extend(from.z),
+                born: time.elapsed_secs(),
+            },
+            Mesh3d(art.quad.clone()),
+            MeshMaterial3d(art.pearl.clone()),
+            Transform::from_translation(from + Vec3::Z * 45.0).with_scale(Vec3::splat(26.0)),
+            bevy::light::NotShadowCaster,
+        ));
+        announce(&mut notice, by("ENDER PEARL", &power.command.username));
+    }
+}
+
+/// An ender pearl in flight; the hero teleports where it lands.
+#[derive(Component)]
+struct PearlFlight {
+    hero: Entity,
+    from: Vec3,
+    to: Vec3,
+    born: f32,
+}
+
+const PEARL_FLIGHT: f32 = 0.45;
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn pearl_flight(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut pearls: Query<(Entity, &PearlFlight, &mut Transform), Without<Hero>>,
+    mut heroes: Query<(&mut Transform, &mut Position, &mut LinearVelocity), With<Hero>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let now = time.elapsed_secs();
+    let mut rng = rand::rng();
+    let ender = |rng: &mut rand::rngs::ThreadRng| {
+        if rng.random_bool(0.5) {
+            Color::srgba(0.75, 0.3, 1.0, 0.9)
+        } else {
+            Color::srgba(0.25, 0.95, 0.75, 0.9)
+        }
+    };
+    for (e, pearl, mut t) in &mut pearls {
+        let k = ((now - pearl.born) / PEARL_FLIGHT).clamp(0.0, 1.0);
+        let arc = 90.0 + pearl.from.distance(pearl.to) * 0.25;
+        let at = pearl.from.lerp(pearl.to, k) + Vec3::Y * arc * 4.0 * k * (1.0 - k);
+        t.translation = at + Vec3::Z * 45.0;
+        t.rotate_z(time.delta_secs() * 12.0);
+        // Sparkling trail behind the pearl.
+        for _ in 0..2 {
+            let jitter = Vec3::new(
+                rng.random_range(-8.0..8.0),
+                rng.random_range(-8.0..8.0),
+                40.0,
+            );
             spawn_fx(
                 &mut commands,
                 &mut materials,
                 &art.quad,
-                Color::srgba(0.75, 0.3, 1.0, 0.85),
-                p,
-                Vec2::splat(18.0),
-                i as f32,
-                Vec3::Y * 30.0,
-                0.7,
+                ender(&mut rng),
+                at + jitter,
+                Vec2::splat(rng.random_range(6.0..12.0)),
+                rng.random_range(0.0..6.0),
+                Vec3::new(0.0, rng.random_range(-20.0..20.0), 0.0),
+                0.45,
             );
         }
-        play(&mut commands, &art.sounds.pearl, to, 0.8, 1.0);
-        announce(&mut notice, by("ENDER PEARL", &power.command.username));
+        if k < 1.0 {
+            continue;
+        }
+        commands.entity(e).despawn();
+        let Ok((mut ht, mut position, mut v)) = heroes.get_mut(pearl.hero) else {
+            continue;
+        };
+        let left = ht.translation;
+        ht.translation = pearl.to;
+        position.0 = pearl.to;
+        v.0 = Vec3::ZERO;
+        // Arrival: flash, a purple ring and sparks flying out.
+        let arrive = pearl.to + Vec3::Z * 40.0;
+        let flash = Color::srgba(0.85, 0.6, 1.0, 1.0);
+        spawn_burst(
+            &mut commands,
+            &mut materials,
+            &art.hole.disc,
+            flash,
+            arrive,
+            70.0,
+            0.22,
+            7.0,
+        );
+        let ring = Color::srgba(0.55, 0.95, 0.8, 0.9);
+        spawn_burst(
+            &mut commands,
+            &mut materials,
+            &art.hole.ring,
+            ring,
+            arrive,
+            30.0,
+            0.4,
+            7.5,
+        );
+        for i in 0..18 {
+            let a = i as f32 * std::f32::consts::TAU / 18.0;
+            spawn_fx(
+                &mut commands,
+                &mut materials,
+                &art.quad,
+                ender(&mut rng),
+                arrive,
+                Vec2::new(16.0, 5.0),
+                a,
+                Vec3::new(a.cos(), a.sin(), 0.0) * rng.random_range(260.0..420.0),
+                0.5,
+            );
+        }
+        // Departure: particles fall into the spot the hero left.
+        for i in 0..14 {
+            let a = i as f32 * std::f32::consts::TAU / 14.0;
+            let out = Vec3::new(a.cos(), a.sin(), 0.0) * 90.0;
+            spawn_fx(
+                &mut commands,
+                &mut materials,
+                &art.quad,
+                ender(&mut rng),
+                left + out + Vec3::Z * 40.0,
+                Vec2::splat(9.0),
+                a,
+                -out / 0.35,
+                0.35,
+            );
+        }
+        play(&mut commands, &art.sounds.pearl, pearl.to, 0.8, 1.0);
     }
 }
 
@@ -1271,7 +1441,52 @@ fn is_ore(kind: BlockType) -> bool {
 fn start_quake(
     mut commands: Commands,
     mut powers: MessageReader<PowerActivated>,
+    time: Res<Time>,
     art: Res<Art>,
+    hero: Query<&Transform, With<Hero>>,
+    mut quake: ResMut<Quake>,
+    mut shake: ResMut<CameraShake>,
+    mut notice: ResMut<PowerNotice>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let now = time.elapsed_secs();
+    for power in powers.read() {
+        if power.command.command_type != P::Quake {
+            continue;
+        }
+        let Ok(t) = hero.single() else {
+            continue;
+        };
+        quake.until = now + QUAKE_SECONDS;
+        quake.next_pulse = now;
+        shake.start(now, QUAKE_SECONDS, 14.0);
+        // A dusty shockwave rolls out over the ground.
+        let ring = Color::srgba(0.85, 0.65, 0.4, 0.8);
+        let center = t.translation - Vec3::Y * 30.0;
+        let grow = ((QUAKE_RADIUS * 2.0 / 50.0).powf(1.0 / 36.0) - 1.0) * 60.0;
+        spawn_burst(
+            &mut commands,
+            &mut materials,
+            &art.hole.ring,
+            ring,
+            center,
+            50.0,
+            0.6,
+            grow,
+        );
+        play(&mut commands, &art.sounds.quake, t.translation, 0.9, 0.55);
+        announce(&mut notice, by("EARTHQUAKE", &power.command.username));
+    }
+}
+
+/// Every half second while a quake lasts: blocks crack, ores shake loose, dust
+/// and rocks burst out of the ground, bodies bounce and enemies are staggered.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn quake_pulses(
+    mut commands: Commands,
+    time: Res<Time>,
+    art: Res<Art>,
+    mut quake: ResMut<Quake>,
     grid: Res<SpatialHash>,
     blocks: Query<
         (
@@ -1281,56 +1496,147 @@ fn start_quake(
         ),
         With<Block>,
     >,
-    mut actors: Query<
-        (&Transform, &mut LinearVelocity, Has<Hero>),
-        (Actors, Without<Block>, Without<Flying>),
+    hero: Query<&Transform, (With<Hero>, Without<Block>)>,
+    mut bodies: Query<
+        (Entity, &Transform, &mut LinearVelocity, Has<Enemy>),
+        (
+            Or<(With<Hero>, With<Villager>, With<Enemy>, With<Drop>)>,
+            Without<Block>,
+            Without<Flying>,
+        ),
     >,
     mut destroyed: MessageWriter<BlockDestroyed>,
     mut damaged: MessageWriter<BlockDamaged>,
-    mut notice: ResMut<PowerNotice>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for power in powers.read() {
-        if power.command.command_type != P::Quake {
-            continue;
-        }
-        let Some(center) = actors.iter().find(|a| a.2).map(|a| a.0.translation) else {
-            continue;
-        };
-        const RADIUS: f32 = 320.0;
-        let mut broken = HashSet::new();
-        let reach = Vec2::splat(RADIUS);
-        for block in grid.rect_iter(center.xy() - reach, center.xy() + reach) {
-            let Ok((t, kind, tile)) = blocks.get(block) else {
-                continue;
-            };
-            if t.translation.xy().distance(center.xy()) > RADIUS {
-                continue;
-            }
-            if is_ore(*kind) {
-                // Ores shake loose as drops.
-                crate::plugins::gameplay_plugin::break_block(
-                    &mut commands,
-                    &mut destroyed,
-                    &mut broken,
-                    block,
-                    *kind,
-                    t.translation,
-                    tile.copied(),
-                );
-            } else {
-                damaged.write(BlockDamaged {
-                    entity: block,
-                    damage: 1,
-                    remaining_health: 0,
-                });
-            }
-        }
-        for (_, mut v, _) in &mut actors {
-            v.y = v.y.max(320.0);
-        }
-        play(&mut commands, &art.sounds.quake, center, 0.9, 0.55);
-        announce(&mut notice, by("EARTHQUAKE", &power.command.username));
+    let now = time.elapsed_secs();
+    if now >= quake.until || now < quake.next_pulse {
+        return;
     }
+    quake.next_pulse = now + QUAKE_PULSE;
+    let Ok(center) = hero.single().map(|t| t.translation) else {
+        return;
+    };
+    let mut rng = rand::rng();
+    let reach = Vec2::splat(QUAKE_RADIUS);
+    let nearby: Vec<(
+        Entity,
+        Vec3,
+        BlockType,
+        Option<crate::systems::biome_content::Tile>,
+    )> = grid
+        .rect_iter(center.xy() - reach, center.xy() + reach)
+        .filter_map(|e| {
+            blocks
+                .get(e)
+                .ok()
+                .map(|(t, k, tile)| (e, t.translation, *k, tile.copied()))
+        })
+        .filter(|(_, p, ..)| p.xy().distance(center.xy()) <= QUAKE_RADIUS)
+        .collect();
+    let cells: HashSet<(i32, i32)> = nearby
+        .iter()
+        .map(|(_, p, ..)| ((p.x / 64.0).round() as i32, (p.y / 64.0).round() as i32))
+        .collect();
+    let mut broken = HashSet::new();
+    let mut surface = Vec::new();
+    for (block, p, kind, tile) in &nearby {
+        let cell = ((p.x / 64.0).round() as i32, (p.y / 64.0).round() as i32);
+        let exposed = !cells.contains(&(cell.0, cell.1 + 1));
+        if exposed {
+            surface.push(*p);
+        }
+        if !rng.random_bool(if exposed { 0.35 } else { 0.12 }) {
+            continue;
+        }
+        if is_ore(*kind) {
+            // Ores shake loose as drops.
+            crate::plugins::gameplay_plugin::break_block(
+                &mut commands,
+                &mut destroyed,
+                &mut broken,
+                *block,
+                *kind,
+                *p,
+                *tile,
+            );
+        } else {
+            damaged.write(BlockDamaged {
+                entity: *block,
+                damage: 1,
+                remaining_health: 0,
+            });
+        }
+    }
+    // Dust bursts and flying rocks along the ground.
+    for _ in 0..surface.len().min(9) {
+        let p = surface[rng.random_range(0..surface.len())] + Vec3::new(0.0, 34.0, 30.0);
+        let tone = rng.random_range(0.45..0.7);
+        let dust = materials.add(StandardMaterial {
+            base_color: Color::srgba(tone + 0.15, tone, tone - 0.1, 0.75),
+            base_color_texture: Some(art.dust.clone()),
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+        commands.spawn((
+            Fx {
+                life: 1.1,
+                max: 1.1,
+                velocity: Vec3::new(rng.random_range(-30.0..30.0), 60.0, 0.0),
+                spin: rng.random_range(-1.0..1.0),
+                grow: 0.9,
+                gravity: 0.0,
+            },
+            Mesh3d(art.quad.clone()),
+            MeshMaterial3d(dust),
+            Transform::from_translation(p).with_scale(Vec3::splat(rng.random_range(50.0..80.0))),
+            bevy::light::NotShadowCaster,
+        ));
+        for _ in 0..2 {
+            let rock = materials.add(StandardMaterial {
+                base_color: Color::srgb(tone, tone * 0.8, tone * 0.6),
+                ..default()
+            });
+            commands.spawn((
+                Fx {
+                    life: 1.0,
+                    max: 1.0,
+                    velocity: Vec3::new(
+                        rng.random_range(-160.0..160.0),
+                        rng.random_range(300.0..520.0),
+                        0.0,
+                    ),
+                    spin: rng.random_range(-8.0..8.0),
+                    grow: 0.0,
+                    gravity: 1100.0,
+                },
+                Mesh3d(art.cube.clone()),
+                MeshMaterial3d(rock),
+                Transform::from_translation(p).with_scale(Vec3::splat(rng.random_range(8.0..15.0))),
+            ));
+        }
+    }
+    // Everything on the ground bounces; enemies are staggered.
+    for (e, t, mut v, enemy) in &mut bodies {
+        if t.translation.xy().distance(center.xy()) > QUAKE_RADIUS * 1.3 || v.y.abs() > 60.0 {
+            continue;
+        }
+        v.y = rng.random_range(200.0..340.0);
+        v.x += rng.random_range(-120.0..120.0);
+        if enemy {
+            commands
+                .entity(e)
+                .try_insert(crate::systems::biome_encounters::Stunned { remaining: 0.6 });
+        }
+    }
+    play(
+        &mut commands,
+        &art.sounds.quake,
+        center,
+        0.35,
+        rng.random_range(0.4..0.55),
+    );
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]

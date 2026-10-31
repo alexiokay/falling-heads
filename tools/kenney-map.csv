@@ -381,3 +381,4 @@ textures/powers/blackhole_glow.png,fx:light_01.png,size=256x256
 textures/powers/blackhole_swirl.png,fx:twirl_02.png,size=256x256
 textures/powers/blackhole_disk.png,fx:twirl_03.png,size=256x256
 textures/powers/blackhole_spark.png,fx:circle_05.png,size=64x64
+textures/powers/quake_dust.png,fx:smoke_04.png,size=128x128
