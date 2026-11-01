@@ -83,6 +83,7 @@ pub(crate) mod slime_rift;
 
 pub(crate) mod asset_packs;
 pub(crate) mod character_select;
+pub(crate) mod combos;
 pub(crate) mod extra_powers;
 pub(crate) mod game_modes;
 pub(crate) mod play_styles;

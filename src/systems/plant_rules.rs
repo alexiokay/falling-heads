@@ -144,6 +144,7 @@ mod tests {
             .init_resource::<LoadedChunks>()
             .insert_resource(SpatialHash::new(256.))
             .add_message::<BlockDamaged>()
+            .add_message::<crate::events::block_events::HeadHitBlock>()
             .add_systems(Update, maintain);
         let ground = app
             .world_mut()

@@ -226,6 +226,7 @@ mod regression_tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_message::<BlockDamaged>()
+            .add_message::<crate::events::block_events::HeadHitBlock>()
             .insert_resource(Assets::<Mesh>::default())
             .insert_resource(Assets::<CrackMaterial>::default())
             .insert_resource(DamageStageTextures {

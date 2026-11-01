@@ -26,6 +26,7 @@ mod continuous_contact_tests {
             .init_resource::<DamageCooldown>()
             .insert_resource(SpatialHash::new(256.))
             .add_message::<BlockDamaged>()
+            .add_message::<crate::events::block_events::HeadHitBlock>()
             .add_message::<EntityDamaged>();
         install_terrain_contacts(&mut app);
         let front = app
@@ -320,6 +321,7 @@ mod snow_contact_tests {
                 .init_resource::<TerrainStepStarts>()
                 .insert_resource(SpatialHash::new(256.))
                 .add_message::<BlockDamaged>()
+                .add_message::<crate::events::block_events::HeadHitBlock>()
                 .add_message::<EntityDamaged>()
                 .add_systems(Update, check_all_entity_block_collisions);
             let block = app
@@ -384,6 +386,7 @@ mod snow_contact_tests {
                 .init_resource::<TerrainStepStarts>()
                 .insert_resource(SpatialHash::new(256.))
                 .add_message::<BlockDamaged>()
+                .add_message::<crate::events::block_events::HeadHitBlock>()
                 .add_message::<EntityDamaged>()
                 .add_systems(Update, check_all_entity_block_collisions);
             let block = app
@@ -442,6 +445,7 @@ mod snow_contact_tests {
                 .init_resource::<TerrainStepStarts>()
                 .insert_resource(SpatialHash::new(256.))
                 .add_message::<BlockDamaged>()
+                .add_message::<crate::events::block_events::HeadHitBlock>()
                 .add_message::<EntityDamaged>()
                 .add_systems(Update, check_all_entity_block_collisions);
             let block = app
@@ -563,6 +567,7 @@ mod grounded_snow_tests {
             .init_resource::<DamageCooldown>()
             .insert_resource(SpatialHash::new(256.))
             .add_message::<BlockDamaged>()
+            .add_message::<crate::events::block_events::HeadHitBlock>()
             .add_message::<EntityDamaged>();
         install_terrain_contacts(&mut app);
         let blocks = (-4..=4)

@@ -57,6 +57,8 @@ pub struct GameplayPlugin;
 impl Plugin for GameplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<BlockDamaged>()
+            .add_message::<crate::events::block_events::HeadHitBlock>()
+            .add_message::<crate::events::block_events::BonusDrop>()
             .add_message::<BlockDestroyed>()
             .add_message::<ResourceCollected>()
             .add_message::<EntityDamaged>()
@@ -384,17 +386,24 @@ fn update_block_visuals(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // Bevy system parameters
 fn spawn_resources_from_destroyed_blocks(
     mut commands: Commands,
     mut destroy_events: MessageReader<BlockDestroyed>,
+    mut bonus_drops: MessageReader<crate::events::block_events::BonusDrop>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     resource_textures: Res<crate::resources::asset_handles::ResourceTextures>,
     mut drop_materials: Local<std::collections::HashMap<ResourceType, Handle<StandardMaterial>>>,
     mut drop_mesh: Local<Option<Handle<Mesh>>>,
 ) {
-    for event in destroy_events.read() {
-        let (resource_type, texture) = match event.block_type {
+    let drops: Vec<(BlockType, Vec3)> = destroy_events
+        .read()
+        .map(|e| (e.block_type, e.position))
+        .chain(bonus_drops.read().map(|b| (b.block_type, b.position)))
+        .collect();
+    for (block_type, position) in drops {
+        let (resource_type, texture) = match block_type {
             BlockType::Coal => (ResourceType::Coal, resource_textures.coal.clone()),
             BlockType::Iron => (ResourceType::Iron, resource_textures.iron_ingot.clone()),
             BlockType::Gold => (ResourceType::Gold, resource_textures.gold_ingot.clone()),
@@ -429,7 +438,7 @@ fn spawn_resources_from_destroyed_blocks(
 
         // Random Z offset to prevent Z-fighting when resources stack
         let z_offset = rand::random::<f32>() * 2.0; // 0.0 to 2.0 range
-        let drop_position = Vec3::new(event.position.x, event.position.y, 5.0 + z_offset);
+        let drop_position = Vec3::new(position.x, position.y, 5.0 + z_offset);
 
         commands.spawn((
             Resource { resource_type },

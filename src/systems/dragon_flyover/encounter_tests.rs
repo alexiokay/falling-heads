@@ -20,6 +20,7 @@ fn shared_heat_ignites_and_propagation_cannot_cross_four_cells() {
         })
         .add_message::<TerrainHeat>()
         .add_message::<crate::events::block_events::BlockDamaged>()
+        .add_message::<crate::events::block_events::HeadHitBlock>()
         .add_message::<crate::events::damage_events::EntityDamaged>()
         .add_systems(Update, (apply_heat, ground_fire).chain());
     let line: Vec<_> = (0..10)
@@ -78,6 +79,7 @@ fn wet_or_rained_on_material_does_not_ignite_from_heat() {
         })
         .add_message::<TerrainHeat>()
         .add_message::<crate::events::block_events::BlockDamaged>()
+        .add_message::<crate::events::block_events::HeadHitBlock>()
         .add_systems(Update, apply_heat);
     app.world_mut().spawn((
         Block {
@@ -288,6 +290,7 @@ fn ground_flames_damage_destroy_and_spread_only_to_flammable_blocks() {
             breath: default(),
         })
         .add_message::<crate::events::block_events::BlockDamaged>()
+        .add_message::<crate::events::block_events::HeadHitBlock>()
         .add_message::<crate::events::block_events::BlockDestroyed>()
         .add_message::<crate::events::damage_events::EntityDamaged>()
         .add_message::<TerrainHeat>()

@@ -79,6 +79,10 @@ fn probe(world: &mut World) {
         crate::systems::slime_rift::probe::run(world);
         return;
     }
+    if std::env::args().any(|a| a == "--combo-test") {
+        crate::combo_probe::run(world);
+        return;
+    }
     if std::env::args().any(|a| a == "--character-test") {
         crate::character_probe::run(world);
         return;

@@ -108,6 +108,7 @@ pub(super) struct TerrainDamageContext<'w, 's> {
     breaking: Local<'s, std::collections::HashSet<Entity>>,
     time: Res<'w, Time<Virtual>>,
     ice_age: Option<Res<'w, crate::systems::extra_powers::IceAge>>,
+    hits: MessageWriter<'w, crate::events::block_events::HeadHitBlock>,
 }
 
 /// Actor/terrain collision uses authoritative positions and a swept local broad phase.
@@ -170,6 +171,7 @@ pub(super) fn check_all_entity_block_collisions(
         mut breaking,
         time,
         ice_age,
+        mut hits,
     } = context;
     let current_time = time.elapsed_secs();
     let ice_age_on = ice_age.is_some_and(|ice| ice.active(current_time));
@@ -262,6 +264,10 @@ pub(super) fn check_all_entity_block_collisions(
                 let e = candidates.remove(index);
                 bounds.remove(index);
                 breaking.insert(e);
+                hits.write(crate::events::block_events::HeadHitBlock {
+                    head: entity,
+                    block: e,
+                });
                 damage_events.write(BlockDamaged {
                     entity: e,
                     damage: 1,
@@ -485,6 +491,10 @@ pub(super) fn check_all_entity_block_collisions(
                 if !shrunk
                     && block_cooldown.can_damage(block_entity, current_time, BLOCK_DAMAGE_COOLDOWN)
                 {
+                    hits.write(crate::events::block_events::HeadHitBlock {
+                        head: entity,
+                        block: block_entity,
+                    });
                     damage_events.write(BlockDamaged {
                         entity: block_entity,
                         // Heavy heads hit harder when they land fast.

@@ -75,6 +75,13 @@ port. The address in use is shown under **Settings > Game modes** and written to
 `%APPDATA%\FallingHeads\api.json` (`{"url": ..., "port": ...}`) for tools such as
 VortiDeck. `FALLING_HEADS_API_PORT` forces one port.
 
+### Combo streaks
+Break blocks within 1.5 s of each other to build a combo. The counter climbs with the
+break notes; milestones at x10 (ON FIRE), x25 (UNSTOPPABLE) and x50 (FRENZY) add a
+shake and a glowing trail. XP from blocks is multiplied (x1.5 from 5, x2 from 10, x3 from
+25, capped) and long combos drop extra ores. Viewer heads keep their own combos; big
+ones are announced. A split twin's breaks count for its Splitter head.
+
 ### Play styles
 Each viewer chooses how their heads play the ball. The choice is remembered,
 so heads they spawn later use it too. The streamer cycles the hero's style with **C**, or picks

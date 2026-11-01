@@ -13,6 +13,8 @@ pub enum XpSource {
     MobKill,
     ResourceCollected,
     BlockBroken,
+    /// Extra XP from a combo streak's multiplier.
+    Combo,
 }
 
 /// Event fired when player levels up
