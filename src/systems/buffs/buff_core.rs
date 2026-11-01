@@ -215,12 +215,13 @@ fn apply_buff_scale_effects(
             Option<&PreGrowthScale>,
             Option<&GrowthPower>,
             Option<&crate::systems::extra_powers::Shrunk>,
+            Has<crate::components::play_style::Split>,
         ),
         (With<Buffable>, Without<MarkedForDeath>),
     >,
 ) {
     let now = time.map_or(0.0, |t| t.elapsed_secs());
-    for (e, buff, mut t, saved, growth, shrunk) in &mut actors {
+    for (e, buff, mut t, saved, growth, shrunk, split) in &mut actors {
         let stacks = growth.map(|g| g.stacks).or_else(|| {
             buff.filter(|b| b.buff_type == BuffType::Grow)
                 .map(|b| b.stacks)
@@ -231,13 +232,20 @@ fn apply_buff_scale_effects(
                 .entity(e)
                 .remove::<crate::systems::extra_powers::Shrunk>();
         }
-        if stacks.is_some() || shrinking {
+        if stacks.is_some() || shrinking || split {
             let base = saved.map_or(t.scale, |s| s.0);
             if saved.is_none() {
                 commands.entity(e).insert(PreGrowthScale(base));
             }
             let grow = stacks.map_or(1.0, |s| BuffType::Grow.scale_multiplier().powi(s as i32));
-            let desired = base * grow * if shrinking { SHRINK_SCALE } else { 1.0 };
+            let desired = base
+                * grow
+                * if shrinking { SHRINK_SCALE } else { 1.0 }
+                * if split {
+                    crate::components::play_style::SPLIT_SCALE
+                } else {
+                    1.0
+                };
             if t.scale != desired {
                 t.scale = desired;
             }

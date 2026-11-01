@@ -45,6 +45,7 @@ pub enum SettingsPage {
     General,
     Graphics,
     GameModes,
+    Character,
     Theme,
 }
 #[derive(Resource, Default)]

@@ -132,10 +132,16 @@ pub(super) fn check_all_entity_block_collisions(
             Has<crate::systems::extra_powers::Shrunk>,
         ),
         (
-            Or<(With<Hero>, With<Villager>, With<Enemy>)>,
+            Or<(
+                With<Hero>,
+                With<Villager>,
+                With<Enemy>,
+                With<crate::components::play_style::SplitTwin>,
+            )>,
             Without<Block>,
             Without<crate::components::enemy::Flying>,
             Without<crate::systems::slime_rift::RiftParked>,
+            Without<crate::components::play_style::TwinReturning>,
         ),
     >,
     block_query: Query<
@@ -429,6 +435,14 @@ pub(super) fn check_all_entity_block_collisions(
                             velocity.x = if velocity.x < 0. { -115. } else { 115. };
                         }
                     } else {
+                        // A Splitter splits on a hard landing (the play-style system decides).
+                        if style == crate::components::play_style::PlayStyle::Splitter
+                            && velocity.y < -crate::components::play_style::SPLIT_LANDING_SPEED
+                        {
+                            commands.entity(entity).try_insert(
+                                crate::components::play_style::SplitRequest { speed: -velocity.y },
+                            );
+                        }
                         velocity.y = style.floor_bounce(velocity.y, restitution.coefficient);
                         // Settled snowfall and full snow blocks share one response.
                         if *kind == BlockType::Snow || snow.is_some_and(|s| s.stage > 0) {

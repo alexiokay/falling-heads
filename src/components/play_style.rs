@@ -15,10 +15,19 @@ pub enum PlayStyle {
     Floaty,
     /// Grabs walls on contact, hangs on briefly, then wall-jumps up and away.
     Sticky,
+    /// Bounces like Bouncy; a hard landing splits it into two small heads
+    /// that merge back after a few seconds.
+    Splitter,
 }
 
 impl PlayStyle {
-    pub const ALL: [PlayStyle; 4] = [Self::Bouncy, Self::Heavy, Self::Floaty, Self::Sticky];
+    pub const ALL: [PlayStyle; 5] = [
+        Self::Bouncy,
+        Self::Heavy,
+        Self::Floaty,
+        Self::Sticky,
+        Self::Splitter,
+    ];
 
     pub fn parse(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
@@ -26,6 +35,7 @@ impl PlayStyle {
             "heavy" | "smasher" => Some(Self::Heavy),
             "floaty" | "glider" => Some(Self::Floaty),
             "sticky" | "climber" => Some(Self::Sticky),
+            "splitter" | "split" => Some(Self::Splitter),
             _ => None,
         }
     }
@@ -36,6 +46,7 @@ impl PlayStyle {
             Self::Heavy => "Heavy",
             Self::Floaty => "Floaty",
             Self::Sticky => "Sticky",
+            Self::Splitter => "Splitter",
         }
     }
 
@@ -49,7 +60,7 @@ impl PlayStyle {
         match self {
             Self::Heavy => 2.4,
             Self::Floaty => 0.6,
-            Self::Bouncy | Self::Sticky => 1.5,
+            Self::Bouncy | Self::Sticky | Self::Splitter => 1.5,
         }
     }
 
@@ -60,7 +71,7 @@ impl PlayStyle {
             Self::Heavy => (-vy * 0.3).clamp(90.0, 260.0),
             // Same rebound every time; low gravity turns it into long hops.
             Self::Floaty => (-vy * restitution).clamp(300.0, 420.0),
-            Self::Bouncy | Self::Sticky => {
+            Self::Bouncy | Self::Sticky | Self::Splitter => {
                 (-vy * restitution).clamp(MIN_BOUNCE_VELOCITY, MAX_BOUNCE_VELOCITY)
             }
         }
@@ -105,6 +116,43 @@ impl WallCling {
         Vec2::new(self.side * 260.0, 480.0)
     }
 }
+
+/// Downward speed of a landing that splits a Splitter head.
+pub const SPLIT_LANDING_SPEED: f32 = 550.0;
+/// Seconds the two halves stay apart before the small twin flies back.
+pub const SPLIT_SECONDS: f32 = 4.0;
+/// Size of each half while split.
+pub const SPLIT_SCALE: f32 = 0.62;
+
+/// Set by the terrain solver on a Splitter's hard landing; the play-style
+/// system decides whether it may split now.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SplitRequest {
+    pub speed: f32,
+}
+
+/// A Splitter head that is currently split; its small twin is `twin`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Split {
+    pub twin: Entity,
+    pub until: f32,
+}
+
+/// The small half that popped out of a Splitter head.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SplitTwin {
+    pub parent: Entity,
+}
+
+/// A twin flying back to merge; terrain no longer stops it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TwinReturning {
+    pub since: f32,
+}
+
+/// No new split until this time, so a head does not split on every bounce.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SplitCooldown(pub f32);
 
 #[cfg(test)]
 mod tests {

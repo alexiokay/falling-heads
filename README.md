@@ -77,7 +77,8 @@ VortiDeck. `FALLING_HEADS_API_PORT` forces one port.
 
 ### Play styles
 Each viewer chooses how their heads play the ball. The choice is remembered,
-so heads they spawn later use it too. The streamer cycles the hero's style with **C**.
+so heads they spawn later use it too. The streamer cycles the hero's style with **C**, or picks
+the hero's face and style under **Settings > Character** (saved for next time).
 
 | Style | Behaviour |
 |-------|-----------|
@@ -85,6 +86,7 @@ so heads they spawn later use it too. The streamer cycles the hero's style with 
 | `heavy` | Falls fast, barely bounces, hard landings do double block damage (digs down) |
 | `floaty` | Low gravity, steady soft hops, long hang time |
 | `sticky` | Grabs walls, hangs on briefly, then wall-jumps up and away |
+| `splitter` | Bounces; a hard landing splits it into two small heads that merge back after 4 s |
 
 ```bash
 curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \

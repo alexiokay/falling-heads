@@ -2,7 +2,10 @@
 //! (`STYLE` / `VILLAGERS` with `"style"`), the streamer cycles the hero's style
 //! with C. Bounce and block-damage rules live in the terrain contact solver.
 use crate::components::hero::Hero;
-use crate::components::play_style::{PlayStyle, WallCling};
+use crate::components::play_style::{
+    PlayStyle, SPLIT_SCALE, SPLIT_SECONDS, Split, SplitCooldown, SplitRequest, SplitTwin,
+    TwinReturning, WallCling,
+};
 use crate::components::username_label::UsernameLabel;
 use crate::events::power_events::PowerActivated;
 use crate::resources::command_queue::PowerCommandType;
@@ -33,6 +36,7 @@ fn style_color(style: PlayStyle) -> Color {
         PlayStyle::Heavy => Color::srgb(1.0, 0.55, 0.35),
         PlayStyle::Floaty => Color::srgb(0.75, 0.7, 1.0),
         PlayStyle::Sticky => Color::srgb(0.55, 1.0, 0.45),
+        PlayStyle::Splitter => Color::srgb(1.0, 0.55, 0.85),
     }
 }
 
@@ -47,6 +51,9 @@ impl Plugin for PlayStylePlugin {
                 hero_style_hotkey,
                 apply_gravity,
                 wall_cling,
+                split_heads,
+                merge_twins,
+                fade_puffs,
                 label_style_names,
                 hero_style_buttons,
                 hero_style_hud,
@@ -254,6 +261,197 @@ fn fade_toasts(
     }
 }
 
+/// Puff of the split and merge: small coloured squares that drift and fade.
+#[derive(Component)]
+struct SplitPuff {
+    velocity: Vec3,
+    life: f32,
+    max: f32,
+}
+
+fn puff(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    at: Vec3,
+) {
+    let mesh = meshes.add(Rectangle::new(1.0, 1.0));
+    for i in 0..12 {
+        let a = i as f32 * std::f32::consts::TAU / 12.0;
+        let color = if i % 2 == 0 {
+            Color::srgba(1.0, 0.55, 0.85, 0.9)
+        } else {
+            Color::srgba(1.0, 0.95, 1.0, 0.9)
+        };
+        commands.spawn((
+            SplitPuff {
+                velocity: Vec3::new(a.cos(), a.sin(), 0.0) * 260.0,
+                life: 0.4,
+                max: 0.4,
+            },
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: color,
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            })),
+            Transform::from_translation(at + Vec3::Z * 30.0).with_scale(Vec3::splat(9.0)),
+            bevy::light::NotShadowCaster,
+        ));
+    }
+}
+
+fn fade_puffs(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut puffs: Query<(
+        Entity,
+        &mut SplitPuff,
+        &mut Transform,
+        &MeshMaterial3d<StandardMaterial>,
+    )>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut p, mut t, material) in &mut puffs {
+        p.life -= dt;
+        if p.life <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        t.translation += p.velocity * dt;
+        if let Some(mut m) = materials.get_mut(&material.0) {
+            m.base_color.set_alpha(p.life / p.max);
+        }
+    }
+}
+
+/// A Splitter's hard landing: the head shrinks and a small twin with the same
+/// face pops out the other way. Both bounce and dig until they merge again.
+#[allow(clippy::type_complexity)]
+fn split_heads(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut requests: Query<(
+        Entity,
+        &Transform,
+        &Mesh3d,
+        &MeshMaterial3d<StandardMaterial>,
+        &avian3d::prelude::LinearVelocity,
+        Has<Split>,
+        Option<&SplitCooldown>,
+        Option<&PlayStyle>,
+        &SplitRequest,
+    )>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let now = time.elapsed_secs();
+    for (head, t, mesh, material, v, split, cooldown, style, request) in &mut requests {
+        commands.entity(head).remove::<SplitRequest>();
+        let ready = !split
+            && cooldown.is_none_or(|c| now >= c.0)
+            && style.copied() == Some(PlayStyle::Splitter);
+        if !ready {
+            continue;
+        }
+        // The twin heads the opposite way to the head's current drift.
+        let side = if v.x >= 0.0 { -1.0 } else { 1.0 };
+        let at = t.translation + Vec3::new(side * 30.0, 12.0, 0.0);
+        let twin = commands
+            .spawn((
+                SplitTwin { parent: head },
+                PlayStyle::Bouncy,
+                crate::components::bundles::avian_physics::character(),
+                crate::components::bundles::SpriteBundle3d::with_scale(
+                    mesh.0.clone(),
+                    material.0.clone(),
+                    at,
+                    Vec3::new(SPLIT_SCALE, SPLIT_SCALE, 1.0),
+                ),
+            ))
+            .id();
+        commands
+            .entity(twin)
+            .insert(avian3d::prelude::LinearVelocity(Vec3::new(
+                side * 320.0,
+                (request.speed * 0.55).clamp(260.0, 460.0),
+                0.0,
+            )));
+        commands.entity(head).insert(Split {
+            twin,
+            until: now + SPLIT_SECONDS,
+        });
+        puff(&mut commands, &mut meshes, &mut materials, t.translation);
+    }
+}
+
+/// After [`SPLIT_SECONDS`] the twin flies straight back (through terrain) and
+/// merges with a puff; the head grows back to full size.
+#[allow(clippy::type_complexity)]
+fn merge_twins(
+    mut commands: Commands,
+    time: Res<Time>,
+    heads: Query<(&Transform, &Split), Without<SplitTwin>>,
+    mut twins: Query<
+        (
+            Entity,
+            &SplitTwin,
+            &mut Transform,
+            Option<&mut avian3d::prelude::Position>,
+            Option<&TwinReturning>,
+        ),
+        Without<Split>,
+    >,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let now = time.elapsed_secs();
+    for (twin, link, mut t, position, returning) in &mut twins {
+        // The head is gone (died, despawned) or no longer split: the twin goes too.
+        let Ok((head_t, split)) = heads.get(link.parent) else {
+            commands.entity(twin).despawn();
+            continue;
+        };
+        if split.twin != twin {
+            commands.entity(twin).despawn();
+            continue;
+        }
+        if now < split.until {
+            continue;
+        }
+        let Some(returning) = returning else {
+            commands.entity(twin).insert((
+                TwinReturning { since: now },
+                avian3d::prelude::RigidBody::Kinematic,
+                avian3d::prelude::LinearVelocity::ZERO,
+            ));
+            continue;
+        };
+        let target = head_t.translation;
+        let to_head = target - t.translation;
+        let step = 900.0 * time.delta_secs();
+        let next = if to_head.length() <= step {
+            target
+        } else {
+            t.translation + to_head.normalize() * step
+        };
+        t.translation = next;
+        if let Some(mut p) = position {
+            p.0 = next;
+        }
+        if to_head.length() < 28.0 || now - returning.since > 1.5 {
+            commands.entity(twin).despawn();
+            commands
+                .entity(link.parent)
+                .remove::<Split>()
+                .insert(SplitCooldown(now + 2.5));
+            puff(&mut commands, &mut meshes, &mut materials, target);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,6 +467,8 @@ mod tests {
                 std::time::Duration::from_millis(100),
             ))
             .add_message::<PowerActivated>()
+            .init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
             .add_plugins(PlayStylePlugin);
         app
     }

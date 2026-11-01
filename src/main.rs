@@ -19,6 +19,8 @@ mod utils;
 mod world_preview;
 // Test and probe launch modes, left out of player builds (--no-default-features)
 #[cfg(feature = "probes")]
+mod character_probe;
+#[cfg(feature = "probes")]
 mod crowd_probe;
 #[cfg(feature = "probes")]
 mod depth_probe;
@@ -208,6 +210,7 @@ fn main() {
     .add_plugins(systems::play_styles::PlayStylePlugin)
     .add_plugins(systems::game_modes::GameModesPlugin)
     .add_plugins(systems::asset_packs::AssetPacksPlugin)
+    .add_plugins(systems::character_select::CharacterSelectPlugin)
     .add_plugins(systems::extra_powers::ExtraPowersPlugin)
     .add_plugins(systems::window_icon::WindowIconPlugin)
     .add_plugins(systems::ui::loading_screen::LoadingScreenPlugin)

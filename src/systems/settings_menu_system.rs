@@ -140,10 +140,11 @@ pub fn setup_settings_menu(mut commands: Commands, settings: Res<GameSettings>) 
                         (SettingsPage::General, "General"),
                         (SettingsPage::Graphics, "Graphics"),
                         (SettingsPage::GameModes, "Game modes"),
+                        (SettingsPage::Character, "Character"),
                         (SettingsPage::Theme, "Theme"),
                     ] {
                         tabs.spawn(Node {
-                            width: Val::Percent(25.),
+                            width: Val::Percent(20.),
                             ..default()
                         })
                         .with_children(|p| menu_button(p, label, SettingsTab(page)));
@@ -210,6 +211,17 @@ pub fn setup_settings_menu(mut commands: Commands, settings: Res<GameSettings>) 
                 // Filled by `game_modes::fill_game_modes_page`.
                 p.spawn((
                     SettingsPageRoot(SettingsPage::GameModes),
+                    Node {
+                        display: Display::None,
+                        width: Val::Percent(100.),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.),
+                        ..default()
+                    },
+                ));
+                // Filled by `character_select::fill_character_page`.
+                p.spawn((
+                    SettingsPageRoot(SettingsPage::Character),
                     Node {
                         display: Display::None,
                         width: Val::Percent(100.),
