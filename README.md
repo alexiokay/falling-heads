@@ -59,7 +59,7 @@ cargo run --release
 
 ## 🎯 External API
 
-The game exposes an HTTP API on `http://localhost:3029` for triggering powers:
+The game exposes an HTTP API for triggering powers, normally on `http://127.0.0.1:3029/command`:
 
 ```bash
 # Example: Trigger TNT explosion
@@ -68,10 +68,12 @@ curl -X POST http://localhost:3029/command \
   -d '{"action": "TNT"}'
 ```
 
-If Windows reports the port as forbidden, it is inside a reserved range
-(`netsh interface ipv4 show excludedportrange protocol=tcp`; Hyper-V, WSL and
-Docker reserve these). Start the game with `FALLING_HEADS_API_PORT` set to a free
-port, or reserve 3029 for Falling Heads as admin.
+Windows can reserve port 3029 (Hyper-V, WSL and Docker reserve ranges that may
+change at every boot; see `netsh interface ipv4 show excludedportrange protocol=tcp`).
+The game then moves on by itself to 7329, 17329, 27329, 37329, 47329 or any free
+port. The address in use is shown under **Settings > Game modes** and written to
+`%APPDATA%\FallingHeads\api.json` (`{"url": ..., "port": ...}`) for tools such as
+VortiDeck. `FALLING_HEADS_API_PORT` forces one port.
 
 ### Play styles
 Each viewer chooses how their heads play the ball. The choice is remembered,

@@ -205,6 +205,20 @@ fn fill_game_modes_page(
                     GameModeToggle(mode),
                 );
             }
+            // Where chat bots and VortiDeck send commands (the port can change
+            // when Windows reserves the default one).
+            p.spawn((
+                bevy::picking::Pickable::IGNORE,
+                Text::new(format!(
+                    "Viewer commands: {}",
+                    crate::plugins::external_api_plugin::api_url()
+                )),
+                TextFont {
+                    font_size: FontSize::Px(13.),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.7, 0.75, 0.78)),
+            ));
         });
     }
 }

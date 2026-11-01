@@ -70,16 +70,38 @@ impl LauncherApiOptions {
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// Default API port. Set FALLING_HEADS_API_PORT to use another one (e.g. when
-/// Windows has reserved a range containing 3029 for Hyper-V/WSL/Docker).
+/// Preferred API port, used whenever it is free.
 const DEFAULT_API_PORT: u16 = 3029;
+/// Tried in order when the default is taken. Hyper-V, WSL and Docker reserve
+/// port ranges that can change at every boot (on some PCs anywhere above 1024).
+const FALLBACK_API_PORTS: [u16; 5] = [7329, 17329, 27329, 37329, 47329];
+/// Settings file with the address in use, for VortiDeck and other tools.
+const API_INFO_FILE: &str = "api.json";
 
-fn api_addr() -> String {
-    let port = std::env::var("FALLING_HEADS_API_PORT")
+/// Ports to try in order: only FALLING_HEADS_API_PORT when it is set, else the
+/// default, the fallbacks, then 0 (any free port Windows offers).
+fn api_ports() -> Vec<u16> {
+    match std::env::var("FALLING_HEADS_API_PORT")
         .ok()
         .and_then(|p| p.trim().parse::<u16>().ok())
-        .unwrap_or(DEFAULT_API_PORT);
-    format!("127.0.0.1:{port}")
+    {
+        Some(port) => vec![port],
+        None => std::iter::once(DEFAULT_API_PORT)
+            .chain(FALLBACK_API_PORTS)
+            .chain(std::iter::once(0))
+            .collect(),
+    }
+}
+
+/// Where viewer commands go once the server is listening ("off" if it failed).
+static API_URL: OnceLock<String> = OnceLock::new();
+
+/// The command address for the settings page, or why there is none.
+pub fn api_url() -> String {
+    API_URL
+        .get()
+        .cloned()
+        .unwrap_or_else(|| "starting...".to_string())
 }
 
 /// STYLE needs a valid style; VILLAGERS may carry one; other commands ignore it.
@@ -101,6 +123,22 @@ fn requested_style(
         }
         (PowerCommandType::Style, None) => Err(format!("STYLE needs \"style\": {}", names())),
         _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod port_tests {
+    use super::*;
+
+    #[test]
+    fn default_port_first_then_fallbacks_then_any_free_port() {
+        if std::env::var("FALLING_HEADS_API_PORT").is_ok() {
+            return; // An explicit port replaces the list.
+        }
+        let ports = api_ports();
+        assert_eq!(ports.first(), Some(&DEFAULT_API_PORT));
+        assert_eq!(ports.last(), Some(&0));
+        assert_eq!(ports.len(), FALLBACK_API_PORTS.len() + 2);
     }
 }
 
@@ -146,8 +184,8 @@ impl Plugin for ExternalApiPlugin {
             .add_systems(Update, update_thunder_bolts);
 
         info!(
-            "ExternalApiPlugin loaded - API will start on http://{}",
-            api_addr()
+            "ExternalApiPlugin loaded - API ports to try: {:?}",
+            api_ports()
         );
     }
 }
@@ -314,7 +352,7 @@ fn start_api_server() {
         .with_state(queue.clone());
 
     // Spawn API server in background thread
-    let api_addr = api_addr();
+    let ports = api_ports();
     std::thread::spawn(move || {
         let rt = match Runtime::new() {
             Ok(rt) => rt,
@@ -324,18 +362,34 @@ fn start_api_server() {
             }
         };
         rt.block_on(async {
-            let listener = match tokio::net::TcpListener::bind(&api_addr).await {
-                Ok(listener) => listener,
-                Err(e) => {
-                    error!("API server disabled: cannot bind {api_addr}: {e}");
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error!(
-                            "Windows may have reserved this port (see `netsh interface ipv4 show \n                             excludedportrange protocol=tcp`). Set FALLING_HEADS_API_PORT to a free port, \n                             or reserve this one for FallingHeads as admin."
-                        );
+            let mut bound = None;
+            for port in &ports {
+                match tokio::net::TcpListener::bind(("127.0.0.1", *port)).await {
+                    Ok(listener) => {
+                        bound = Some(listener);
+                        break;
                     }
-                    return;
+                    // Reserved by Windows (permission denied) or used by another app.
+                    Err(e) => warn!("API port {port} unavailable: {e}"),
                 }
+            }
+            let Some(listener) = bound else {
+                error!(
+                    "API server disabled: no free port among {ports:?}. Set FALLING_HEADS_API_PORT \
+                     to a free port (see `netsh interface ipv4 show excludedportrange protocol=tcp`)."
+                );
+                API_URL.set("off (no free port)".to_string()).ok();
+                return;
             };
+            let api_addr = listener
+                .local_addr()
+                .map_or_else(|_| "127.0.0.1:?".to_string(), |a| a.to_string());
+            let url = format!("http://{api_addr}/command");
+            API_URL.set(url.clone()).ok();
+            if crate::resources::settings::persistence_enabled() {
+                let info = serde_json::json!({ "url": url, "port": listener.local_addr().map(|a| a.port()).ok() });
+                crate::resources::settings::write_settings_file(API_INFO_FILE, &info.to_string());
+            }
             info!("API server running on http://{api_addr}");
             info!("Try: curl -X POST http://{api_addr}/command -H \"Content-Type: application/json\" -d '{{\"action\":\"TNT\",\"username\":\"viewer123\"}}'");
             if let Err(e) = axum::serve(listener, app_router).await {
