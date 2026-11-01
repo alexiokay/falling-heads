@@ -355,10 +355,63 @@ pub struct Shrunk {
     pub until: f32,
 }
 
+/// WIND: one gusty blow. Strength, direction and length vary per use.
 #[derive(Resource, Default)]
 struct Wind {
+    start: f32,
     until: f32,
-    direction: f32,
+    /// Mostly sideways, sometimes with a little lift or downdraft.
+    direction: Vec2,
+    /// Sideways speed it pushes bodies towards at full gust.
+    strength: f32,
+    /// Offsets the gust rhythm so no two winds pulse alike.
+    phase: f32,
+}
+
+/// One kind of wind: how hard, how long and how it sounds.
+#[derive(Clone, Copy)]
+struct WindKind {
+    name: &'static str,
+    speed: f32,
+    seconds: (f32, f32),
+    volume: f32,
+    pitch: f32,
+}
+
+const WIND_KINDS: [WindKind; 3] = [
+    WindKind {
+        name: "breeze",
+        speed: 260.0,
+        seconds: (2.0, 3.0),
+        volume: 0.5,
+        pitch: 1.15,
+    },
+    WindKind {
+        name: "strong",
+        speed: 480.0,
+        seconds: (3.0, 4.0),
+        volume: 0.8,
+        pitch: 0.9,
+    },
+    WindKind {
+        name: "STORM",
+        speed: 720.0,
+        seconds: (4.0, 5.0),
+        volume: 1.0,
+        pitch: 0.7,
+    },
+];
+
+impl Wind {
+    /// 0..1: builds up over 0.4 s, surges and eases, dies down over the last 0.6 s.
+    fn gust(&self, now: f32) -> f32 {
+        let ramp = ((now - self.start) / 0.4)
+            .min((self.until - now) / 0.6)
+            .clamp(0.0, 1.0);
+        let t = now - self.start + self.phase;
+        let surge = 0.78 + 0.22 * (t * 2.3).sin() + 0.12 * (t * 5.7).sin();
+        (ramp * surge).clamp(0.0, 1.0)
+    }
 }
 
 #[derive(Resource, Default)]
@@ -433,7 +486,6 @@ impl Fuss {
 const FEATHER_GRAVITY: f32 = 0.35;
 const FEATHER_SECONDS: f32 = 8.0;
 const SHRINK_SECONDS: f32 = 10.0;
-const WIND_SECONDS: f32 = 3.0;
 const ICE_AGE_SECONDS: f32 = 15.0;
 /// Water within this distance of the hero freezes when an ice age starts.
 const ICE_AGE_FREEZE_RADIUS: f32 = 1600.0;
@@ -497,14 +549,38 @@ fn start_simple(
                 announce(&mut notice, by("SHRINK: tiny heads", user));
             }
             P::Wind => {
-                wind.until = now + WIND_SECONDS;
-                wind.direction = if rand::rng().random_bool(0.5) {
-                    1.0
+                let mut rng = rand::rng();
+                // Breezes and strong winds are common, storms rarer.
+                let roll = rng.random_range(0.0..1.0);
+                let WindKind {
+                    name,
+                    speed,
+                    seconds: (shortest, longest),
+                    volume,
+                    pitch,
+                } = WIND_KINDS[if roll < 0.4 {
+                    0
+                } else if roll < 0.8 {
+                    1
                 } else {
-                    -1.0
+                    2
+                }];
+                let side = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
+                let lift = if rng.random_bool(0.3) {
+                    rng.random_range(-0.15..0.3)
+                } else {
+                    0.0
                 };
-                play(&mut commands, &art.sounds.wind, hero_at, 0.8, 0.9);
-                announce(&mut notice, by("WIND", user));
+                *wind = Wind {
+                    start: now,
+                    until: now + rng.random_range(shortest..longest),
+                    direction: Vec2::new(side, lift).normalize(),
+                    strength: speed,
+                    phase: rng.random_range(0.0..std::f32::consts::TAU),
+                };
+                play(&mut commands, &art.sounds.wind, hero_at, volume, pitch);
+                let arrow = if side > 0.0 { ">>>" } else { "<<<" };
+                announce(&mut notice, by(&format!("WIND: {name} {arrow}"), user));
             }
             P::IceAge => {
                 ice.until = now + ICE_AGE_SECONDS;
@@ -565,36 +641,93 @@ fn blow_wind(
     cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
     let now = time.elapsed_secs();
-    if now >= wind.until {
+    if now >= wind.until || now < wind.start {
         return;
     }
     let dt = time.delta_secs();
-    let target = wind.direction * 480.0;
+    let gust = wind.gust(now);
+    let push = wind.direction * wind.strength * gust;
     for mut v in &mut actors {
-        v.x += (target - v.x) * (dt * 3.0).min(1.0);
+        v.x += (push.x - v.x) * (dt * 3.0).min(1.0);
+        // Lift or downdraft nudges, never cancels a jump or a fall outright.
+        v.y += push.y * dt * 2.5;
     }
-    // Streaks across the view show the gust.
-    if let Some(camera) = cameras.iter().next() {
-        let mut rng = rand::rng();
-        if rng.random_bool(0.6) {
-            let c = camera.translation();
-            let at = Vec3::new(
-                c.x - wind.direction * 700.0,
-                c.y + rng.random_range(-600.0..600.0),
-                60.0,
-            );
-            spawn_fx(
-                &mut commands,
-                &mut materials,
-                &art.quad,
-                Color::srgba(0.9, 0.95, 1.0, 0.6),
-                at,
-                Vec2::new(rng.random_range(60.0..140.0), 3.0),
-                0.0,
-                Vec3::X * wind.direction * 1800.0,
-                0.8,
-            );
-        }
+    let Some(camera) = cameras.iter().next() else {
+        return;
+    };
+    let c = camera.translation();
+    let mut rng = rand::rng();
+    let power = wind.strength / 720.0 * gust;
+    // Streaks across the view: more, longer and faster the harder it blows.
+    let streaks = power * 2.4;
+    let count = streaks as u32 + u32::from(rng.random_bool(f64::from(streaks.fract())));
+    for _ in 0..count {
+        let at = Vec3::new(
+            c.x - wind.direction.x * 760.0,
+            c.y + rng.random_range(-620.0..620.0),
+            60.0,
+        );
+        let speed = 1300.0 + 1300.0 * power;
+        spawn_fx(
+            &mut commands,
+            &mut materials,
+            &art.quad,
+            Color::srgba(0.9, 0.95, 1.0, 0.35 + 0.35 * power),
+            at,
+            Vec2::new(
+                rng.random_range(50.0..110.0) * (0.7 + power),
+                2.0 + 2.0 * power,
+            ),
+            wind.direction.y.atan2(wind.direction.x.abs()) * wind.direction.x.signum(),
+            wind.direction.extend(0.0) * speed,
+            0.9,
+        );
+    }
+    // Strong winds and storms carry leaves and dust along.
+    if power > 0.45 && rng.random_bool(f64::from(power * 0.5)) {
+        let leaf = rng.random_bool(0.6);
+        let color = if leaf {
+            Color::srgba(0.35, rng.random_range(0.55..0.75), 0.2, 0.95)
+        } else {
+            Color::srgba(0.6, 0.5, 0.35, 0.6)
+        };
+        let material = materials.add(StandardMaterial {
+            base_color: color,
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+        let at = Vec3::new(
+            c.x - wind.direction.x * 760.0,
+            c.y + rng.random_range(-500.0..500.0),
+            55.0,
+        );
+        let size = if leaf {
+            Vec3::new(10.0, 6.0, 1.0)
+        } else {
+            Vec3::splat(rng.random_range(18.0..34.0))
+        };
+        commands.spawn((
+            Fx {
+                life: 1.6,
+                max: 1.6,
+                velocity: (wind.direction * wind.strength * rng.random_range(1.1..1.6)).extend(0.0)
+                    + Vec3::Y * rng.random_range(-60.0..80.0),
+                spin: if leaf {
+                    rng.random_range(-9.0..9.0)
+                } else {
+                    0.5
+                },
+                grow: if leaf { 0.0 } else { 0.6 },
+                gravity: if leaf { 60.0 } else { 0.0 },
+            },
+            Mesh3d(art.quad.clone()),
+            MeshMaterial3d(material),
+            Transform::from_translation(at)
+                .with_rotation(Quat::from_rotation_z(rng.random_range(0.0..6.0)))
+                .with_scale(size),
+            bevy::light::NotShadowCaster,
+        ));
     }
 }
 
@@ -1768,6 +1901,26 @@ mod tests {
         };
         assert_eq!(fuss.steer_sign(1.0), -1.0);
         assert_eq!(fuss.steer_sign(6.0), 1.0);
+    }
+
+    #[test]
+    fn wind_builds_up_surges_and_dies_down() {
+        let wind = Wind {
+            start: 10.0,
+            until: 14.0,
+            direction: Vec2::X,
+            strength: 480.0,
+            phase: 1.0,
+        };
+        assert_eq!(wind.gust(10.0), 0.0);
+        assert!(wind.gust(14.0) <= 0.001);
+        let middle: Vec<f32> = (0..40).map(|i| wind.gust(10.6 + i as f32 * 0.07)).collect();
+        assert!(middle.iter().all(|g| (0.0..=1.0).contains(g)));
+        // It surges and eases rather than blowing flat.
+        let (lo, hi) = middle
+            .iter()
+            .fold((1.0_f32, 0.0_f32), |(l, h), g| (l.min(*g), h.max(*g)));
+        assert!(hi - lo > 0.2, "gust range {lo}..{hi}");
     }
 
     #[test]
