@@ -29,6 +29,8 @@ mod depth_probe;
 #[cfg(feature = "probes")]
 mod ecology_probe;
 #[cfg(feature = "probes")]
+mod fast_motion_probe;
+#[cfg(feature = "probes")]
 mod ghost_floor_probe;
 #[cfg(feature = "probes")]
 mod head_size_probe;

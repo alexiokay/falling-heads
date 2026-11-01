@@ -399,7 +399,7 @@ fn combo_hud(
 fn combo_trail(
     mut commands: Commands,
     time: Res<Time>,
-    heroes: Query<(&Combo, &Transform), With<Hero>>,
+    heroes: Query<(&Combo, &Transform, &avian3d::prelude::LinearVelocity), With<Hero>>,
     mut sparks: Query<
         (
             Entity,
@@ -426,7 +426,7 @@ fn combo_trail(
             m.base_color.set_alpha((s.life / 0.4).min(1.0));
         }
     }
-    let Ok((combo, hero)) = heroes.single() else {
+    let Ok((combo, hero, velocity)) = heroes.single() else {
         return;
     };
     if combo.count < 10 {
@@ -443,8 +443,15 @@ fn combo_trail(
     } else {
         1
     };
+    // Sparks start just outside the head on the side it is leaving, and sit
+    // behind it, so the trail never covers the face.
+    let back = (-velocity.0.xy()).normalize_or(Vec2::NEG_Y);
+    let side = back.perp();
+    let half = hero.scale.y.abs() * 32.0;
     for _ in 0..per_frame {
         let color = heat_color(combo.count);
+        let offset = back * (half + rng.random_range(4.0..16.0))
+            + side * rng.random_range(-half * 0.6..half * 0.6);
         commands.spawn((
             ComboSpark {
                 velocity: Vec3::new(
@@ -462,15 +469,8 @@ fn combo_trail(
                 alpha_mode: AlphaMode::Add,
                 ..default()
             })),
-            Transform::from_translation(
-                hero.translation
-                    + Vec3::new(
-                        rng.random_range(-20.0..20.0),
-                        rng.random_range(-20.0..20.0),
-                        25.0,
-                    ),
-            )
-            .with_scale(Vec3::splat(rng.random_range(6.0..12.0))),
+            Transform::from_translation(hero.translation + offset.extend(-4.0))
+                .with_scale(Vec3::splat(rng.random_range(6.0..12.0))),
             bevy::light::NotShadowCaster,
         ));
     }

@@ -79,6 +79,10 @@ fn probe(world: &mut World) {
         crate::systems::slime_rift::probe::run(world);
         return;
     }
+    if std::env::args().any(|a| a == "--fast-motion-test") {
+        crate::fast_motion_probe::run(world);
+        return;
+    }
     if std::env::args().any(|a| a == "--settings-drag-test") {
         crate::pack_switch_probe::run_drag(world);
         return;
