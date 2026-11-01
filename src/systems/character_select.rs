@@ -322,17 +322,21 @@ type Pressed<T> = (Changed<PickingInteraction>, With<T>);
 
 fn press_buttons(
     mut chosen: ResMut<ChosenCharacter>,
-    characters: Query<(&PickingInteraction, &CharacterButtonId), Pressed<CharacterButtonId>>,
-    styles: Query<(&PickingInteraction, &StyleButtonId), Pressed<StyleButtonId>>,
+    characters: Query<
+        (Entity, &PickingInteraction, &CharacterButtonId),
+        Pressed<CharacterButtonId>,
+    >,
+    styles: Query<(Entity, &PickingInteraction, &StyleButtonId), Pressed<StyleButtonId>>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
     let mut next = chosen.clone();
-    for (interaction, button) in &characters {
-        if *interaction == PickingInteraction::Pressed {
+    for (entity, interaction, button) in &characters {
+        if presses.pressed(entity, *interaction) {
             next.character = button.0;
         }
     }
-    for (interaction, button) in &styles {
-        if *interaction == PickingInteraction::Pressed {
+    for (entity, interaction, button) in &styles {
+        if presses.pressed(entity, *interaction) {
             next.style = button.0;
         }
     }

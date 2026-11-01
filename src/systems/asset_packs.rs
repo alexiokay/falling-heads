@@ -510,12 +510,13 @@ fn refill_theme_list(
 type PressedPackButton = (Changed<PickingInteraction>, With<PackButton>);
 
 fn press_pack_button(
-    buttons: Query<(&PickingInteraction, &PackButton, &Children), PressedPackButton>,
+    buttons: Query<(Entity, &PickingInteraction, &PackButton, &Children), PressedPackButton>,
     mut texts: Query<&mut Text, With<ToggleButtonText>>,
     mut switch: MessageWriter<SwitchPack>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
-    for (interaction, button, children) in &buttons {
-        if *interaction != PickingInteraction::Pressed {
+    for (entity, interaction, button, children) in &buttons {
+        if !presses.pressed(entity, *interaction) {
             continue;
         }
         switch.write(SwitchPack(button.0.clone()));

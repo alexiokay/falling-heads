@@ -8,6 +8,24 @@ use bevy::{
     window::{PresentMode, PrimaryWindow},
 };
 
+/// Remembers each control's last interaction so a press counts only when the
+/// pointer was already over it when the button went down (Hovered -> Pressed).
+/// Dragging onto a control with the button held, or a control appearing under
+/// a held click (switching tab or menu), goes None -> Pressed and is ignored.
+#[derive(Default)]
+pub struct PressTracker(std::collections::HashMap<Entity, PickingInteraction>);
+
+impl PressTracker {
+    /// Records `now` for `entity`; true for a genuine click on it.
+    pub fn pressed(&mut self, entity: Entity, now: PickingInteraction) -> bool {
+        if self.0.len() > 512 {
+            self.0.clear();
+        }
+        let before = self.0.insert(entity, now);
+        now == PickingInteraction::Pressed && before == Some(PickingInteraction::Hovered)
+    }
+}
+
 pub fn menu_button(parent: &mut ChildSpawnerCommands, label: &str, marker: impl Bundle) {
     parent
         .spawn((
@@ -260,6 +278,7 @@ pub fn cleanup_settings_menu(mut commands: Commands, roots: Query<Entity, With<S
 pub fn handle_settings_buttons(
     buttons: Query<
         (
+            Entity,
             &PickingInteraction,
             Option<&VsyncToggleButton>,
             Option<&FpsToggleButton>,
@@ -274,9 +293,10 @@ pub fn handle_settings_buttons(
     mut nav: ResMut<SettingsNavigation>,
     mut state: ResMut<NextState<GameState>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut presses: Local<PressTracker>,
 ) {
-    for (i, vsync, fps, limit, dev, back, tab) in &buttons {
-        if *i != PickingInteraction::Pressed {
+    for (entity, i, vsync, fps, limit, dev, back, tab) in &buttons {
+        if !presses.pressed(entity, *i) {
             continue;
         }
         if let Some(tab) = tab {
@@ -380,6 +400,7 @@ pub fn settings_layout_and_style(
 }
 
 /// Handle volume slider interactions using RelativeCursorPosition
+#[allow(clippy::too_many_arguments)] // Bevy system parameters
 pub fn handle_volume_sliders(
     mut settings: ResMut<GameSettings>,
     container_query: Query<
@@ -391,7 +412,12 @@ pub fn handle_volume_sliders(
         Or<(With<EffectsVolumeSlider>, With<MusicVolumeSlider>)>,
     >,
     slider_bar_query: Query<
-        (&PickingInteraction, &RelativeCursorPosition, &Children),
+        (
+            Entity,
+            &PickingInteraction,
+            &RelativeCursorPosition,
+            &Children,
+        ),
         With<VolumeSliderBar>,
     >,
     mut label_query: Query<&mut Text, With<VolumeSliderLabel>>,
@@ -414,9 +440,18 @@ pub fn handle_volume_sliders(
         >,
     )>,
     mouse_button: Res<ButtonInput<MouseButton>>,
+    mut presses: Local<PressTracker>,
+    mut active: Local<Option<Entity>>,
 ) {
-    // Only respond when mouse is pressed
+    // A slider moves only while a drag that started on it is held, never when
+    // a held button passes over it.
+    for (bar, interaction, _, _) in &slider_bar_query {
+        if presses.pressed(bar, *interaction) {
+            *active = Some(bar);
+        }
+    }
     if !mouse_button.pressed(MouseButton::Left) {
+        *active = None;
         return;
     }
 
@@ -424,12 +459,9 @@ pub fn handle_volume_sliders(
     for (container_children, effects_marker, music_marker) in container_query.iter() {
         // Find the slider bar child
         for child in container_children.iter() {
-            if let Ok((interaction, relative_cursor, bar_children)) = slider_bar_query.get(child) {
-                // Check if mouse is over the slider bar and pressed
-                if matches!(
-                    interaction,
-                    PickingInteraction::Pressed | PickingInteraction::Hovered
-                ) {
+            if let Ok((bar, _, relative_cursor, bar_children)) = slider_bar_query.get(child) {
+                // Only the slider this drag started on.
+                if *active == Some(bar) {
                     // Get the normalized cursor position (relative to the bar)
                     if let Some(normalized_pos) = relative_cursor.normalized {
                         // RelativeCursorPosition uses range (-0.5, -0.5) to (0.5, 0.5)

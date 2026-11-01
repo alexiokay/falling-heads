@@ -225,12 +225,16 @@ fn fill_game_modes_page(
 
 fn handle_game_mode_toggles(
     mut modes: ResMut<GameModes>,
-    buttons: Query<(&PickingInteraction, &GameModeToggle, &Children), Changed<PickingInteraction>>,
+    buttons: Query<
+        (Entity, &PickingInteraction, &GameModeToggle, &Children),
+        Changed<PickingInteraction>,
+    >,
     all: Query<(&GameModeToggle, &Children)>,
     mut texts: Query<&mut Text, With<ToggleButtonText>>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
-    for (interaction, toggle, _) in &buttons {
-        if *interaction == PickingInteraction::Pressed {
+    for (entity, interaction, toggle, _) in &buttons {
+        if presses.pressed(entity, *interaction) {
             modes.toggle(toggle.0);
             info!(
                 "Game mode {} turned {}",

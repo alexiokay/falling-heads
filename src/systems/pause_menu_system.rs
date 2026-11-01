@@ -147,6 +147,7 @@ pub fn cleanup_pause_menu(mut commands: Commands, query: Query<Entity, With<Paus
 pub fn handle_menu_buttons(
     mut interaction_query: Query<
         (
+            Entity,
             &PickingInteraction,
             &mut BackgroundColor,
             Option<&ResumeButton>,
@@ -157,9 +158,13 @@ pub fn handle_menu_buttons(
     >,
     mut next_state: ResMut<NextState<GameState>>,
     mut exit: MessageWriter<bevy::app::AppExit>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
-    for (interaction, mut color, resume, settings, quit) in &mut interaction_query {
+    for (entity, interaction, mut color, resume, settings, quit) in &mut interaction_query {
+        // Only a click that started on the button (not a held drag onto it).
+        let clicked = presses.pressed(entity, *interaction);
         match *interaction {
+            PickingInteraction::Pressed if !clicked => {}
             PickingInteraction::Pressed => {
                 if resume.is_some() {
                     next_state.set(GameState::Playing);

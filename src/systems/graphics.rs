@@ -127,18 +127,28 @@ fn quality_slider(
     mut settings: ResMut<GraphicsSettings>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
-    bars: Query<(&PickingInteraction, &bevy::ui::RelativeCursorPosition), With<QualityBar>>,
+    bars: Query<
+        (
+            Entity,
+            &PickingInteraction,
+            &bevy::ui::RelativeCursorPosition,
+        ),
+        With<QualityBar>,
+    >,
     mut fill: Query<&mut Node, With<QualityFill>>,
     mut text: Query<&mut Text, With<QualityText>>,
     mut drag: Local<Option<u8>>,
+    mut dragging: Local<bool>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
-    for (interaction, cursor) in &bars {
-        if mouse.pressed(MouseButton::Left)
-            && matches!(
-                interaction,
-                PickingInteraction::Pressed | PickingInteraction::Hovered
-            )
-        {
+    for (entity, interaction, cursor) in &bars {
+        // A drag starts only from a click on the bar, then follows the mouse
+        // until release. Holding the button while passing over it (after
+        // clicking a tab) does nothing.
+        if presses.pressed(entity, *interaction) {
+            *dragging = true;
+        }
+        if *dragging && mouse.pressed(MouseButton::Left) {
             if let Some(p) = cursor.normalized {
                 *drag = Some(((p.x + 0.5).clamp(0., 1.) * 2.).round() as u8);
             }
@@ -154,6 +164,7 @@ fn quality_slider(
     }
     // Apply on release: dragging must not rebuild the GPU context every frame.
     if !mouse.pressed(MouseButton::Left) {
+        *dragging = false;
         if let Some(step) = drag.take() {
             settings.set_quality_step(step);
             settings.dlss_model_45 = true;
@@ -175,19 +186,111 @@ fn quality_slider(
         **label = format!("DLSS quality: {name}");
     }
 }
+fn set_quality_bar(world: &mut World, interaction: PickingInteraction, x: Option<f32>) {
+    for (mut i, mut cursor) in world
+        .query_filtered::<(
+            &mut PickingInteraction,
+            &mut bevy::ui::RelativeCursorPosition,
+        ), With<QualityBar>>()
+        .iter_mut(world)
+    {
+        *i = interaction;
+        if let Some(x) = x {
+            cursor.normalized = Some(Vec2::new(x, 0.));
+        }
+    }
+}
+
+fn set_graphics_buttons(world: &mut World, interaction: PickingInteraction) {
+    for mut i in world
+        .query_filtered::<&mut PickingInteraction, With<GraphicsButton>>()
+        .iter_mut(world)
+    {
+        *i = interaction;
+    }
+}
+
+/// Switching to the Graphics tab with the mouse still held puts the pointer on
+/// a toggle or the quality bar without a click on them. Nothing may change;
+/// a real click on a toggle still works.
+pub(crate) fn verify_held_press_is_ignored(world: &mut World) {
+    let before = world.resource::<GraphicsSettings>().clone();
+    world
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    set_graphics_buttons(world, PickingInteraction::Pressed);
+    set_quality_bar(world, PickingInteraction::Pressed, Some(0.5));
+    world.run_system_cached(buttons).unwrap();
+    world.run_system_cached(quality_slider).unwrap();
+    world
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    set_graphics_buttons(world, PickingInteraction::None);
+    set_quality_bar(world, PickingInteraction::None, None);
+    world.run_system_cached(buttons).unwrap();
+    world.run_system_cached(quality_slider).unwrap();
+    assert!(
+        *world.resource::<GraphicsSettings>() == before,
+        "a held press landing on graphics controls changed the settings"
+    );
+    // One genuine click on the first toggle: hover, then press.
+    let Some(first) = world
+        .query_filtered::<Entity, With<GraphicsButton>>()
+        .iter(world)
+        .next()
+    else {
+        return;
+    };
+    for interaction in [PickingInteraction::Hovered, PickingInteraction::Pressed] {
+        world.entity_mut(first).insert(interaction);
+        world.run_system_cached(buttons).unwrap();
+    }
+    assert!(
+        *world.resource::<GraphicsSettings>() != before,
+        "a real click on a graphics toggle did nothing"
+    );
+    // Click it again to put the setting back.
+    for interaction in [
+        PickingInteraction::None,
+        PickingInteraction::Hovered,
+        PickingInteraction::Pressed,
+    ] {
+        world.entity_mut(first).insert(interaction);
+        world.run_system_cached(buttons).unwrap();
+    }
+    world.entity_mut(first).insert(PickingInteraction::None);
+}
+
 pub(crate) fn verify_quality_slider(world: &mut World) {
+    // Holding the button while passing over the bar (after a tab click) must
+    // not move it: the press did not start on the bar.
+    let before = world.resource::<GraphicsSettings>().quality_step();
+    let far = if before == 2 { -0.5 } else { 0.5 };
+    world
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    set_quality_bar(world, PickingInteraction::Pressed, Some(far));
+    world.run_system_cached(quality_slider).unwrap();
+    world
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    set_quality_bar(world, PickingInteraction::None, None);
+    world.run_system_cached(quality_slider).unwrap();
+    assert_eq!(
+        world.resource::<GraphicsSettings>().quality_step(),
+        before,
+        "A held drag passing over the bar changed the quality"
+    );
     for step in [0u8, 1, 2, 0] {
         let before = world.resource::<GraphicsSettings>().quality_step();
-        for (mut interaction, mut cursor) in world
-            .query_filtered::<(
-                &mut PickingInteraction,
-                &mut bevy::ui::RelativeCursorPosition,
-            ), With<QualityBar>>()
-            .iter_mut(world)
-        {
-            *interaction = PickingInteraction::Pressed;
-            cursor.normalized = Some(Vec2::new(step as f32 / 2. - 0.5, 0.));
-        }
+        // A real click: the pointer hovers the bar before the button goes down.
+        set_quality_bar(world, PickingInteraction::Hovered, None);
+        world.run_system_cached(quality_slider).unwrap();
+        set_quality_bar(
+            world,
+            PickingInteraction::Pressed,
+            Some(step as f32 / 2. - 0.5),
+        );
         world
             .resource_mut::<ButtonInput<MouseButton>>()
             .press(MouseButton::Left);
@@ -1044,11 +1147,15 @@ fn settings_panel(
 }
 fn buttons(
     mut settings: ResMut<GraphicsSettings>,
-    q: Query<(&PickingInteraction, &GraphicsButton, &Children), Changed<PickingInteraction>>,
+    q: Query<
+        (Entity, &PickingInteraction, &GraphicsButton, &Children),
+        Changed<PickingInteraction>,
+    >,
     mut text: Query<&mut Text>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
-    for (i, b, children) in &q {
-        if *i != PickingInteraction::Pressed {
+    for (entity, i, b, children) in &q {
+        if !presses.pressed(entity, *i) {
             continue;
         }
         settings.toggle(b.0);

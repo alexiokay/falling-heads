@@ -145,6 +145,8 @@ struct UiProbe {
     step: usize,
     since: f32,
     other: String,
+    /// A real click hovers the button for a frame before pressing it.
+    hovered: bool,
 }
 
 /// `--visual-smoke-test --theme-ui-test`: opens Settings > Theme, saves
@@ -173,6 +175,7 @@ pub fn run_ui(w: &mut World) {
             step: 0,
             since: now,
             other,
+            hovered: false,
         });
         return;
     }
@@ -214,8 +217,13 @@ pub fn run_ui(w: &mut World) {
                 .find(|(_, b)| b.0 == other)
                 .map(|(e, _)| e)
                 .expect("button for the other pack");
-            w.entity_mut(target).insert(PickingInteraction::Pressed);
-            next(w);
+            if w.resource::<UiProbe>().hovered {
+                w.entity_mut(target).insert(PickingInteraction::Pressed);
+                next(w);
+            } else {
+                w.entity_mut(target).insert(PickingInteraction::Hovered);
+                w.resource_mut::<UiProbe>().hovered = true;
+            }
         }
         3 if w.resource::<AssetPacks>().active == other => {
             eprintln!("[THEME UI] button press switched to {other}");
@@ -231,6 +239,59 @@ pub fn run_ui(w: &mut World) {
         }
         5 if now - since > 1.0 => {
             eprintln!("[THEME UI] passed");
+            w.write_message(AppExit::Success);
+        }
+        _ => {}
+    }
+}
+
+#[derive(Resource, Clone, Copy)]
+struct DragProbe {
+    step: usize,
+    since: f32,
+}
+
+/// `--visual-smoke-test --settings-drag-test`: opens Settings > Graphics and
+/// checks that a held click landing on graphics controls (as when switching
+/// tab) changes nothing, while real clicks and slider drags still work.
+pub fn run_drag(w: &mut World) {
+    use crate::components::settings_menu::{SettingsNavigation, SettingsPage};
+    let now = w.resource::<Time<Real>>().elapsed_secs();
+    assert!(now < 60.0, "Settings drag test timed out");
+    if !w.contains_resource::<DragProbe>() {
+        if now < 8.0 {
+            return;
+        }
+        w.resource_mut::<NextState<crate::states::GameState>>()
+            .set(crate::states::GameState::Settings);
+        w.insert_resource(DragProbe {
+            step: 0,
+            since: now,
+        });
+        return;
+    }
+    let DragProbe { step, since } = *w.resource::<DragProbe>();
+    match step {
+        0 if now - since > 1.0 => {
+            w.resource_mut::<SettingsNavigation>().0 = SettingsPage::Graphics;
+            w.resource_mut::<DragProbe>().step = 1;
+            w.resource_mut::<DragProbe>().since = now;
+        }
+        1 if now - since > 1.5 => {
+            crate::systems::graphics::verify_held_press_is_ignored(w);
+            eprintln!(
+                "[SETTINGS DRAG] held press on graphics controls changed nothing; real click works"
+            );
+            crate::systems::graphics::verify_quality_slider(w);
+            eprintln!(
+                "[SETTINGS DRAG] quality slider: held drag ignored, real drags apply on release"
+            );
+            capture(w, "settings-drag");
+            w.resource_mut::<DragProbe>().step = 2;
+            w.resource_mut::<DragProbe>().since = now;
+        }
+        2 if now - since > 1.0 => {
+            eprintln!("[SETTINGS DRAG] passed");
             w.write_message(AppExit::Success);
         }
         _ => {}

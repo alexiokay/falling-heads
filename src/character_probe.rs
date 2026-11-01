@@ -24,17 +24,24 @@ fn capture(w: &mut World, name: &str) {
         )));
 }
 
-/// Presses the first button whose label component matches.
+/// Clicks the first matching button like a pointer: hover on the first call,
+/// press on the next. Returns true once the press is done; panics if missing.
 fn press<T: Component>(w: &mut World, matches: impl Fn(&T) -> bool) -> bool {
     let target = w
-        .query::<(Entity, &T)>()
+        .query::<(Entity, &T, &PickingInteraction)>()
         .iter(w)
-        .find(|(_, b)| matches(b))
-        .map(|(e, _)| e);
-    if let Some(e) = target {
+        .find(|(_, b, _)| matches(b))
+        .map(|(e, _, i)| (e, *i));
+    let Some((e, interaction)) = target else {
+        panic!("button not found");
+    };
+    if interaction == PickingInteraction::Hovered {
         w.entity_mut(e).insert(PickingInteraction::Pressed);
+        true
+    } else {
+        w.entity_mut(e).insert(PickingInteraction::Hovered);
+        false
     }
-    target.is_some()
 }
 
 fn hero(w: &mut World) -> Option<Entity> {
@@ -73,19 +80,16 @@ pub fn run(w: &mut World) {
             next(w);
         }
         2 if now - since > 1.0 => {
-            assert!(
-                press::<crate::systems::character_select::CharacterButtonId>(w, |b| b.0 == ember),
-                "no Ember button"
-            );
-            next(w);
+            if press::<crate::systems::character_select::CharacterButtonId>(w, |b| b.0 == ember) {
+                next(w);
+            }
         }
         3 if now - since > 0.5 => {
-            assert!(
-                press::<crate::systems::character_select::StyleButtonId>(w, |b| b.0
-                    == PlayStyle::Splitter),
-                "no Splitter button"
-            );
-            next(w);
+            if press::<crate::systems::character_select::StyleButtonId>(w, |b| {
+                b.0 == PlayStyle::Splitter
+            }) {
+                next(w);
+            }
         }
         4 if now - since > 1.0 => {
             let chosen = w.resource::<ChosenCharacter>().clone();
