@@ -170,30 +170,6 @@ textures/effects/laser/laser.png,fx:trace_01.png,tint=FF4040
 textures/effects/laser/fmod_00096_ (1).png,fx:trace_02.png,tint=FF4040
 textures/effects/powder_snow.png,vox:snow.png,
 textures/effects/soul_campfire_fire.png,fx:fire_02.png,tint=60C0FF
-textures/entities/CowFace.webp,ani:cow.png,
-textures/entities/MooshroomFace.png,ani:cow.png,tint=FF9090
-textures/entities/VillagerFace.webp,vox:gnome_head.png,
-textures/entities/villager.png,vox:gnome_head.png,
-textures/entities/hero.jpg,vox:male_head.png,
-textures/entities/player/steve.jpg,vox:male_head.png,
-textures/entities/player/skinmc-avatar (3).png,vox:female_head.png,
-textures/entities/player/skinmc-avatar (4).png,vox:male_head.png,
-textures/entities/enemy/EndermanFace.png,vox:alien_head.png,tint=505060
-textures/entities/enemy/EndermanFace.webp,vox:alien_head.png,tint=505060
-textures/entities/enemy/sentinel_face.png,vox:alien_head.png,
-textures/entities/enemy/blaze.webp,vox:alien_head.png,tint=FFC040
-textures/entities/enemy/chicken.webp,ani:chicken.png,
-textures/entities/enemy/creeper.webp,vox:zombie_head.png,tint=90FF90
-textures/entities/enemy/drowned.jpg,vox:zombie_head.png,tint=60A0B0
-textures/entities/enemy/penguin.png,ani:penguin.png,
-textures/entities/enemy/pillager.png,vox:male_head.png,tint=C0C0C0
-textures/entities/enemy/skeleton.png,vox:skeleton_head.png,
-textures/entities/enemy/skeleton2.png,vox:skeleton_head.png,
-textures/entities/enemy/slime.webp,ani:frog.png,tint=80FF80
-textures/entities/enemy/witch.png,vox:gnome_head.png,tint=B080C0
-textures/entities/enemy/witch.webp,vox:gnome_head.png,tint=B080C0
-textures/entities/enemy/yeti.png,ani:gorilla.png,tint=F0F0FF
-textures/entities/enemy/zombie.png,vox:zombie_head.png,
 textures/powers/anvil_side.png,vox:greystone.png,tint=505055
 textures/powers/anvil_top.png,vox:greystone.png,tint=606065
 textures/powers/ender_pearl.png,fx:circle_05.png,tint=2A8070

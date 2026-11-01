@@ -22,13 +22,15 @@ try {
         }
     }
     if ($ResolveOnly) { $gameExe; exit 0 }
+    # Only played releases count; test and dev builds under target\ run alongside.
+    $releases = (Join-Path $gameRoot 'builds') + '\'
     $alreadyRunning = Get-CimInstance Win32_Process | Where-Object {
-        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($gameRoot + '\', [StringComparison]::OrdinalIgnoreCase) -and
-        ($_.Name -eq 'FallingHeads.exe' -or $_.Name -eq 'falling-heads.exe')
+        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($releases, [StringComparison]::OrdinalIgnoreCase) -and
+        ($_.Name -eq 'FallingHeads.exe' -or $_.Name -eq 'MineHeads.exe')
     }
     if ($alreadyRunning) {
         Add-Type -AssemblyName System.Windows.Forms
-        [Windows.Forms.MessageBox]::Show('FallingHeads is already running. Your current session stays open. Quit it and use this shortcut again to play the latest installed version.', 'FallingHeads') | Out-Null
+        [Windows.Forms.MessageBox]::Show('Falling Heads is already running. Your current session stays open. Quit it and use this shortcut again to play the latest installed version.', 'Falling Heads') | Out-Null
         exit 0
     }
     # Assets are an immutable snapshot belonging to this binary. A later update
@@ -39,6 +41,6 @@ try {
 } catch {
     if ($ResolveOnly) { throw }
     Add-Type -AssemblyName System.Windows.Forms
-    [Windows.Forms.MessageBox]::Show($_.Exception.Message, 'FallingHeads launcher') | Out-Null
+    [Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Falling Heads launcher') | Out-Null
     exit 1
 }

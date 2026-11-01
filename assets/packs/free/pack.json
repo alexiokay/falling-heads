@@ -3,9 +3,9 @@
   "author": "alexiokay, Kenney",
   "license": "Own work and CC0; see credits",
   "credits": [
-    "Block, item and character textures: Kenney Voxel Pack (CC0), https://kenney.nl/assets/voxel-pack",
+    "Block and item textures: Kenney Voxel Pack (CC0), https://kenney.nl/assets/voxel-pack",
     "Effects: Kenney Particle Pack (CC0), https://kenney.nl/assets/particle-pack",
-    "Animal faces: Kenney Animal Pack Remastered (CC0), https://kenney.nl/assets/animal-pack-remastered",
+    "Player, mob and animal faces, bee and golem skins: alexiokay (tools/Draw-FreePackFaces.ps1)",
     "Sounds: Kenney Impact Sounds, Sci-fi Sounds, RPG Audio and Interface Sounds (CC0), https://kenney.nl",
     "Biome music, rocket, laser, burst, shield and roulette sounds: alexiokay (AI-assisted)",
     "Lootbox icons: alexiokay (AI-generated, prompts in textures/ui/lootbox/prompts.txt)",
