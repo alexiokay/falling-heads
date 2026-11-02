@@ -5,6 +5,7 @@
 #   textures/prison/button.png, button_pressed.png  16x16 buttons at 4x
 #   textures/prison/guard.png          16x16 guard face with police cap at 4x
 #   textures/prison/stars.png          512x512 starfield for the space backdrop
+#   textures/prison/earth.png          1024x512 Earth map (equirectangular) for the planet
 # Fixed random seeds, so reruns give the same pictures.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -128,4 +129,34 @@ for ($i = 0; $i -lt 260; $i++) {
 $g.Dispose()
 $s.Save((Join-Path $out 'stars.png'), [System.Drawing.Imaging.ImageFormat]::Png)
 $s.Dispose()
+# Earth: deep ocean, blobby green and brown continents, polar ice, soft clouds.
+$e = New-Object System.Drawing.Bitmap 1024, 512, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+$g = [System.Drawing.Graphics]::FromImage($e)
+$g.SmoothingMode = 'AntiAlias'
+$ocean = New-Object System.Drawing.Drawing2D.LinearGradientBrush ([System.Drawing.Rectangle]::new(0, 0, 1024, 512)), (Rgb 20 60 140), (Rgb 30 90 170), 90.0
+$g.FillRectangle($ocean, 0, 0, 1024, 512); $ocean.Dispose()
+$rng = New-Object System.Random 2024
+function Blob($g, $rng, [int]$cx, [int]$cy, [int]$r, [System.Drawing.Color]$c, [int]$parts) {
+    $brush = New-Object System.Drawing.SolidBrush $c
+    for ($i = 0; $i -lt $parts; $i++) {
+        $x = $cx + $rng.Next(-$r, $r); $y = $cy + [int]($rng.Next(-$r, $r) * 0.6); $s = $rng.Next([int]($r * 0.4), $r)
+        $g.FillEllipse($brush, $x - $s, $y - [int]($s * 0.7), 2 * $s, [int](1.4 * $s))
+    }
+    $brush.Dispose()
+}
+foreach ($c in @(@(180, 170, 90), @(260, 330, 80), @(520, 160, 110), @(560, 300, 70), @(780, 180, 100), @(860, 340, 60))) {
+    Blob $g $rng $c[0] $c[1] $c[2] (Rgb 60 140 60) 14
+    Blob $g $rng $c[0] $c[1] ([int]($c[2] * 0.5)) (Rgb 150 130 80) 5
+    Blob $g $rng $c[0] $c[1] ([int]($c[2] * 0.3)) (Rgb 40 110 50) 4
+}
+$ice = New-Object System.Drawing.SolidBrush (Rgb 235 240 250)
+$g.FillRectangle($ice, 0, 0, 1024, 26); $g.FillRectangle($ice, 0, 488, 1024, 24); $ice.Dispose()
+for ($i = 0; $i -lt 40; $i++) {
+    $cloud = New-Object System.Drawing.SolidBrush (Rgb 255 255 255 120)
+    $x = $rng.Next(0, 1024); $y = $rng.Next(40, 470); $w = $rng.Next(40, 160)
+    $g.FillEllipse($cloud, $x, $y, $w, [int]($w * 0.25)); $cloud.Dispose()
+}
+$g.Dispose()
+$e.Save((Join-Path $out 'earth.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+$e.Dispose()
 "Prison art written to $out"

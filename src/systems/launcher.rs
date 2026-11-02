@@ -33,6 +33,19 @@ struct Arrival {
 }
 #[derive(Resource, Default)]
 struct Arrivals(Vec<Arrival>);
+/// Lands `count` villagers beside `at`, one after another, like rocket passengers
+/// (the space prison uses it for villagers who escaped with the hero).
+pub(crate) fn drop_villagers(world: &mut World, at: Vec3, count: u32, seed: u32) {
+    let mut arrivals = world.get_resource_or_insert_with(Arrivals::default);
+    for i in 0..count.min(8) {
+        let side = if i % 2 == 0 { -1. } else { 1. };
+        arrivals.0.push(Arrival {
+            position: at + Vec3::new(side * TILE * (1 + i / 2) as f32, 0., 0.),
+            delay: 0.3 + i as f32 * 0.2,
+            seed: seed.wrapping_add(i),
+        });
+    }
+}
 fn release_passengers(world: &mut World, dt: f32) {
     let mut arrivals = world.remove_resource::<Arrivals>().unwrap_or_default();
     for a in &mut arrivals.0 {

@@ -77,11 +77,14 @@ VortiDeck. `FALLING_HEADS_API_PORT` forces one port.
 
 ### Space prison
 `PRISON` (or `JAIL`) locks the hero and one or two villagers in a 10x10 bedrock cell
-floating in space. The cell spins, magnets on its corners pull heads to the walls
-and micro-blasts throw everyone around. Hitting a red button opens the trapdoor
+floating in space above Earth. The cell spins (faster or slower every few seconds,
+sometimes reversing), so heads are flung outward and curve as the walls sweep past;
+four fixed electromagnets around it take turns pulling everyone to one side (the
+active one glows and arcs), and micro-blasts throw heads around. Hitting a red button opens the trapdoor
 across the room for 1.8 s; fly out through it (WASD or arrows thrust). Guards come
 in through the trapdoors and hit with batons (a hit costs a heart but never kills).
-Escape and a rocket flies you home with every villager who got out: 100 XP, up to
+Fly out and an escape rocket picks you up and dives to Earth (re-entry glow and
+all); you land home with every villager who got out: 100 XP, up to
 150 more for speed, 40 per villager and a heart. After 75 s, or Esc, the guards
 throw you out with nothing. Its cooldown is under Settings > Cooldowns.
 

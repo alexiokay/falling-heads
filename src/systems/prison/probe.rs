@@ -3,7 +3,9 @@
 //! trapdoor it opens, then checks the escape reward and the rocket home. A
 //! second visit is given up with Esc and must end as caught. Saves
 //! `target/visual-prison-<name>.png`.
+use super::RIDE_END;
 use super::*;
+use crate::resources::command_queue::PowerCommand;
 
 #[derive(Resource)]
 struct Probe {
@@ -107,48 +109,53 @@ pub(crate) fn run(w: &mut World) {
             capture(w, "trapdoor-open");
             next(w);
         }
+        // The escape rocket: pick-up at the trapdoor, then re-entry over Earth.
         3 => {
+            let ride = w
+                .resource_mut::<Prison>()
+                .into_inner()
+                .session_mut()
+                .and_then(|s| s.ride_time());
+            if ride.is_some_and(|t| t > 0.6) {
+                capture(w, "rocket-pickup");
+                next(w);
+            }
+            assert!(now - since < 3., "no escape rocket came");
+        }
+        4 => {
+            let ride = w
+                .resource_mut::<Prison>()
+                .into_inner()
+                .session_mut()
+                .and_then(|s| s.ride_time());
+            if ride.is_some_and(|t| t > RIDE_END - 1.) {
+                capture(w, "reentry");
+                next(w);
+            }
+            assert!(now - since < 6., "the rocket never reached Earth");
+        }
+        // Landed home, in the world, with the reward.
+        5 => {
             if state(w) == GameState::Playing {
                 let text = notice(w);
-                assert!(text.contains("ESCAPED"), "no escape notice ({text})");
+                assert!(text.contains("BACK ON EARTH"), "no landing notice ({text})");
+                let hero = w
+                    .query_filtered::<&Visibility, With<crate::components::hero::Hero>>()
+                    .single(w)
+                    .copied()
+                    .unwrap();
+                assert!(hero != Visibility::Hidden, "the hero did not come back");
                 eprintln!("[PRISON] {text}");
                 next(w);
             }
-            assert!(now - since < 5., "the escape did not end the visit");
-        }
-        // Home by rocket.
-        4 => {
-            let flying = w
-                .query_filtered::<(), (
-                    With<crate::components::hero::Hero>,
-                    With<super::super::launcher::LauncherPassenger>,
-                )>()
-                .iter(w)
-                .count();
-            if flying > 0 {
-                capture(w, "rocket");
-                eprintln!("[PRISON] rocket home after {:.1}s", now - since);
-                next(w);
-            }
-            assert!(now - since < 6., "no rocket home after the escape");
+            assert!(now - since < 4., "the ride did not end the visit");
         }
         // Second visit, given up with Esc.
-        // Prison is refused while travelling, so wait for the rocket to land.
-        5 if now - since > 2. => {
-            let flying = w
-                .query_filtered::<(), (
-                    With<crate::components::hero::Hero>,
-                    With<super::super::launcher::LauncherPassenger>,
-                )>()
-                .iter(w)
-                .count();
-            if flying == 0 {
-                send(PowerCommandType::Prison);
-                next(w);
-            }
-            assert!(now - since < 40., "the rocket home never landed");
+        6 if now - since > 2. => {
+            send(PowerCommandType::Prison);
+            next(w);
         }
-        6 => {
+        7 => {
             if state(w) == GameState::Prison && now - since > 9. {
                 let guards = cell(w).map_or(0, |c| c.guards());
                 assert!(guards >= 1, "no guard came in");
@@ -163,7 +170,7 @@ pub(crate) fn run(w: &mut World) {
             }
             assert!(now - since < 30., "second PRISON never started");
         }
-        7 => {
+        8 => {
             if state(w) == GameState::Playing {
                 let text = notice(w);
                 assert!(text.contains("Caught"), "giving up was not caught ({text})");

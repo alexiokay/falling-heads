@@ -1,14 +1,15 @@
 //! Space prison event (`!PRISON`): the hero and one or two villagers are locked
 //! in a spinning bedrock cell in zero gravity. Micro-blasts throw everyone
-//! around, magnets pull heads to the walls, a button opens the trapdoor across
-//! the room for a moment, and guards come in through the trapdoors. Escape and a
-//! rocket flies you (and any villager who got out) back home; fail and the
-//! guards throw you out after 75 s. The world keeps running
-//! behind it with the hero parked.
+//! around, four fixed electromagnets take turns pulling heads to one side, a
+//! button opens the trapdoor across the room for a moment, and guards come in
+//! through the trapdoors. Fly out and an escape rocket picks you up and flies
+//! you down to Earth (re-entry and all), landing you home with every villager
+//! who got out; fail and the guards throw you out after 75 s. The world keeps
+//! running behind it with the hero parked.
 use crate::{
     components::{enemy::Health, hero::Hero},
     events::power_events::PowerActivated,
-    resources::command_queue::{PowerCommand, PowerCommandType},
+    resources::command_queue::PowerCommandType,
     states::GameState,
 };
 use avian3d::prelude::*;
@@ -39,9 +40,64 @@ pub(crate) struct Session {
     elapsed: f32,
     leaving: Option<f32>,
     villagers: usize,
-    by: String,
     /// World text (ruin labels and the like) hidden for the visit, to restore.
     hidden_text: Vec<(Entity, Visibility)>,
+    /// The escape ride to Earth, once the hero is out.
+    ride: Option<Ride>,
+    /// Seconds of screen shake left (blasts).
+    shake: f32,
+    magnet_was: Option<usize>,
+}
+
+/// Seconds from the hero leaving the cell to landing back in the world.
+const RIDE_END: f32 = 4.4;
+
+/// The rocket ride: it swoops in to pick the hero up at the trapdoor, then
+/// dives for Earth, speeding up, until re-entry heat wraps it.
+struct Ride {
+    t: f32,
+    exit: Vec3,
+    side: Vec3,
+    out: Vec3,
+    target: Vec3,
+}
+
+fn smooth(t: f32) -> f32 {
+    let t = t.clamp(0., 1.);
+    t * t * (3. - 2. * t)
+}
+
+impl Ride {
+    fn at(&self, t: f32) -> Vec3 {
+        if t < 0.9 {
+            let k = 1. - (1. - t / 0.9).powi(3);
+            (self.exit + self.side * 900.).lerp(self.exit, k)
+        } else {
+            let u = ((t - 0.9) / (RIDE_END - 1.2)).clamp(0., 1.);
+            // Away from the prison first, then down, faster and faster.
+            self.exit.lerp(self.target, u * u * u)
+                + self.out * (u * std::f32::consts::PI).sin() * 320.
+        }
+    }
+    /// Position, heading, flame (0..1) and re-entry heat (0..1).
+    fn pose(&self) -> (Vec3, Vec3, f32, f32) {
+        let p = self.at(self.t);
+        let heading = if self.t < 0.9 {
+            -self.side
+        } else {
+            self.at(self.t + 0.02) - p
+        };
+        let u = ((self.t - 0.9) / (RIDE_END - 1.2)).clamp(0., 1.);
+        let flame = if self.t < 0.9 { 0.45 } else { 0.6 + u * 0.4 };
+        (p, heading, flame, smooth((u - 0.55) / 0.4))
+    }
+}
+
+impl Session {
+    /// Seconds into the escape ride, once it has started.
+    pub(crate) fn ride_time(&self) -> Option<f32> {
+        self.ride.as_ref().map(|r| r.t)
+    }
 }
 
 impl Prison {
@@ -162,19 +218,22 @@ fn enter(w: &mut World) {
         elapsed: 0.,
         leaving: None,
         villagers,
-        by,
         hidden_text: Vec::new(),
+        ride: None,
+        shake: 0.,
+        magnet_was: None,
     });
 }
 
-/// Camera distance that fits the spinning cell (its corners included).
+/// Camera distance that fits the cell and the electromagnets around it.
 fn camera_distance(w: &mut World) -> f32 {
     let aspect = w
         .query::<&Window>()
         .iter(w)
         .next()
         .map_or(1., |win| win.width() / win.height().max(1.));
-    let reach = (sim::HALF + sim::WALL) * std::f32::consts::SQRT_2 + 40.;
+    // The electromagnets around the cell, up to their mounts.
+    let reach = 830.;
     reach / ((std::f32::consts::FRAC_PI_8).tan() * aspect.min(1.))
 }
 
@@ -199,7 +258,8 @@ fn update(w: &mut World) {
     if give_up && s.cell.outcome.is_none() {
         s.cell.outcome = Some(sim::Outcome::Caught);
     }
-    if s.elapsed > 0.6 && s.cell.outcome.is_none() {
+    // After the outcome the cell keeps turning (the simulation only spins then).
+    if s.elapsed > 0.6 {
         s.accumulator += dt;
         while s.accumulator >= sim::STEP {
             s.cell.tick(steer);
@@ -242,24 +302,65 @@ fn update(w: &mut World) {
             _ => {}
         }
     }
-    let mut veil = (1. - s.elapsed / 0.6).clamp(0., 1.);
-    if s.cell.outcome.is_some() {
+    let magnet_was = s.magnet_was;
+    s.magnet_was = s.cell.magnet;
+    if events.iter().any(|e| matches!(e, sim::Event::Blast(_))) {
+        s.shake = 0.35;
+    }
+    s.shake = (s.shake - dt).max(0.);
+    // Out of the cell: the escape rocket swoops in and takes the hero to Earth.
+    if matches!(s.cell.outcome, Some(sim::Outcome::Escaped { .. })) && s.ride.is_none() {
+        let turn = Quat::from_rotation_z(s.cell.angle);
+        let exit = s.origin + turn * s.cell.bodies[0].p.extend(30.);
+        let out = (exit - s.origin).normalize_or(Vec3::Y);
+        let earth = s.origin + visuals::EARTH_CENTER;
+        let target = earth + (exit - earth).normalize() * visuals::EARTH_RADIUS * 1.02;
+        let side = Vec3::new(-out.y, out.x, 0.);
+        visuals::spawn_rocket(w, exit + side * 900., s.cell.saved);
+        s.ride = Some(Ride {
+            t: 0.,
+            exit,
+            side,
+            out,
+            target,
+        });
+    }
+    let mut veil = Color::srgba(0., 0., 0., (1. - s.elapsed / 0.6).clamp(0., 1.));
+    let mut look = s.origin;
+    let mut back = distance;
+    if let Some(r) = s.ride.as_mut() {
+        r.t += dt;
+        let (p, heading, flame, heat) = r.pose();
+        visuals::pose_rocket(w, p, heading, flame, heat);
+        // Follow the rocket down, closing in as it dives.
+        look = s.origin.lerp(p, smooth(r.t / 1.2));
+        back = distance + (950. - distance) * smooth((r.t - 0.9) / 1.6);
+        // Re-entry: the screen flares orange-white before landing.
+        let flare = ((r.t - (RIDE_END - 0.7)) / 0.6).clamp(0., 1.);
+        veil = Color::srgba(1., 0.82, 0.55, flare);
+        if r.t >= RIDE_END {
+            w.resource_mut::<NextState<GameState>>()
+                .set(GameState::Playing);
+        }
+    } else if s.cell.outcome.is_some() {
+        // Caught (or gave up): fade to black.
         let t = s.leaving.get_or_insert(0.);
         *t += dt;
-        veil = veil.max((*t / 0.6).clamp(0., 1.));
+        veil = Color::srgba(0., 0., 0., (*t / 0.6).clamp(0., 1.));
         if *t >= 0.7 {
             w.resource_mut::<NextState<GameState>>()
                 .set(GameState::Playing);
         }
     }
-    // A slow camera sway sells the zero gravity; the cell turns on its own.
+    // A slow sway sells the zero gravity; blasts shake the view.
     let sway = Vec3::new(
         (s.elapsed * 0.4).sin() * 40.,
         (s.elapsed * 0.3).cos() * 30.,
         0.,
     );
-    let camera = Transform::from_translation(s.origin + Vec3::Z * distance + sway)
-        .looking_at(s.origin, Vec3::Y);
+    let shake = Vec3::new((s.elapsed * 61.).sin(), (s.elapsed * 47.).cos(), 0.) * s.shake * 70.;
+    let camera = Transform::from_translation(look + Vec3::Z * back + sway + shake)
+        .looking_at(look + shake * 0.5, Vec3::Y);
     *w.get_mut::<Transform>(s.camera).unwrap() = if s.elapsed < 0.6 {
         Transform {
             translation: s
@@ -271,7 +372,16 @@ fn update(w: &mut World) {
     } else {
         camera
     };
-    visuals::animate(w, s.origin, &s.cell, &events, s.villagers, veil);
+    visuals::animate(
+        w,
+        s.origin,
+        &s.cell,
+        &events,
+        s.villagers,
+        veil,
+        s.ride.as_ref().map(|r| r.t),
+        magnet_was,
+    );
     w.insert_resource(p);
 }
 
@@ -311,12 +421,15 @@ fn leave(w: &mut World) {
                 {
                     xp.add_xp(amount);
                 }
-                // Home by rocket, with every villager who got out.
-                let mut command = PowerCommand::new(PowerCommandType::Launcher, s.by.clone());
-                command.launcher.villagers = saved as u8;
-                w.write_message(PowerActivated { command });
+                // The villagers who got out land beside the hero.
+                super::launcher::drop_villagers(
+                    w,
+                    s.start.translation,
+                    saved,
+                    s.cell.time.to_bits(),
+                );
                 format!(
-                    "ESCAPED in {seconds:.0}s! +{amount} XP, +1 heart, {saved}/{} villagers saved",
+                    "BACK ON EARTH! Escaped in {seconds:.0}s: +{amount} XP, +1 heart, {saved}/{} villagers saved",
                     s.villagers
                 )
             }

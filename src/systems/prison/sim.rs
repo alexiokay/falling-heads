@@ -15,14 +15,24 @@ pub const STEP: f32 = 1. / 120.;
 pub const TIME_LIMIT: f32 = 75.;
 /// A button keeps its trapdoor open this long.
 pub const DOOR_OPEN: f32 = 1.8;
-/// Turning speed of the whole cell, radians per second.
-pub const SPIN: f32 = 0.35;
-const BLAST_RADIUS: f32 = 260.;
-const BLAST_SPEED: f32 = 1000.;
-/// The outer magnets pull heads toward the walls (per px from the centre).
-const MAGNET: f32 = 0.55;
+/// Spin speed range (radians per second); it changes every few seconds and
+/// sometimes reverses, easing toward the new speed.
+const SPIN_MIN: f32 = 0.75;
+const SPIN_MAX: f32 = 1.35;
+const SPIN_EASE: f32 = 0.8;
+/// How strongly the spinning room's own forces act (1 = real physics): heads
+/// are flung outward and curve as the walls sweep past them.
+const SPIN_FORCES: f32 = 0.7;
+const BLAST_RADIUS: f32 = 270.;
+const BLAST_SPEED: f32 = 1100.;
+/// The four electromagnets around the cell stay put (right, up, left, down in
+/// the world); one at a time pulls every head toward its side.
+pub const MAGNETS: [Vec2; 4] = [Vec2::X, Vec2::Y, Vec2::NEG_X, Vec2::NEG_Y];
+const MAGNET_PULL: f32 = 560.;
+const MAGNET_ON: f32 = 1.4;
+const MAGNET_GAP: f32 = 0.6;
 const DRAG: f32 = 0.18;
-const THRUST: f32 = 560.;
+const THRUST: f32 = 720.;
 const MAX_SPEED: f32 = 1500.;
 const BOUNCE: f32 = 0.85;
 const GUARD_EVERY: f32 = 11.;
@@ -82,6 +92,14 @@ pub enum Outcome {
 pub struct Cell {
     pub time: f32,
     pub angle: f32,
+    /// Current spin, radians per second (negative turns the other way).
+    pub omega: f32,
+    omega_target: f32,
+    next_spin_change: f32,
+    /// The pulling magnet (index into `MAGNETS`) and seconds it stays on.
+    pub magnet: Option<usize>,
+    magnet_left: f32,
+    next_magnet: f32,
     pub bodies: Vec<Body>,
     pub doors: [Door; 3],
     pub buttons: [Button; 3],
@@ -120,6 +138,12 @@ impl Cell {
         Self {
             time: 0.,
             angle: 0.,
+            omega: 0.9,
+            omega_target: 0.9,
+            next_spin_change: 6.,
+            magnet: None,
+            magnet_left: 0.,
+            next_magnet: 1.5,
             bodies,
             // Top, left and right trapdoors.
             doors: [
@@ -186,11 +210,43 @@ impl Cell {
     /// One fixed step. `steer` is the player's input in screen space.
     pub fn tick(&mut self, steer: Vec2) {
         if self.outcome.is_some() {
+            // The cell keeps turning while the hero flies away (or is thrown out).
+            self.angle += self.omega * STEP;
             return;
         }
         let dt = STEP;
         self.time += dt;
-        self.angle += SPIN * dt;
+        if self.time >= self.next_spin_change {
+            self.next_spin_change = self.time + 5. + self.random() * 4.;
+            let speed = SPIN_MIN + self.random() * (SPIN_MAX - SPIN_MIN);
+            let keep = self.random() > 0.35;
+            self.omega_target = speed * self.omega.signum() * if keep { 1. } else { -1. };
+        }
+        let before = self.omega;
+        self.omega += (self.omega_target - self.omega).clamp(-SPIN_EASE * dt, SPIN_EASE * dt);
+        let alpha = (self.omega - before) / dt;
+        self.angle += self.omega * dt;
+        self.magnet_left = (self.magnet_left - dt).max(0.);
+        if self.magnet_left == 0. {
+            self.magnet = None;
+        }
+        if self.time >= self.next_magnet {
+            let pick = (self.random() * 4.) as usize % 4;
+            // Never the same magnet twice in a row.
+            let pick = if Some(pick) == self.magnet {
+                (pick + 1) % 4
+            } else {
+                pick
+            };
+            self.magnet = Some(pick);
+            self.magnet_left = MAGNET_ON;
+            self.next_magnet = self.time + MAGNET_ON + MAGNET_GAP;
+        }
+        let pull = self.magnet.map_or(Vec2::ZERO, |m| {
+            rotate(MAGNETS[m], -self.angle) * MAGNET_PULL
+        });
+        let (w, alpha) = (self.omega * SPIN_FORCES, alpha * SPIN_FORCES);
+        let fling = self.omega * self.omega * SPIN_FORCES;
         for d in &mut self.doors {
             d.open = (d.open - dt).max(0.);
         }
@@ -198,7 +254,7 @@ impl Cell {
             b.lit = (b.lit - dt).max(0.);
         }
         if self.time >= self.next_blast {
-            self.next_blast = self.time + 2.5 + self.random() * 1.5;
+            self.next_blast = self.time + 1.6 + self.random() * 1.2;
             let at = Vec2::new(self.random() - 0.5, self.random() - 0.5) * (HALF - 60.) * 2.;
             self.blast(at);
         }
@@ -216,7 +272,12 @@ impl Cell {
             if b.escaped {
                 continue;
             }
-            let mut a = b.p * MAGNET;
+            // In the turning room: centrifugal (out), Coriolis (curving) and
+            // the push of a speeding-up or slowing spin; plus the magnet.
+            let centrifugal = b.p * fling;
+            let coriolis = Vec2::new(b.v.y, -b.v.x) * 2. * w;
+            let euler = Vec2::new(b.p.y, -b.p.x) * alpha;
+            let mut a = centrifugal + coriolis + euler + pull;
             match b.kind {
                 Kind::Hero => a += thrust,
                 Kind::Guard => a += (hero - b.p).normalize_or_zero() * GUARD_THRUST,
@@ -445,6 +506,33 @@ mod tests {
             cell.tick(Vec2::ZERO);
         }
         assert!(!cell.bodies[guard].escaped);
+    }
+
+    #[test]
+    fn magnets_take_turns_and_the_spin_varies_and_reverses() {
+        let mut cell = Cell::new(9, 1);
+        let mut used = Vec::new();
+        let (mut slow, mut fast, mut flips) = (f32::MAX, 0f32, 0);
+        let mut last = cell.omega.signum();
+        for _ in 0..(60. / STEP) as usize {
+            cell.tick(Vec2::ZERO);
+            if let Some(m) = cell.magnet
+                && used.last() != Some(&m)
+            {
+                used.push(m);
+            }
+            slow = slow.min(cell.omega.abs());
+            fast = fast.max(cell.omega.abs());
+            if cell.omega.signum() != last {
+                flips += 1;
+                last = cell.omega.signum();
+            }
+        }
+        assert!(used.len() >= 10, "magnets fired {} times", used.len());
+        assert!(used.windows(2).all(|p| p[0] != p[1]));
+        assert!((0..4).all(|m| used.contains(&m)), "every magnet fires");
+        assert!(flips >= 1, "the spin never reversed");
+        assert!(fast > 0.9 && fast - slow > 0.3, "spin {slow}..{fast}");
     }
 
     #[test]
