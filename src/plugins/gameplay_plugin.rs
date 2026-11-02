@@ -108,13 +108,13 @@ impl Plugin for GameplayPlugin {
                         crate::systems::ui::loading_screen::LoadingActive,
                     >)),
                 )
-                    // The world keeps running behind the Slime Rift.
+                    // The world keeps running behind the space prison.
                     .run_if(in_state(crate::states::InGame)),
             )
             .add_systems(
                 Update,
                 // Hero keyboard control and the camera belong to normal play; the
-                // Rift steers its own runner and camera.
+                // prison steers its own heads and camera.
                 (
                     hero_movement,
                     calculate_action_center,
@@ -127,7 +127,6 @@ impl Plugin for GameplayPlugin {
                 update_background
                     .after(crate::systems::biome_teleport::finish_biome_teleport)
                     .before(TransformSystems::Propagate)
-                    // Also in the Slime Rift, whose camera shows the real world behind the course.
                     .run_if(in_state(crate::states::InGame)),
             )
             .add_systems(

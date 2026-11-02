@@ -83,7 +83,6 @@ fn setup_commands_panel(mut commands: Commands) {
                         "!MIRROR",
                         "!MAGNET",
                         "!LAUNCHER",
-                        "!RIFT",
                         "!TELEPORT",
                         "!WATERBUCKET",
                         "!LAVABUCKET",

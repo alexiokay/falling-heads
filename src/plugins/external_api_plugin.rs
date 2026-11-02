@@ -242,8 +242,6 @@ fn start_api_server() {
             "LAVABUCKET" => Some(PowerCommandType::LavaBucket),
             "TELEPORT" => Some(PowerCommandType::Teleport),
             "LAUNCHER" | "ROCKET" => Some(PowerCommandType::Launcher),
-            "RIFT" => Some(PowerCommandType::Rift),
-            "REWIND" => Some(PowerCommandType::Rewind),
             "TNT" => Some(PowerCommandType::Tnt),
             "FAST" => Some(PowerCommandType::Fast),
             "SLOW" => Some(PowerCommandType::Slow),
@@ -472,9 +470,7 @@ fn process_commands(
 
         // Execute power immediately
         match command.command_type {
-            PowerCommandType::Rift
-            | PowerCommandType::Rewind
-            | PowerCommandType::Launcher
+            PowerCommandType::Launcher
             | PowerCommandType::Teleport
             | PowerCommandType::WaterBucket
             | PowerCommandType::LavaBucket

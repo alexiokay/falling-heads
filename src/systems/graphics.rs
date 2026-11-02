@@ -35,7 +35,7 @@ impl Plugin for GraphicsPlugin {
                     camera_settings,
                     lights_off_everywhere,
                     night_shade,
-                    lighting.run_if(not(in_state(GameState::Rift))),
+                    lighting,
                     torches,
                     local_lights,
                     animate_flames,

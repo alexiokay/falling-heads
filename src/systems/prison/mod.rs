@@ -3,7 +3,7 @@
 //! around, magnets pull heads to the walls, a button opens the trapdoor across
 //! the room for a moment, and guards come in through the trapdoors. Escape and a
 //! rocket flies you (and any villager who got out) back home; fail and the
-//! guards throw you out after 75 s. Like the Slime Rift, the world keeps running
+//! guards throw you out after 75 s. The world keeps running
 //! behind it with the hero parked.
 use crate::{
     components::{enemy::Health, hero::Hero},
@@ -40,6 +40,8 @@ pub(crate) struct Session {
     leaving: Option<f32>,
     villagers: usize,
     by: String,
+    /// World text (ruin labels and the like) hidden for the visit, to restore.
+    hidden_text: Vec<(Entity, Visibility)>,
 }
 
 impl Prison {
@@ -129,10 +131,10 @@ fn enter(w: &mut World) {
     else {
         return back_to_play(w, "");
     };
-    // Park the hero in the live world, like the Slime Rift does.
+    // Park the hero in the live world while the prison plays.
     w.entity_mut(hero).insert((
         Visibility::Hidden,
-        super::slime_rift::RiftParked,
+        crate::components::hero::Parked,
         RigidBody::Static,
         LinearVelocity::ZERO,
         ColliderDisabled,
@@ -161,6 +163,7 @@ fn enter(w: &mut World) {
         leaving: None,
         villagers,
         by,
+        hidden_text: Vec::new(),
     });
 }
 
@@ -201,6 +204,20 @@ fn update(w: &mut World) {
         while s.accumulator >= sim::STEP {
             s.cell.tick(steer);
             s.accumulator -= sim::STEP;
+        }
+    }
+    // World text is drawn by its own 2D pass, which the camera's layers do not
+    // hide; keep it out of space (labels appearing mid-visit included).
+    let shown: Vec<_> = w
+        .query_filtered::<(Entity, &Visibility), With<Text2d>>()
+        .iter(w)
+        .filter(|(_, v)| **v != Visibility::Hidden)
+        .map(|(e, v)| (e, *v))
+        .collect();
+    for (e, v) in shown {
+        w.entity_mut(e).insert(Visibility::Hidden);
+        if !s.hidden_text.iter().any(|(h, _)| *h == e) {
+            s.hidden_text.push((e, v));
         }
     }
     let events = std::mem::take(&mut s.cell.events);
@@ -262,7 +279,7 @@ fn leave(w: &mut World) {
     let mut p = w.remove_resource::<Prison>().unwrap();
     if let Some(s) = p.session.take() {
         if let Ok(mut hero) = w.get_entity_mut(s.hero) {
-            hero.remove::<(super::slime_rift::RiftParked, ColliderDisabled)>();
+            hero.remove::<(crate::components::hero::Parked, ColliderDisabled)>();
             hero.insert((
                 RigidBody::Dynamic,
                 LinearVelocity::ZERO,
@@ -270,6 +287,11 @@ fn leave(w: &mut World) {
                 s.start,
                 Position(s.start.translation),
             ));
+        }
+        for (e, v) in s.hidden_text {
+            if let Ok(mut label) = w.get_entity_mut(e) {
+                label.insert(v);
+            }
         }
         if let Ok(mut camera) = w.get_entity_mut(s.camera) {
             camera.insert(s.camera_start);

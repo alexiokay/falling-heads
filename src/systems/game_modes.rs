@@ -13,7 +13,6 @@ const GAME_MODES_FILE: &str = "game-modes.json";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GameMode {
-    SlimeRift,
     RandomEvents,
     RandomBoxes,
     Weather,
@@ -24,8 +23,7 @@ pub enum GameMode {
 }
 
 impl GameMode {
-    pub const ALL: [GameMode; 8] = [
-        Self::SlimeRift,
+    pub const ALL: [GameMode; 7] = [
         Self::RandomEvents,
         Self::RandomBoxes,
         Self::Weather,
@@ -37,7 +35,6 @@ impl GameMode {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::SlimeRift => "Slime Rift",
             Self::RandomEvents => "Random events",
             Self::RandomBoxes => "Random boxes",
             Self::Weather => "Weather",
@@ -52,7 +49,6 @@ impl GameMode {
 #[derive(Resource, Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
 pub struct GameModes {
-    pub slime_rift: bool,
     pub random_events: bool,
     pub random_boxes: bool,
     pub weather: bool,
@@ -65,7 +61,6 @@ pub struct GameModes {
 impl Default for GameModes {
     fn default() -> Self {
         Self {
-            slime_rift: true,
             random_events: true,
             random_boxes: true,
             weather: true,
@@ -80,7 +75,6 @@ impl Default for GameModes {
 impl GameModes {
     pub fn enabled(&self, mode: GameMode) -> bool {
         match mode {
-            GameMode::SlimeRift => self.slime_rift,
             GameMode::RandomEvents => self.random_events,
             GameMode::RandomBoxes => self.random_boxes,
             GameMode::Weather => self.weather,
@@ -93,7 +87,6 @@ impl GameModes {
 
     pub fn toggle(&mut self, mode: GameMode) {
         let flag = match mode {
-            GameMode::SlimeRift => &mut self.slime_rift,
             GameMode::RandomEvents => &mut self.random_events,
             GameMode::RandomBoxes => &mut self.random_boxes,
             GameMode::Weather => &mut self.weather,
@@ -266,12 +259,14 @@ mod tests {
     fn modes_default_on_toggle_and_survive_missing_fields() {
         let mut modes = GameModes::default();
         assert!(GameMode::ALL.iter().all(|m| modes.enabled(*m)));
-        modes.toggle(GameMode::SlimeRift);
-        assert!(!modes.enabled(GameMode::SlimeRift));
+        modes.toggle(GameMode::Dragon);
+        assert!(!modes.enabled(GameMode::Dragon));
         assert!(modes.enabled(GameMode::Weather));
         // An older save without some switches keeps the rest on.
-        let loaded: GameModes = serde_json::from_str(r#"{"weather":false}"#).unwrap();
-        assert!(!loaded.weather && loaded.slime_rift && loaded.chat_powers);
+        // A save from before the Slime Rift was removed still loads.
+        let loaded: GameModes =
+            serde_json::from_str(r#"{"weather":false,"slime_rift":false}"#).unwrap();
+        assert!(!loaded.weather && loaded.dragon && loaded.chat_powers);
         assert!(is_on(None, GameMode::Dragon));
     }
 }

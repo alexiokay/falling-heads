@@ -79,7 +79,6 @@ pub(crate) mod biome_content;
 
 pub(crate) mod plant_rules;
 pub(crate) mod slime_physics;
-pub(crate) mod slime_rift;
 
 pub(crate) mod asset_packs;
 pub(crate) mod character_select;

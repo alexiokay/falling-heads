@@ -17,7 +17,7 @@ const COOLDOWN_FILE: &str = "power-cooldowns.json";
 pub const STEPS: [u32; 9] = [0, 5, 10, 15, 30, 60, 120, 300, 600];
 
 /// Every power in the order the settings page lists them.
-pub const POWERS: [P; 36] = [
+pub const POWERS: [P; 34] = [
     P::Bolt,
     P::Thunder,
     P::Tnt,
@@ -51,8 +51,6 @@ pub const POWERS: [P; 36] = [
     P::LavaBucket,
     P::Teleport,
     P::Launcher,
-    P::Rift,
-    P::Rewind,
     P::Prison,
 ];
 
@@ -63,8 +61,6 @@ pub fn names(p: P) -> (&'static str, &'static str) {
         P::LavaBucket => ("lavabucket", "Lava"),
         P::Teleport => ("teleport", "Teleport"),
         P::Launcher => ("launcher", "Launcher"),
-        P::Rift => ("rift", "Rift"),
-        P::Rewind => ("rewind", "Rewind"),
         P::Tnt => ("tnt", "TNT"),
         P::Fast => ("fast", "Fast"),
         P::Slow => ("slow", "Slow"),

@@ -492,7 +492,6 @@ fn visibility(
     hero: Query<&GlobalTransform, With<crate::components::hero::Hero>>,
     layers: Query<Option<&bevy::camera::visibility::RenderLayers>>,
     camera_layers: Query<Option<&bevy::camera::visibility::RenderLayers>, With<Camera3d>>,
-    state: Res<State<crate::states::GameState>>,
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) {
     let center = hero.iter().next().map(|t| t.translation());
@@ -513,16 +512,14 @@ fn visibility(
         let visible = status.mode == 2
             && v.get()
             && camera_mask.intersects(&source_mask)
-            && (*state.get() == crate::states::GameState::Rift
-                || (t
-                    .translation()
-                    .xy()
-                    .cmpge(view.min - Vec2::splat(800.))
-                    .all()
-                    && t.translation()
-                        .xy()
-                        .cmple(view.max + Vec2::splat(800.))
-                        .all()));
+            && t.translation()
+                .xy()
+                .cmpge(view.min - Vec2::splat(800.))
+                .all()
+            && t.translation()
+                .xy()
+                .cmple(view.max + Vec2::splat(800.))
+                .all();
         if visible && !active {
             commands.entity(e).insert(RaytracingMesh3d(h.0.clone()));
         }

@@ -30,7 +30,7 @@ fn rebuild(
             Or<(With<Hero>, With<Villager>)>,
             Without<crate::components::damage_visual::DeathAnimation>,
             Without<crate::systems::launcher::LauncherPassenger>,
-            Without<crate::systems::slime_rift::RiftParked>,
+            Without<crate::components::hero::Parked>,
         ),
     >,
 ) {

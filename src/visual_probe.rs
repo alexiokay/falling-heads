@@ -75,10 +75,6 @@ fn probe(world: &mut World) {
         crate::systems::biome_encounters::mechanism_probe(world);
         return;
     }
-    if std::env::args().any(|a| a == "--rift-test") {
-        crate::systems::slime_rift::probe::run(world);
-        return;
-    }
     if std::env::args().any(|a| a == "--fast-motion-test") {
         crate::fast_motion_probe::run(world);
         return;

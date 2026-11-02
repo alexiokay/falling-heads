@@ -47,8 +47,6 @@ pub enum PowerCommandType {
     LavaBucket,
     Teleport, // Safe travel to the next biome
     Launcher,
-    Rift,
-    Rewind,
     Tnt,
     Fast,
     Slow,

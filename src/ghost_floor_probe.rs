@@ -49,7 +49,7 @@ type Body<'a> = (
     Option<&'a crate::components::enemy::TerrainFootprint>,
     Option<&'a avian3d::prelude::RigidBody>,
     Option<&'a avian3d::prelude::GravityScale>,
-    Has<crate::systems::slime_rift::RiftParked>,
+    Has<crate::components::hero::Parked>,
     Option<&'a Children>,
     Holds,
 );

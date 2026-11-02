@@ -77,6 +77,12 @@ pub(crate) fn run(w: &mut World) {
                 };
                 assert!(angle > 0.3, "cell is not spinning ({angle})");
                 assert!(bodies >= 2, "no villager locked up with the hero");
+                let labels = w
+                    .query::<(&Text2d, &Visibility)>()
+                    .iter(w)
+                    .filter(|(_, v)| **v != Visibility::Hidden)
+                    .count();
+                assert_eq!(labels, 0, "world labels showing in the prison");
                 capture(w, "cell");
                 next(w);
             }
@@ -127,9 +133,20 @@ pub(crate) fn run(w: &mut World) {
             assert!(now - since < 6., "no rocket home after the escape");
         }
         // Second visit, given up with Esc.
-        5 if now - since > 12. => {
-            send(PowerCommandType::Prison);
-            next(w);
+        // Prison is refused while travelling, so wait for the rocket to land.
+        5 if now - since > 2. => {
+            let flying = w
+                .query_filtered::<(), (
+                    With<crate::components::hero::Hero>,
+                    With<super::super::launcher::LauncherPassenger>,
+                )>()
+                .iter(w)
+                .count();
+            if flying == 0 {
+                send(PowerCommandType::Prison);
+                next(w);
+            }
+            assert!(now - since < 40., "the rocket home never landed");
         }
         6 => {
             if state(w) == GameState::Prison && now - since > 9. {

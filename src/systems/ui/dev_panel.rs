@@ -162,7 +162,6 @@ fn setup_dev_panel(mut commands: Commands, settings: Res<GameSettings>) {
                     (PowerCommandType::RandomBox, "RANDOMBOX"),
                     (PowerCommandType::Teleport, "TELEPORT"),
                     (PowerCommandType::Launcher, "LAUNCHER"),
-                    (PowerCommandType::Rift, "RIFT (F8)"),
                     (PowerCommandType::WaterBucket, "WATER"),
                     (PowerCommandType::LavaBucket, "LAVA"),
                     (PowerCommandType::GrowBuff, "GROW"),

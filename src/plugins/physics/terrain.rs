@@ -141,7 +141,7 @@ pub(super) fn check_all_entity_block_collisions(
             )>,
             Without<Block>,
             Without<crate::components::enemy::Flying>,
-            Without<crate::systems::slime_rift::RiftParked>,
+            Without<crate::components::hero::Parked>,
             Without<crate::components::play_style::TwinReturning>,
         ),
     >,

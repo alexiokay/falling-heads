@@ -38,10 +38,6 @@ src/systems/biome_content/probe.rs
 src/systems/biome_content/projectiles.rs
 src/systems/biome_content/terrain.rs
 src/systems/biome_content/tests.rs
-src/systems/slime_rift/course.rs
-src/systems/slime_rift/mod.rs
-src/systems/slime_rift/probe.rs
-src/systems/slime_rift/visuals.rs
 src/systems/plant_rules.rs
 src/systems/slime_physics.rs
 src/systems/terrain_shape.rs
@@ -49,3 +45,9 @@ src/systems/terrain_silhouettes.rs
 src/systems/biome_encounters/mechanisms.rs
 src/systems/biome_encounters/mechanisms/probe.rs
 src/depth_probe.rs
+src/systems/prison/mod.rs
+src/systems/prison/probe.rs
+src/systems/prison/sim.rs
+src/systems/prison/visuals.rs
+src/systems/power_cooldowns.rs
+src/night_probe.rs

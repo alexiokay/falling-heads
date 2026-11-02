@@ -227,7 +227,6 @@ fn main() {
     .add_plugins(systems::ui::loading_screen::LoadingScreenPlugin)
     .add_plugins(systems::biome_encounters::BiomeEncountersPlugin)
     .add_plugins(systems::biome_content::BiomeContentPlugin)
-    .add_plugins(systems::slime_rift::SlimeRiftPlugin)
     .add_plugins(systems::prison::PrisonPlugin)
     .add_plugins(systems::terrain_cracks::TerrainCracksPlugin)
     .add_plugins(systems::dragon_flyover::DragonPlugin)
