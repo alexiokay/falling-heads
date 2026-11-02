@@ -27,6 +27,7 @@ pub struct GraphicsPlugin;
 impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GraphicsSettings::load())
+            .init_resource::<KeepLit>()
             .add_plugins(MaterialPlugin::<FlameMaterial>::default())
             .add_systems(Startup, setup)
             .add_systems(
@@ -97,6 +98,11 @@ fn night_shade(
     }
 }
 
+/// Materials that stay lit whatever Graphics > Lighting says: the space prison's
+/// small scene brings its own lights and needs them for its metal and planet.
+#[derive(Resource, Default)]
+pub(crate) struct KeepLit(pub HashSet<AssetId<StandardMaterial>>);
+
 /// Graphics > Lighting for every material in the game, whoever made it
 /// (blocks, variant tiles, landmarks, mechanisms, mobs...): with lighting off
 /// each material that was made lit renders flat at full colour, so nothing
@@ -104,6 +110,7 @@ fn night_shade(
 /// Materials made unlit on purpose (heads, items, particles) are left alone.
 fn lights_off_everywhere(
     settings: Res<GraphicsSettings>,
+    keep: Res<KeepLit>,
     mut events: MessageReader<AssetEvent<StandardMaterial>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut made_lit: Local<HashSet<AssetId<StandardMaterial>>>,
@@ -119,7 +126,7 @@ fn lights_off_everywhere(
         }
     }
     for id in fresh {
-        if mats.get(id).is_some_and(|m| !m.unlit) {
+        if !keep.0.contains(&id) && mats.get(id).is_some_and(|m| !m.unlit) {
             made_lit.insert(id);
             if !settings.lighting
                 && let Some(mut m) = mats.get_mut(id)
@@ -1291,6 +1298,7 @@ mod tests {
                 lighting: false,
                 ..default()
             })
+            .init_resource::<KeepLit>()
             .add_systems(Update, lights_off_everywhere);
         let mut mats = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
         let lit = mats.add(StandardMaterial::default());

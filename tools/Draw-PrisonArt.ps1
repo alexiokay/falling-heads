@@ -6,6 +6,8 @@
 #   textures/prison/guard.png          16x16 guard face with police cap at 4x
 #   textures/prison/stars.png          512x512 starfield for the space backdrop
 #   textures/prison/earth.png          1024x512 Earth map (equirectangular) for the planet
+#   textures/prison/hazard.png         16x16 yellow-black hazard stripes at 4x
+#   textures/prison/solar.png          16x16 solar panel cells at 4x
 # Fixed random seeds, so reruns give the same pictures.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -159,4 +161,25 @@ for ($i = 0; $i -lt 40; $i++) {
 $g.Dispose()
 $e.Save((Join-Path $out 'earth.png'), [System.Drawing.Imaging.ImageFormat]::Png)
 $e.Dispose()
+# Hazard stripes: diagonal yellow and black bands.
+$hz = New-Pixels
+for ($y = 0; $y -lt 16; $y++) {
+    for ($x = 0; $x -lt 16; $x++) {
+        $c = if ((($x + $y) % 8) -lt 4) { Rgb 235 190 30 } else { Rgb 25 25 28 }
+        Set-Pixel $hz $x $y $c
+    }
+}
+Save $hz 'hazard.png'
+
+# Solar panel: dark blue cells in a silver grid, a light sheen on each cell.
+$sp = New-Pixels
+for ($y = 0; $y -lt 16; $y++) {
+    for ($x = 0; $x -lt 16; $x++) {
+        $grid = ($x % 4 -eq 0) -or ($y % 4 -eq 0)
+        $sheen = (($x % 4) -eq 1) -and (($y % 4) -eq 1)
+        $c = if ($grid) { Rgb 170 175 185 } elseif ($sheen) { Rgb 70 110 190 } else { Rgb 25 45 110 }
+        Set-Pixel $sp $x $y $c
+    }
+}
+Save $sp 'solar.png'
 "Prison art written to $out"

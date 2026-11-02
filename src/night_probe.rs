@@ -71,10 +71,11 @@ pub fn run(w: &mut World) {
                 .0
                 .alpha();
             assert!(alpha > 0.3, "night shade only at {alpha}");
+            let keep = &w.resource::<crate::systems::graphics::KeepLit>().0;
             let lit = w
                 .resource::<Assets<StandardMaterial>>()
                 .iter()
-                .filter(|(_, m)| !m.unlit)
+                .filter(|(id, m)| !m.unlit && !keep.contains(id))
                 .count();
             assert_eq!(lit, 0, "{lit} materials still lit with Lighting off");
             capture(w, "night");

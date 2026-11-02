@@ -79,8 +79,11 @@ VortiDeck. `FALLING_HEADS_API_PORT` forces one port.
 `PRISON` (or `JAIL`) locks the hero and one or two villagers in a 10x10 bedrock cell
 floating in space above Earth. The cell spins (faster or slower every few seconds,
 sometimes reversing), so heads are flung outward and curve as the walls sweep past;
-four fixed electromagnets around it take turns pulling everyone to one side (the
-active one glows and arcs), and micro-blasts throw heads around. Hitting a red button opens the trapdoor
+four electromagnets on a space-station truss ring (solar wings, antenna, beacons)
+take turns pulling everyone to one side (the active one heats its coil, arcs and
+fires a field beam), a containment field shimmers around the cell, and
+micro-blasts throw heads around. The station, cell and Earth are lit by the
+scene's own lights whatever Graphics > Lighting says. Hitting a red button opens the trapdoor
 across the room for 1.8 s; fly out through it (WASD or arrows thrust). Guards come
 in through the trapdoors and hit with batons (a hit costs a heart but never kills).
 Fly out and an escape rocket picks you up and dives to Earth (re-entry glow and

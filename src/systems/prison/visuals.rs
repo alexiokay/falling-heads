@@ -1,10 +1,15 @@
-//! The prison scene: a spinning bedrock cell with trapdoors and buttons, four
-//! fixed electromagnets around it (iron core, copper coils, steel mount, cable;
-//! the active one glows and throws electric arcs), heads, guards with batons,
-//! blast flashes and debris, Earth below, a starfield, the escape rocket, the HUD.
-//! Everything is unlit and on render layer 1, which the camera alone shows.
+//! The prison scene: a spinning bedrock cell with trapdoors and buttons, held
+//! by four electromagnets on a space-station truss ring (solar wings, antenna,
+//! blinking beacons); the active magnet glows, heats its coil, throws arcs and
+//! a shader field beam. Heads, guards with batons, blast flashes and debris,
+//! a lit Earth with a shader atmosphere, a starfield, the escape rocket, the HUD.
+//! The station, cell and Earth are lit by the scene's own lights (they stay lit
+//! whatever Graphics > Lighting says); faces and effects are unlit. Everything
+//! is on render layer 1, which the camera alone shows.
 use super::sim::{self, Cell, Event, Kind};
 use super::*;
+use bevy::render::render_resource::AsBindGroup;
+use bevy::shader::ShaderRef;
 
 /// Earth, far below and behind the prison (relative to the scene origin).
 pub(super) const EARTH_CENTER: Vec3 = Vec3::new(500., -2700., -1800.);
@@ -12,6 +17,23 @@ pub(super) const EARTH_RADIUS: f32 = 1750.;
 /// Pole face distance of each electromagnet from the cell centre; the spinning
 /// cell's corners reach about 543.
 const MAGNET_POLE: f32 = 600.;
+
+/// The prison's shader effects (`shaders/prison_field.wesl`): a magnet's field
+/// beam, Earth's atmosphere rim, the containment band around the cell.
+/// `params`: x time, y strength 0..1, z mode (0 beam, 1 atmosphere, 2 band).
+#[derive(Asset, TypePath, AsBindGroup, Clone, Debug)]
+pub(crate) struct PrisonField {
+    #[uniform(0)]
+    pub params: Vec4,
+}
+impl Material for PrisonField {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/prison_field.wesl".into()
+    }
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
+}
 
 #[derive(Resource, Clone)]
 pub(super) struct Art {
@@ -29,7 +51,6 @@ pub(super) struct Art {
     villager: Handle<StandardMaterial>,
     stars: Handle<StandardMaterial>,
     earth: Handle<StandardMaterial>,
-    air: Handle<StandardMaterial>,
     flash: Handle<StandardMaterial>,
     debris: Handle<StandardMaterial>,
     steel: Handle<StandardMaterial>,
@@ -37,8 +58,18 @@ pub(super) struct Art {
     iron: Handle<StandardMaterial>,
     copper: Handle<StandardMaterial>,
     copper_dark: Handle<StandardMaterial>,
+    copper_hot: Handle<StandardMaterial>,
     pole: Handle<StandardMaterial>,
     pole_hot: Handle<StandardMaterial>,
+    yoke: Handle<StandardMaterial>,
+    fin: Handle<StandardMaterial>,
+    hazard: Handle<StandardMaterial>,
+    truss: Handle<StandardMaterial>,
+    node: Handle<StandardMaterial>,
+    solar: Handle<StandardMaterial>,
+    beacon: Handle<StandardMaterial>,
+    lamp_idle: Handle<StandardMaterial>,
+    lamp_on: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     cable: Handle<StandardMaterial>,
     baton: Handle<StandardMaterial>,
@@ -47,6 +78,9 @@ pub(super) struct Art {
     red: Handle<StandardMaterial>,
     flame: Handle<StandardMaterial>,
     heat: Handle<StandardMaterial>,
+    fields: [Handle<PrisonField>; 4],
+    atmosphere: Handle<PrisonField>,
+    containment: Handle<PrisonField>,
     boom: [Handle<AudioSource>; 4],
     click: Handle<AudioSource>,
     bell: Handle<AudioSource>,
@@ -61,9 +95,19 @@ struct CellRoot;
 struct DoorTile(usize);
 #[derive(Component)]
 struct ButtonTile(usize);
-/// The pole face of electromagnet `0` (glows while it pulls).
+/// The pole shoe of electromagnet `0` (glows while it pulls).
 #[derive(Component)]
 struct MagnetPole(usize);
+/// A coil winding of magnet `0` (`1`: the light-copper ones); glows hot while
+/// the magnet pulls.
+#[derive(Component)]
+struct CoilWinding(usize, bool);
+/// The status lamp of magnet `0`.
+#[derive(Component)]
+struct StatusLamp(usize);
+/// A beacon on the station that blinks, with its phase in seconds.
+#[derive(Component)]
+struct Beacon(f32);
 /// One straight piece of an electric arc: magnet, arc, segment.
 #[derive(Component)]
 struct ArcSeg(usize, usize, usize);
@@ -80,7 +124,7 @@ struct Debris {
 }
 #[derive(Component)]
 struct Earth;
-/// An electromagnet's group (hidden once the escape rocket has left).
+/// The station and its magnets (hidden once the escape rocket has left).
 #[derive(Component)]
 struct MagnetRoot;
 #[derive(Component)]
@@ -101,10 +145,13 @@ struct HeroFace(Handle<StandardMaterial>);
 const ARCS: usize = 3;
 const ARC_SEGMENTS: usize = 5;
 
+#[allow(clippy::too_many_arguments)] // Bevy system parameters
 pub(super) fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
+    mut fields: ResMut<Assets<PrisonField>>,
+    mut keep: ResMut<crate::systems::graphics::KeepLit>,
     server: Res<AssetServer>,
     textures: Option<Res<crate::resources::asset_handles::GameTextures>>,
 ) {
@@ -125,12 +172,6 @@ pub(super) fn setup(
             ..default()
         })
     };
-    let bedrock = flat(Some(pixel("textures/prison/bedrock.png")), Color::WHITE);
-    let backwall = flat(
-        Some(pixel("textures/prison/bedrock.png")),
-        Color::srgb(0.42, 0.42, 0.48),
-    );
-    let trapdoor = flat(Some(pixel("textures/prison/trapdoor.png")), Color::WHITE);
     let button = flat(Some(pixel("textures/prison/button.png")), Color::WHITE);
     let button_pressed = flat(
         Some(pixel("textures/prison/button_pressed.png")),
@@ -145,43 +186,132 @@ pub(super) fn setup(
         Color::WHITE,
     );
     let stars = flat(Some(server.load("textures/prison/stars.png")), Color::WHITE);
-    let earth = flat(Some(server.load("textures/prison/earth.png")), Color::WHITE);
-    let steel = flat(None, Color::srgb(0.26, 0.28, 0.32));
-    let bolt = flat(None, Color::srgb(0.6, 0.62, 0.66));
-    let iron = flat(None, Color::srgb(0.45, 0.46, 0.5));
-    let copper = flat(None, Color::srgb(0.85, 0.5, 0.22));
-    let copper_dark = flat(None, Color::srgb(0.55, 0.29, 0.12));
-    let pole = flat(None, Color::srgb(0.7, 0.72, 0.78));
-    let cable = flat(None, Color::srgb(0.08, 0.08, 0.09));
     let baton = flat(None, Color::srgb(0.12, 0.1, 0.1));
     let body = flat(None, Color::srgb(0.2, 0.2, 0.24));
-    let debris = flat(None, Color::srgb(0.3, 0.3, 0.33));
-    let hull = flat(None, Color::srgb(0.93, 0.93, 0.95));
-    let red = flat(None, Color::srgb(0.85, 0.15, 0.12));
-    let mut glow = |color: Color, emissive: LinearRgba| {
+    // Lit surfaces: metal shines and shades under the scene's lights.
+    let mut lit = |texture: Option<Handle<Image>>, color: Color, metal: f32, rough: f32| {
+        let h = mats.add(StandardMaterial {
+            base_color_texture: texture,
+            base_color: color,
+            metallic: metal,
+            perceptual_roughness: rough,
+            reflectance: 0.5,
+            ..default()
+        });
+        keep.0.insert(h.id());
+        h
+    };
+    let bedrock = lit(
+        Some(pixel("textures/prison/bedrock.png")),
+        Color::WHITE,
+        0.,
+        0.9,
+    );
+    let backwall = lit(
+        Some(pixel("textures/prison/bedrock.png")),
+        Color::srgb(0.5, 0.5, 0.56),
+        0.,
+        0.95,
+    );
+    let trapdoor = lit(
+        Some(pixel("textures/prison/trapdoor.png")),
+        Color::WHITE,
+        0.6,
+        0.45,
+    );
+    let earth = lit(
+        Some(server.load("textures/prison/earth.png")),
+        Color::WHITE,
+        0.,
+        0.7,
+    );
+    let hazard = lit(
+        Some(pixel("textures/prison/hazard.png")),
+        Color::WHITE,
+        0.3,
+        0.5,
+    );
+    let solar = lit(
+        Some(pixel("textures/prison/solar.png")),
+        Color::WHITE,
+        0.4,
+        0.25,
+    );
+    let steel = lit(None, Color::srgb(0.3, 0.32, 0.36), 0.9, 0.35);
+    let bolt = lit(None, Color::srgb(0.75, 0.77, 0.8), 1., 0.25);
+    let iron = lit(None, Color::srgb(0.5, 0.51, 0.55), 0.85, 0.4);
+    let copper = lit(None, Color::srgb(0.95, 0.55, 0.3), 1., 0.28);
+    let copper_dark = lit(None, Color::srgb(0.62, 0.32, 0.15), 1., 0.38);
+    let pole = lit(None, Color::srgb(0.82, 0.84, 0.9), 1., 0.15);
+    let yoke = lit(None, Color::srgb(0.2, 0.21, 0.24), 0.8, 0.45);
+    let fin = lit(None, Color::srgb(0.6, 0.62, 0.66), 0.9, 0.3);
+    let truss = lit(None, Color::srgb(0.66, 0.68, 0.72), 0.85, 0.35);
+    let node = lit(None, Color::srgb(0.34, 0.36, 0.4), 0.8, 0.4);
+    let cable = lit(None, Color::srgb(0.06, 0.06, 0.07), 0., 0.6);
+    let debris = lit(None, Color::srgb(0.32, 0.32, 0.35), 0., 0.9);
+    let hull = lit(None, Color::srgb(0.93, 0.93, 0.95), 0.3, 0.3);
+    let red = lit(None, Color::srgb(0.85, 0.15, 0.12), 0.2, 0.4);
+    let mut glow = |color: Color, emissive: LinearRgba, blend: bool| {
         mats.add(StandardMaterial {
             base_color: color,
             emissive,
             unlit: true,
-            alpha_mode: AlphaMode::Blend,
+            alpha_mode: if blend {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Opaque
+            },
             ..default()
         })
     };
-    let air = glow(Color::srgba(0.45, 0.7, 1., 0.18), LinearRgba::BLACK);
     let flash = glow(
         Color::srgba(1., 0.75, 0.3, 0.75),
         LinearRgba::rgb(4., 2.2, 0.6),
+        true,
     );
-    let pole_hot = glow(Color::srgb(0.7, 0.95, 1.), LinearRgba::rgb(2., 4., 6.));
-    let spark = glow(Color::srgb(0.75, 0.95, 1.), LinearRgba::rgb(3., 6., 9.));
+    let pole_hot = glow(
+        Color::srgb(0.7, 0.95, 1.),
+        LinearRgba::rgb(2., 4., 6.),
+        false,
+    );
+    let copper_hot = glow(
+        Color::srgb(1., 0.6, 0.3),
+        LinearRgba::rgb(3., 1.2, 0.3),
+        false,
+    );
+    let spark = glow(
+        Color::srgb(0.75, 0.95, 1.),
+        LinearRgba::rgb(3., 6., 9.),
+        true,
+    );
+    let beacon = glow(
+        Color::srgb(1., 0.2, 0.15),
+        LinearRgba::rgb(6., 0.6, 0.4),
+        false,
+    );
+    let lamp_idle = glow(
+        Color::srgb(0.3, 1., 0.4),
+        LinearRgba::rgb(0.5, 2.5, 0.6),
+        false,
+    );
+    let lamp_on = glow(
+        Color::srgb(1., 0.25, 0.2),
+        LinearRgba::rgb(6., 0.8, 0.5),
+        false,
+    );
     let flame = glow(
         Color::srgba(1., 0.6, 0.15, 0.85),
         LinearRgba::rgb(5., 2.2, 0.3),
+        true,
     );
     let heat = glow(
         Color::srgba(1., 0.45, 0.1, 0.5),
         LinearRgba::rgb(4., 1.4, 0.2),
+        true,
     );
+    let field = |mode: f32| PrisonField {
+        params: Vec4::new(0., 0., mode, 0.),
+    };
     commands.insert_resource(Art {
         cube: meshes.add(Cuboid::new(1., 1., 1.)),
         quad: meshes.add(Rectangle::new(1., 1.)),
@@ -200,7 +330,6 @@ pub(super) fn setup(
         villager,
         stars,
         earth,
-        air,
         flash,
         debris,
         steel,
@@ -208,8 +337,18 @@ pub(super) fn setup(
         iron,
         copper,
         copper_dark,
+        copper_hot,
         pole,
         pole_hot,
+        yoke,
+        fin,
+        hazard,
+        truss,
+        node,
+        solar,
+        beacon,
+        lamp_idle,
+        lamp_on,
         spark,
         cable,
         baton,
@@ -218,6 +357,9 @@ pub(super) fn setup(
         red,
         flame,
         heat,
+        fields: std::array::from_fn(|_| fields.add(field(0.))),
+        atmosphere: fields.add(field(1.)),
+        containment: fields.add(field(2.)),
         boom: std::array::from_fn(|i| {
             server.load(format!("audio/sfx/explode/explode{}.ogg", i + 1))
         }),
@@ -228,11 +370,11 @@ pub(super) fn setup(
     });
 }
 
-fn mesh(
+fn mesh<M: Material>(
     w: &mut World,
     parent: Option<Entity>,
     mesh: &Handle<Mesh>,
-    mat: &Handle<StandardMaterial>,
+    mat: &Handle<M>,
     t: Transform,
     extra: impl Bundle,
 ) -> Entity {
@@ -255,9 +397,13 @@ fn group(w: &mut World, t: Transform, extra: impl Bundle) -> Entity {
     w.spawn((Scene, t, Visibility::Inherited, extra)).id()
 }
 
+/// Middle radius of the station's truss ring that holds the magnets.
+const RING: f32 = 960.;
+
 /// An electromagnet seen from the side, pointing at the cell along `dir`:
-/// steel mount with bolts and a cable, iron core wrapped in copper windings,
-/// a polished pole face. Built along local +X, then turned to `dir`.
+/// a polished pole shoe, an iron core wound with copper between two flanges,
+/// a horseshoe yoke with bolts and cooling fins, a status lamp, a hazard-striped
+/// strut bolted to the station ring and a cable. Built along local +X.
 fn electromagnet(w: &mut World, a: &Art, origin: Vec3, index: usize, dir: Vec2) {
     let root = group(
         w,
@@ -265,53 +411,48 @@ fn electromagnet(w: &mut World, a: &Art, origin: Vec3, index: usize, dir: Vec2) 
             .with_rotation(Quat::from_rotation_z(dir.y.atan2(dir.x))),
         MagnetRoot,
     );
-    let at = |d: f32, size: Vec3| Transform::from_xyz(d, 0., 0.).with_scale(size);
-    // Mount plate and its bolts.
+    let at = |x: f32, y: f32, size: Vec3| Transform::from_xyz(x, y, 0.).with_scale(size);
+    let p = MAGNET_POLE;
+    // The field beam from the pole toward the cell (drawn by the shader).
+    mesh(
+        w,
+        Some(root),
+        &a.quad,
+        &a.fields[index],
+        Transform::from_xyz(p - 100., 0., 25.)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::PI))
+            .with_scale(Vec3::new(200., 150., 1.)),
+        (),
+    );
+    // Pole shoe and core.
     mesh(
         w,
         Some(root),
         &a.cube,
-        &a.steel,
-        at(MAGNET_POLE + 200., Vec3::new(28., 170., 90.)),
-        (),
+        &a.pole,
+        at(p + 12., 0., Vec3::new(24., 100., 92.)),
+        MagnetPole(index),
     );
-    for y in [-62., 62.] {
-        mesh(
-            w,
-            Some(root),
-            &a.cube,
-            &a.bolt,
-            Transform::from_xyz(MAGNET_POLE + 200., y, 46.).with_scale(Vec3::new(12., 12., 4.)),
-            (),
-        );
-    }
-    // Cable out of the back, with a kink.
-    mesh(
-        w,
-        Some(root),
-        &a.cube,
-        &a.cable,
-        at(MAGNET_POLE + 260., Vec3::new(100., 12., 12.)),
-        (),
-    );
-    mesh(
-        w,
-        Some(root),
-        &a.cube,
-        &a.cable,
-        Transform::from_xyz(MAGNET_POLE + 310., 40., 0.).with_scale(Vec3::new(12., 92., 12.)),
-        (),
-    );
-    // Iron core and the copper windings around it.
     mesh(
         w,
         Some(root),
         &a.cube,
         &a.iron,
-        at(MAGNET_POLE + 95., Vec3::new(190., 46., 60.)),
+        at(p + 115., 0., Vec3::new(190., 46., 60.)),
         (),
     );
-    for i in 0..10 {
+    // Coil: end flanges and the windings between them.
+    for x in [p + 36., p + 190.] {
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.yoke,
+            at(x, 0., Vec3::new(8., 118., 106.)),
+            (),
+        );
+    }
+    for i in 0..11 {
         let mat = if i % 2 == 0 {
             &a.copper
         } else {
@@ -322,19 +463,98 @@ fn electromagnet(w: &mut World, a: &Art, origin: Vec3, index: usize, dir: Vec2) 
             Some(root),
             &a.cube,
             mat,
-            at(MAGNET_POLE + 34. + i as f32 * 14., Vec3::new(12., 92., 96.)),
-            (),
+            at(p + 46. + i as f32 * 13.5, 0., Vec3::new(12.5, 102., 98.)),
+            CoilWinding(index, i % 2 == 0),
         );
     }
-    // Pole face toward the cell.
+    // Horseshoe yoke: back plate and two arms reaching toward the cell.
     mesh(
         w,
         Some(root),
         &a.cube,
-        &a.pole,
-        at(MAGNET_POLE + 10., Vec3::new(20., 74., 80.)),
-        MagnetPole(index),
+        &a.yoke,
+        at(p + 225., 0., Vec3::new(30., 176., 96.)),
+        (),
     );
+    for y in [-80., 80.] {
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.yoke,
+            at(p + 165., y, Vec3::new(150., 18., 72.)),
+            (),
+        );
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.pole,
+            at(p + 92., y * 0.94, Vec3::new(14., 30., 74.)),
+            (),
+        );
+        for x in [p + 140., p + 200.] {
+            mesh(
+                w,
+                Some(root),
+                &a.cube,
+                &a.bolt,
+                Transform::from_xyz(x, y, 37.).with_scale(Vec3::new(9., 9., 4.)),
+                (),
+            );
+        }
+    }
+    // Cooling fins behind the yoke.
+    for i in 0..5 {
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.fin,
+            at(p + 248. + i as f32 * 10., 0., Vec3::new(4., 136., 84.)),
+            (),
+        );
+    }
+    // Status lamp on the yoke: green idle, red while pulling.
+    mesh(
+        w,
+        Some(root),
+        &a.cube,
+        &a.lamp_idle,
+        Transform::from_xyz(p + 225., 0., 50.).with_scale(Vec3::splat(16.)),
+        StatusLamp(index),
+    );
+    // Hazard-striped strut to the ring, and a cable running beside it.
+    let strut = RING - 22. - (p + 296.);
+    mesh(
+        w,
+        Some(root),
+        &a.cube,
+        &a.hazard,
+        at(p + 296. + strut / 2., 0., Vec3::new(strut, 36., 44.)),
+        (),
+    );
+    mesh(
+        w,
+        Some(root),
+        &a.cube,
+        &a.cable,
+        at(p + 225., 96., Vec3::new(10., 22., 10.)),
+        (),
+    );
+    mesh(
+        w,
+        Some(root),
+        &a.cube,
+        &a.cable,
+        at(
+            (p + 225. + RING) / 2.,
+            104.,
+            Vec3::new(RING - p - 225., 10., 10.),
+        ),
+        (),
+    );
+    // Arc pieces, posed each frame while this magnet pulls.
     for arc in 0..ARCS {
         for seg in 0..ARC_SEGMENTS {
             mesh(
@@ -347,6 +567,130 @@ fn electromagnet(w: &mut World, a: &Art, origin: Vec3, index: usize, dir: Vec2) 
             );
         }
     }
+}
+
+/// The station that holds the magnets: an octagonal truss ring (two rails and
+/// zig-zag bracing) with corner nodes and blinking beacons, two solar wings on
+/// booms and an antenna mast with a dish.
+fn station(w: &mut World, a: &Art, origin: Vec3) {
+    let root = group(w, Transform::from_translation(origin), MagnetRoot);
+    let eighth = std::f32::consts::PI / 8.;
+    let side = 2. * RING * eighth.tan();
+    for k in 0..8 {
+        let angle = k as f32 * std::f32::consts::FRAC_PI_4;
+        let segment = w
+            .spawn((
+                Transform::from_rotation(Quat::from_rotation_z(angle)),
+                Visibility::Inherited,
+                ChildOf(root),
+            ))
+            .id();
+        // Local X points out from the centre; the segment runs along local Y.
+        for x in [RING - 22., RING + 22.] {
+            mesh(
+                w,
+                Some(segment),
+                &a.cube,
+                &a.truss,
+                Transform::from_xyz(x, 0., 0.).with_scale(Vec3::new(9., side, 30.)),
+                (),
+            );
+        }
+        let bays = 12;
+        let bay = side / bays as f32;
+        for i in 0..bays {
+            let y0 = -side / 2. + i as f32 * bay;
+            let (from, to) = if i % 2 == 0 {
+                (Vec2::new(RING - 22., y0), Vec2::new(RING + 22., y0 + bay))
+            } else {
+                (Vec2::new(RING + 22., y0), Vec2::new(RING - 22., y0 + bay))
+            };
+            let d = to - from;
+            mesh(
+                w,
+                Some(segment),
+                &a.cube,
+                &a.truss,
+                Transform::from_translation(((from + to) / 2.).extend(-4.))
+                    .with_rotation(Quat::from_rotation_z(d.y.atan2(d.x)))
+                    .with_scale(Vec3::new(d.length(), 5., 18.)),
+                (),
+            );
+        }
+        // Corner node, with a blinking beacon on every other one.
+        let corner = angle + eighth;
+        let at = Vec2::new(corner.cos(), corner.sin()) * (RING / eighth.cos());
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.node,
+            Transform::from_translation(at.extend(0.))
+                .with_rotation(Quat::from_rotation_z(corner))
+                .with_scale(Vec3::new(64., 64., 44.)),
+            (),
+        );
+        if k % 2 == 0 {
+            mesh(
+                w,
+                Some(root),
+                &a.cube,
+                &a.beacon,
+                Transform::from_translation(at.extend(26.)).with_scale(Vec3::splat(14.)),
+                Beacon(k as f32 * 0.37),
+            );
+        }
+    }
+    // Solar wings left and right, on booms out of the ring.
+    for s in [-1., 1.] {
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.truss,
+            Transform::from_xyz(s * (RING + 290.), 0., -10.).with_scale(Vec3::new(520., 14., 14.)),
+            (),
+        );
+        for y in [-1., 1.] {
+            mesh(
+                w,
+                Some(root),
+                &a.cube,
+                &a.solar,
+                Transform::from_xyz(s * (RING + 330.), y * 96., -12.)
+                    .with_scale(Vec3::new(400., 150., 6.)),
+                (),
+            );
+        }
+    }
+    // Antenna mast and dish on top, beside the upper magnet.
+    let top = RING + 22.;
+    mesh(
+        w,
+        Some(root),
+        &a.cube,
+        &a.truss,
+        Transform::from_xyz(-200., top + 120., -6.).with_scale(Vec3::new(12., 240., 12.)),
+        (),
+    );
+    mesh(
+        w,
+        Some(root),
+        &a.cone,
+        &a.hull,
+        Transform::from_xyz(-200., top + 250., -6.)
+            .with_rotation(Quat::from_rotation_z(0.6))
+            .with_scale(Vec3::new(110., 40., 110.)),
+        (),
+    );
+    mesh(
+        w,
+        Some(root),
+        &a.cube,
+        &a.beacon,
+        Transform::from_xyz(-200., top + 245., 20.).with_scale(Vec3::splat(12.)),
+        Beacon(0.5),
+    );
 }
 
 pub(super) fn scene(w: &mut World, origin: Vec3, hero: Entity) {
@@ -407,11 +751,54 @@ pub(super) fn scene(w: &mut World, origin: Vec3, hero: Entity) {
             ButtonTile(i),
         );
     }
-    // Four fixed electromagnets around the spinning cell.
+    // The station ring and its four electromagnets around the spinning cell.
+    station(w, &a, origin);
     for (i, dir) in sim::MAGNETS.iter().enumerate() {
         electromagnet(w, &a, origin, i, *dir);
     }
-    // Earth below, with a thin atmosphere, turning slowly.
+    // The containment field band around the cell (shader).
+    mesh(
+        w,
+        None,
+        &a.quad,
+        &a.containment,
+        Transform::from_translation(origin + Vec3::Z * 70.).with_scale(Vec3::splat(1250.)),
+        (),
+    );
+    // The scene's own lights: a white sun from the upper left, blue earthshine
+    // from below and a warm rim from behind on the right.
+    for (offset, color, intensity) in [
+        (
+            Vec3::new(-1500., 1300., 1600.),
+            Color::srgb(1., 0.97, 0.92),
+            1_400_000_000.,
+        ),
+        (
+            Vec3::new(400., -2200., 900.),
+            Color::srgb(0.45, 0.65, 1.),
+            600_000_000.,
+        ),
+        (
+            Vec3::new(1600., 700., -700.),
+            Color::srgb(1., 0.75, 0.5),
+            450_000_000.,
+        ),
+    ] {
+        w.spawn((
+            Scene,
+            PointLight {
+                color,
+                intensity,
+                range: 9000.,
+                radius: 120.,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::from_translation(origin + offset),
+            RenderLayers::layer(1),
+        ));
+    }
+    // Earth below, lit by the sun, with a glowing atmosphere rim, turning slowly.
     let earth = group(
         w,
         Transform::from_translation(origin + EARTH_CENTER)
@@ -430,8 +817,8 @@ pub(super) fn scene(w: &mut World, origin: Vec3, hero: Entity) {
         w,
         Some(earth),
         &a.sphere,
-        &a.air,
-        Transform::from_scale(Vec3::splat(EARTH_RADIUS * 1.04)),
+        &a.atmosphere,
+        Transform::from_scale(Vec3::splat(EARTH_RADIUS * 1.05)),
         (),
     );
     // Starfield far behind.
@@ -746,6 +1133,71 @@ pub(super) fn animate(
         };
         if m.0 != *mat {
             m.0 = mat.clone();
+        }
+    }
+    // Coils glow hot and the lamp turns red on the pulling magnet.
+    for (coil, mut m) in w
+        .query::<(&CoilWinding, &mut MeshMaterial3d<StandardMaterial>)>()
+        .iter_mut(w)
+    {
+        let mat = if cell.magnet == Some(coil.0) && coil.1 {
+            &a.copper_hot
+        } else if coil.1 {
+            &a.copper
+        } else {
+            &a.copper_dark
+        };
+        if m.0 != *mat {
+            m.0 = mat.clone();
+        }
+    }
+    for (lamp, mut m) in w
+        .query::<(&StatusLamp, &mut MeshMaterial3d<StandardMaterial>)>()
+        .iter_mut(w)
+    {
+        let mat = if cell.magnet == Some(lamp.0) {
+            &a.lamp_on
+        } else {
+            &a.lamp_idle
+        };
+        if m.0 != *mat {
+            m.0 = mat.clone();
+        }
+    }
+    for (beacon, mut v) in w.query::<(&Beacon, &mut Visibility)>().iter_mut(w) {
+        let on = (cell.time + beacon.0) % 1.2 < 0.25 && !gone;
+        *v = if on {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
+    // Shader effects: field beams, the atmosphere and the containment band.
+    {
+        let now = w.resource::<Time<Real>>().elapsed_secs();
+        let mut fields = w.resource_mut::<Assets<PrisonField>>();
+        for (i, h) in a.fields.iter().enumerate() {
+            if let Some(mut f) = fields.get_mut(h) {
+                let on = if cell.magnet == Some(i) && !gone {
+                    1.
+                } else {
+                    0.
+                };
+                f.params = Vec4::new(now, on, 0., 0.);
+            }
+        }
+        if let Some(mut f) = fields.get_mut(&a.atmosphere) {
+            f.params = Vec4::new(now, 1., 1., 0.);
+        }
+        if let Some(mut f) = fields.get_mut(&a.containment) {
+            let strength = if gone {
+                0.
+            } else if cell.magnet.is_some() {
+                1.
+            } else {
+                0.3
+            };
+            f.params = Vec4::new(now, strength, 2., if gone { 0. } else { 1. });
         }
     }
     let frame = (cell.time * 24.) as u32;

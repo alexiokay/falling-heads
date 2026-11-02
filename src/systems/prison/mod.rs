@@ -110,6 +110,7 @@ pub(crate) struct PrisonPlugin;
 impl Plugin for PrisonPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Prison>()
+            .add_plugins(MaterialPlugin::<visuals::PrisonField>::default())
             .add_systems(Startup, visuals::setup)
             .add_systems(Update, requests)
             .add_systems(OnEnter(GameState::Prison), enter)
@@ -232,8 +233,8 @@ fn camera_distance(w: &mut World) -> f32 {
         .iter(w)
         .next()
         .map_or(1., |win| win.width() / win.height().max(1.));
-    // The electromagnets around the cell, up to their mounts.
-    let reach = 830.;
+    // The magnets and most of the station ring (its outer edge may run off).
+    let reach = 900.;
     reach / ((std::f32::consts::FRAC_PI_8).tan() * aspect.min(1.))
 }
 
