@@ -856,7 +856,7 @@ struct Bee {
 
 const ANVIL_MAX_BLOCKS: u8 = 6;
 const GOLEM_SECONDS: f32 = 30.0;
-const HOLE_SECONDS: f32 = 4.0;
+const HOLE_SECONDS: f32 = 10.0;
 const HOLE_RADIUS: f32 = 800.0;
 const BEE_SECONDS: f32 = 12.0;
 

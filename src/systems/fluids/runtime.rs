@@ -1,8 +1,6 @@
 use super::*;
 pub(super) fn bucket_powers(
     mut powers: MessageReader<crate::events::power_events::PowerActivated>,
-    time: Res<Time>,
-    mut cooldown: Local<f32>,
     hero: Query<&Transform, With<crate::components::hero::Hero>>,
     blocks: Query<
         (
@@ -17,18 +15,13 @@ pub(super) fn bucket_powers(
     mut notice: ResMut<crate::systems::world_portals::PowerNotice>,
 ) {
     use crate::resources::command_queue::PowerCommandType;
-    *cooldown = (*cooldown - time.delta_secs()).max(0.);
     for power in powers.read() {
         let kind = match power.command.command_type {
             PowerCommandType::WaterBucket => Liquid::Water,
             PowerCommandType::LavaBucket => Liquid::Lava,
             _ => continue,
         };
-        if *cooldown > 0. {
-            notice.text = format!("BUCKET RECHARGING - {:.0}s", cooldown.ceil());
-            notice.remaining = 2.;
-            continue;
-        }
+        // Any wait between buckets is the Water/Lava cooldown under Settings > Cooldowns.
         let Ok(hero) = hero.single() else {
             continue;
         };
@@ -58,9 +51,6 @@ pub(super) fn bucket_powers(
             if poured == 16 {
                 break;
             }
-        }
-        if poured > 0 {
-            *cooldown = 8.;
         }
         notice.text = if poured > 0 {
             format!("{:?} BUCKET", kind).to_uppercase()

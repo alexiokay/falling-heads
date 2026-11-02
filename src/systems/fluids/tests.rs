@@ -218,7 +218,7 @@ mod tests {
         }
     }
     #[test]
-    fn bucket_messages_respect_solids_finite_volume_and_shared_cooldown() {
+    fn bucket_messages_respect_solids_finite_volume_and_have_no_built_in_cooldown() {
         use crate::{
             events::power_events::PowerActivated,
             resources::command_queue::{PowerCommand, PowerCommandType},
@@ -252,15 +252,20 @@ mod tests {
             BlockType::Stone,
             Transform::from_xyz(64., 64., 0.),
         ));
-        for kind in [PowerCommandType::WaterBucket, PowerCommandType::LavaBucket] {
-            app.world_mut().write_message(PowerActivated {
-                command: PowerCommand::new(kind, "test".into()),
-            });
-            app.update();
-        }
+        app.world_mut().write_message(PowerActivated {
+            command: PowerCommand::new(PowerCommandType::WaterBucket, "test".into()),
+        });
+        app.update();
         let w = app.world().resource::<FluidWorld>();
         assert!(!w.cells.contains_key(&(1, 1)));
         assert_eq!(w.cells.values().map(|v| v.amount as u32).sum::<u32>(), 16);
+        // A second bucket straight away pours too: waits come from Settings > Cooldowns.
+        app.world_mut().write_message(PowerActivated {
+            command: PowerCommand::new(PowerCommandType::WaterBucket, "test".into()),
+        });
+        app.update();
+        let w = app.world().resource::<FluidWorld>();
+        assert!(w.cells.values().map(|v| v.amount as u32).sum::<u32>() > 16);
         assert!(
             w.cells
                 .values()
@@ -270,7 +275,7 @@ mod tests {
             app.world()
                 .resource::<crate::systems::world_portals::PowerNotice>()
                 .text
-                .contains("RECHARGING")
+                .contains("WATER BUCKET")
         );
     }
     fn weather(

@@ -105,6 +105,10 @@ fn power_requests(
         }
         if let Ok(hero) = hero.single() {
             let biome = determine_biome_at_position(hero.translation.x, hero.translation.y);
+            // The ruins' travel lock does not hold back the TELEPORT power (its wait
+            // is the Teleport cooldown under Settings > Cooldowns); a trip still
+            // sets the lock so landing beside a ruin does not bounce straight back.
+            let held = std::mem::take(&mut lock.remaining);
             let accepted = request_travel(
                 hero.translation,
                 next_biome(biome),
@@ -112,11 +116,8 @@ fn power_requests(
                 &mut lock,
             );
             if !accepted {
-                notice.text = if lock.remaining > 0. {
-                    format!("PORTAL RECHARGING - {:.0}s", lock.remaining.ceil())
-                } else {
-                    "TELEPORT ALREADY IN PROGRESS".into()
-                };
+                lock.remaining = held;
+                notice.text = "TELEPORT ALREADY IN PROGRESS".into();
                 notice.remaining = 3.;
             }
         }
@@ -345,7 +346,7 @@ mod tests {
             app.world()
                 .resource::<PowerNotice>()
                 .text
-                .contains("RECHARGING")
+                .contains("IN PROGRESS")
         );
         assert!(
             crate::components::lootbox::LootboxReward::all_rewards()

@@ -124,7 +124,7 @@ curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \
 - `QUAKE` ✅ - Ores nearby pop out as drops, blocks crack, heads jolt
 - `SHRINK` ✅ - Friendly heads half size for 10 seconds (no block damage)
 - `WIND` ✅ - Gust pushes every head sideways for 3 seconds
-- `BLACKHOLE` ✅ - Vortex pulls things in for 4 seconds, then pops them outward
+- `BLACKHOLE` ✅ - Vortex pulls things in for 10 seconds, then pops them outward
 - `ICEAGE` ✅ - Snow and slippery floors for 15 seconds
 - `BEES` ✅ - Swarm chases a random head; a big bounce shakes it off
 - `GHAST` 🚧 - Spawn shooting Ghast enemy (coming soon)
