@@ -35,6 +35,8 @@ mod ghost_floor_probe;
 #[cfg(feature = "probes")]
 mod head_size_probe;
 #[cfg(feature = "probes")]
+mod night_probe;
+#[cfg(feature = "probes")]
 mod overhaul_probe;
 #[cfg(feature = "probes")]
 mod pack_switch_probe;

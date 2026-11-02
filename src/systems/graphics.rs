@@ -33,6 +33,8 @@ impl Plugin for GraphicsPlugin {
                 Update,
                 (
                     camera_settings,
+                    lights_off_everywhere,
+                    night_shade,
                     lighting.run_if(not(in_state(GameState::Rift))),
                     torches,
                     local_lights,
@@ -48,6 +50,92 @@ impl Plugin for GraphicsPlugin {
                 Update,
                 (buttons, quality_slider).run_if(in_state(GameState::Settings)),
             );
+    }
+}
+
+/// With Lighting off nothing is lit, so night would look like day. This even
+/// dark-blue shade over the world (under the HUD) dims blocks, heads and
+/// items together at night, fading in at dusk and out at dawn. With Lighting
+/// on, the sun, moon and torches do this instead. Follows "Weather / moon
+/// lighting" like the backdrop does.
+#[derive(Component)]
+pub(crate) struct NightShade;
+const NIGHT_SHADE: f32 = 0.42;
+fn night_shade(
+    mut commands: Commands,
+    time: Res<Time>,
+    settings: Res<GraphicsSettings>,
+    cycle: Option<Res<DayNightCycle>>,
+    mut shade: Query<&mut BackgroundColor, With<NightShade>>,
+    mut level: Local<f32>,
+) {
+    let Ok(mut color) = shade.single_mut() else {
+        commands.spawn((
+            NightShade,
+            bevy::picking::Pickable::IGNORE,
+            GlobalZIndex(-50),
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+        ));
+        return;
+    };
+    let night = cycle.is_some_and(|c| !c.is_day());
+    let target = if night && !settings.lighting && settings.weather_lighting {
+        NIGHT_SHADE
+    } else {
+        0.
+    };
+    *level += (target - *level) * (time.delta_secs() * 0.8).min(1.);
+    let next = Color::srgba(0.01, 0.02, 0.07, *level);
+    if color.0 != next {
+        color.0 = next;
+    }
+}
+
+/// Graphics > Lighting for every material in the game, whoever made it
+/// (blocks, variant tiles, landmarks, mechanisms, mobs...): with lighting off
+/// each material that was made lit renders flat at full colour, so nothing
+/// turns near-black at night or underground; turning lighting on restores them.
+/// Materials made unlit on purpose (heads, items, particles) are left alone.
+fn lights_off_everywhere(
+    settings: Res<GraphicsSettings>,
+    mut events: MessageReader<AssetEvent<StandardMaterial>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut made_lit: Local<HashSet<AssetId<StandardMaterial>>>,
+) {
+    let mut fresh = Vec::new();
+    for event in events.read() {
+        match *event {
+            AssetEvent::Added { id } => fresh.push(id),
+            AssetEvent::Removed { id } | AssetEvent::Unused { id } => {
+                made_lit.remove(&id);
+            }
+            _ => {}
+        }
+    }
+    for id in fresh {
+        if mats.get(id).is_some_and(|m| !m.unlit) {
+            made_lit.insert(id);
+            if !settings.lighting
+                && let Some(mut m) = mats.get_mut(id)
+            {
+                m.unlit = true;
+            }
+        }
+    }
+    if settings.is_changed() {
+        for &id in made_lit.iter() {
+            if mats.get(id).is_some_and(|m| m.unlit == settings.lighting)
+                && let Some(mut m) = mats.get_mut(id)
+            {
+                m.unlit = !settings.lighting;
+            }
+        }
     }
 }
 
@@ -1127,6 +1215,7 @@ fn settings_panel(
                     font_size: FontSize::Px(14.),
                     ..default()
                 },
+                TextColor(label_color(&settings, n)),
                 Pickable::IGNORE,
             ));
         }
@@ -1147,24 +1236,44 @@ fn settings_panel(
         ));
     });
 }
+/// Grey for an option that does nothing right now because Lighting is off.
+fn label_color(settings: &GraphicsSettings, n: usize) -> Color {
+    if settings.inactive(n) {
+        Color::srgb(0.5, 0.52, 0.55)
+    } else {
+        Color::WHITE
+    }
+}
 fn buttons(
     mut settings: ResMut<GraphicsSettings>,
-    q: Query<
-        (Entity, &PickingInteraction, &GraphicsButton, &Children),
-        Changed<PickingInteraction>,
-    >,
-    mut text: Query<&mut Text>,
+    q: Query<(Entity, &PickingInteraction, &GraphicsButton), Changed<PickingInteraction>>,
+    all: Query<(&GraphicsButton, &Children)>,
+    mut text: Query<(&mut Text, &mut TextColor)>,
     mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
 ) {
-    for (entity, i, b, children) in &q {
+    for (entity, i, b) in &q {
         if !presses.pressed(entity, *i) {
             continue;
         }
         settings.toggle(b.0);
         settings.save();
+    }
+    // Every label, not just the clicked one: Lighting changes whether the
+    // options that depend on it are active.
+    if !settings.is_changed() {
+        return;
+    }
+    for (b, children) in &all {
         for child in children {
-            if let Ok(mut t) = text.get_mut(*child) {
-                **t = settings.label(b.0);
+            if let Ok((mut t, mut color)) = text.get_mut(*child) {
+                let label = settings.label(b.0);
+                if **t != label {
+                    **t = label;
+                }
+                let c = label_color(&settings, b.0);
+                if color.0 != c {
+                    color.0 = c;
+                }
             }
         }
     }
@@ -1173,6 +1282,43 @@ fn buttons(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lighting_off_flattens_every_lit_material_and_on_restores_it() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .insert_resource(GraphicsSettings {
+                lighting: false,
+                ..default()
+            })
+            .add_systems(Update, lights_off_everywhere);
+        let mut mats = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
+        let lit = mats.add(StandardMaterial::default());
+        let flat = mats.add(StandardMaterial {
+            unlit: true,
+            ..default()
+        });
+        app.update();
+        app.update();
+        let unlit = |app: &App, h: &Handle<StandardMaterial>| {
+            app.world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(h)
+                .unwrap()
+                .unlit
+        };
+        assert!(
+            unlit(&app, &lit),
+            "lit material not flattened with lighting off"
+        );
+        app.world_mut().resource_mut::<GraphicsSettings>().lighting = true;
+        app.update();
+        assert!(!unlit(&app, &lit), "lighting on did not restore it");
+        assert!(
+            unlit(&app, &flat),
+            "an unlit-by-design material was changed"
+        );
+    }
     #[test]
     fn lights_cover_wide_views_and_fade_only_beyond_their_visible_reach() {
         let view = Rect::from_center_size(Vec2::new(300., -200_000.), Vec2::new(3600., 1400.));

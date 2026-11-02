@@ -179,25 +179,3 @@ pub(super) fn animate_magma(
         m.base_color_texture = Some(art.magma[frame].clone());
     }
 }
-
-/// Variant tiles follow Graphics > Lighting like ordinary blocks: with lighting
-/// off they render flat at full colour instead of going dark at night and in caves.
-pub(super) fn follow_lighting(
-    settings: Option<Res<crate::resources::graphics_settings::GraphicsSettings>>,
-    art: Option<Res<Art>>,
-    mut mats: ResMut<Assets<StandardMaterial>>,
-) {
-    let (Some(settings), Some(art)) = (settings, art) else {
-        return;
-    };
-    if !settings.is_changed() && !art.is_added() {
-        return;
-    }
-    for handle in art.tiles.values() {
-        if let Some(mut m) = mats.get_mut(handle)
-            && m.unlit == settings.lighting
-        {
-            m.unlit = !settings.lighting;
-        }
-    }
-}

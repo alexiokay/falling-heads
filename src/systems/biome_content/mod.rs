@@ -19,7 +19,6 @@ pub struct BiomeContentPlugin;
 impl Plugin for BiomeContentPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, art::setup)
-            .add_systems(Update, art::follow_lighting)
             .add_systems(
                 Update,
                 (

@@ -53,7 +53,12 @@ impl Default for GraphicsSettings {
     }
 }
 impl GraphicsSettings {
+    /// The player's saved settings; test runs use the defaults so they never
+    /// depend on what the player picked (Lighting off would block ray tracing).
     pub fn load() -> Self {
+        if !crate::resources::settings::persistence_enabled() {
+            return Self::default();
+        }
         crate::resources::settings::read_settings_file(GRAPHICS_SETTINGS_FILE)
             .and_then(|s| Self::from_json(&s))
             .unwrap_or_default()
@@ -93,6 +98,14 @@ impl GraphicsSettings {
             _ => "Performance",
         }
     }
+    /// Options that only act on lit surfaces: with Lighting off they change nothing.
+    pub fn needs_lighting(n: usize) -> bool {
+        matches!(n, 1 | 2 | 6 | 12)
+    }
+    /// True when option `n` currently has no effect because Lighting is off.
+    pub fn inactive(&self, n: usize) -> bool {
+        !self.lighting && Self::needs_lighting(n)
+    }
     pub fn label(&self, n: usize) -> String {
         let value = match n {
             14 => {
@@ -117,7 +130,11 @@ impl GraphicsSettings {
                 }
             }
         };
-        format!("{}: {}", LABELS[n], value)
+        if self.inactive(n) {
+            format!("{}: {} (needs Lighting)", LABELS[n], value)
+        } else {
+            format!("{}: {}", LABELS[n], value)
+        }
     }
     pub fn value(&self, n: usize) -> bool {
         match n {
@@ -185,6 +202,15 @@ pub const LABELS: [&str; 16] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn options_that_need_lighting_say_so_only_while_it_is_off() {
+        let mut s = GraphicsSettings::default();
+        s.lighting = false;
+        assert!(s.label(1).ends_with("(needs Lighting)"));
+        assert!(!s.label(3).contains("needs Lighting"));
+        s.lighting = true;
+        assert!(!s.label(1).contains("needs Lighting"));
+    }
     #[test]
     fn all_slider_stops_roundtrip_without_affecting_ray_tracing() {
         for step in 0..3 {
