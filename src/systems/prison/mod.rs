@@ -47,6 +47,8 @@ pub(crate) struct Session {
     /// Seconds of screen shake left (blasts).
     shake: f32,
     magnet_was: Option<usize>,
+    /// Where the camera looks: drifts toward the hero inside the cell.
+    look: Vec3,
 }
 
 /// Seconds from the hero leaving the cell to landing back in the world.
@@ -223,18 +225,20 @@ fn enter(w: &mut World) {
         ride: None,
         shake: 0.,
         magnet_was: None,
+        look: origin,
     });
 }
 
-/// Camera distance that fits the cell and the electromagnets around it.
+/// Camera distance that fits the spinning cell, the action up close.
 fn camera_distance(w: &mut World) -> f32 {
     let aspect = w
         .query::<&Window>()
         .iter(w)
         .next()
         .map_or(1., |win| win.width() / win.height().max(1.));
-    // The magnets and most of the station ring (its outer edge may run off).
-    let reach = 900.;
+    // Frame the cell (its corners as it spins) with a little room; the magnets
+    // and station show around the edges. The camera also drifts to the hero.
+    let reach = 640.;
     reach / ((std::f32::consts::FRAC_PI_8).tan() * aspect.min(1.))
 }
 
@@ -327,14 +331,20 @@ fn update(w: &mut World) {
         });
     }
     let mut veil = Color::srgba(0., 0., 0., (1. - s.elapsed / 0.6).clamp(0., 1.));
-    let mut look = s.origin;
+    // Drift toward the hero so the action stays near the middle.
+    if s.ride.is_none() && !s.cell.bodies[0].escaped {
+        let hero = s.origin + Quat::from_rotation_z(s.cell.angle) * s.cell.bodies[0].p.extend(0.);
+        let goal = s.origin.lerp(hero, 0.4);
+        s.look = s.look.lerp(goal, 1. - (-3. * dt).exp());
+    }
+    let mut look = s.look;
     let mut back = distance;
     if let Some(r) = s.ride.as_mut() {
         r.t += dt;
         let (p, heading, flame, heat) = r.pose();
         visuals::pose_rocket(w, p, heading, flame, heat);
         // Follow the rocket down, closing in as it dives.
-        look = s.origin.lerp(p, smooth(r.t / 1.2));
+        look = s.look.lerp(p, smooth(r.t / 1.2));
         back = distance + (950. - distance) * smooth((r.t - 0.9) / 1.6);
         // Re-entry: the screen flares orange-white before landing.
         let flare = ((r.t - (RIDE_END - 0.7)) / 0.6).clamp(0., 1.);

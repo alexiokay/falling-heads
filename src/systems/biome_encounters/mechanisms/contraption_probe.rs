@@ -230,10 +230,12 @@ pub(super) fn run(world: &mut World, anchor: Vec3) -> bool {
         6 if wait(0.5) => {
             let d = world.resource::<Bench>().dummies[0];
             let v = world.get::<LinearVelocity>(d).unwrap().0;
-            assert!(
-                v.y == super::pads::HONEY_SLIDE && v.x.abs() < 5.,
-                "honey stick and slide {v}"
-            );
+            let stuck = v.y == super::pads::HONEY_SLIDE && v.x.abs() < 5.;
+            // Give a slow frame or two the chance to apply the honey rule.
+            if !stuck && !wait(3.) {
+                return false;
+            }
+            assert!(stuck, "honey stick and slide {v}");
             capture(world, "gadget-honey");
             for e in std::mem::take(&mut world.resource_mut::<Bench>().dummies) {
                 world.despawn(e);

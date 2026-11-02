@@ -111,9 +111,7 @@ fn main() {
         .map_err(|e| eprintln!("Cannot create diagnostics: {e}"))
         .ok();
     let mut app = App::new();
-    // A command for an entity that was despawned earlier in the frame (a mob
-    // killed, a chunk unloaded) logs a warning instead of crashing the game.
-    app.set_error_handler(bevy::ecs::error::warn);
+    app.set_error_handler(command_errors_warn);
     if let Some(session) = &session {
         app.insert_resource(session.clone());
     }
@@ -993,4 +991,15 @@ fn initialize_material_cache(
         cache.materials.len(),
         cache.resource_materials.len()
     );
+}
+
+/// A command aimed at an entity despawned earlier in the frame (a mob killed, a
+/// chunk unloaded) only logs a warning instead of crashing the game. Anything
+/// else, such as a panicking system, keeps Bevy's default handling, so it still
+/// stops the game (and fails a test run instead of leaving it hanging).
+fn command_errors_warn(error: bevy::ecs::error::BevyError, ctx: bevy::ecs::error::ErrorContext) {
+    match ctx {
+        bevy::ecs::error::ErrorContext::Command { .. } => bevy::ecs::error::warn(error, ctx),
+        _ => bevy::ecs::error::match_severity(error, ctx),
+    }
 }
