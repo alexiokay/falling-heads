@@ -17,7 +17,7 @@ const COOLDOWN_FILE: &str = "power-cooldowns.json";
 pub const STEPS: [u32; 9] = [0, 5, 10, 15, 30, 60, 120, 300, 600];
 
 /// Every power in the order the settings page lists them.
-pub const POWERS: [P; 35] = [
+pub const POWERS: [P; 36] = [
     P::Bolt,
     P::Thunder,
     P::Tnt,
@@ -53,6 +53,7 @@ pub const POWERS: [P; 35] = [
     P::Launcher,
     P::Rift,
     P::Rewind,
+    P::Prison,
 ];
 
 /// Saved id and shown name of a power.
@@ -93,6 +94,7 @@ pub fn names(p: P) -> (&'static str, &'static str) {
         P::BlackHole => ("blackhole", "Black hole"),
         P::IceAge => ("iceage", "Ice age"),
         P::Bees => ("bees", "Bees"),
+        P::Prison => ("prison", "Prison"),
     }
 }
 

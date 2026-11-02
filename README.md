@@ -75,6 +75,16 @@ port. The address in use is shown under **Settings > Game modes** and written to
 `%APPDATA%\FallingHeads\api.json` (`{"url": ..., "port": ...}`) for tools such as
 VortiDeck. `FALLING_HEADS_API_PORT` forces one port.
 
+### Space prison
+`PRISON` (or `JAIL`) locks the hero and one or two villagers in a 10x10 bedrock cell
+floating in space. The cell spins, magnets on its corners pull heads to the walls
+and micro-blasts throw everyone around. Hitting a red button opens the trapdoor
+across the room for 1.8 s; fly out through it (WASD or arrows thrust). Guards come
+in through the trapdoors and hit with batons (a hit costs a heart but never kills).
+Escape and a rocket flies you home with every villager who got out: 100 XP, up to
+150 more for speed, 40 per villager and a heart. After 75 s, or Esc, the guards
+throw you out with nothing. Its cooldown is under Settings > Cooldowns.
+
 ### Combo streaks
 Break blocks within 1.5 s of each other to build a combo. The counter climbs with the
 break notes; milestones at x10 (ON FIRE), x25 (UNSTOPPABLE) and x50 (FRENZY) add a
@@ -127,6 +137,7 @@ curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \
 - `BLACKHOLE` ✅ - Vortex pulls things in for 10 seconds, then pops them outward
 - `ICEAGE` ✅ - Snow and slippery floors for 15 seconds
 - `BEES` ✅ - Swarm chases a random head; a big bounce shakes it off
+- `PRISON` ✅ - Locks the hero in a spinning zero-gravity space prison (see Space prison)
 - `GHAST` 🚧 - Spawn shooting Ghast enemy (coming soon)
 - `BOX` 🚧 - Spawn loot box (coming soon)
 - `MAGNET` 🚧 - Attract all resources (coming soon)

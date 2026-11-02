@@ -95,6 +95,10 @@ fn probe(world: &mut World) {
         crate::character_probe::run(world);
         return;
     }
+    if std::env::args().any(|a| a == "--prison-test") {
+        crate::systems::prison::probe::run(world);
+        return;
+    }
     if std::env::args().any(|a| a == "--night-test") {
         crate::night_probe::run(world);
         return;

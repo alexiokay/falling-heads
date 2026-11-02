@@ -111,6 +111,9 @@ fn main() {
         .map_err(|e| eprintln!("Cannot create diagnostics: {e}"))
         .ok();
     let mut app = App::new();
+    // A command for an entity that was despawned earlier in the frame (a mob
+    // killed, a chunk unloaded) logs a warning instead of crashing the game.
+    app.set_error_handler(bevy::ecs::error::warn);
     if let Some(session) = &session {
         app.insert_resource(session.clone());
     }
@@ -225,6 +228,7 @@ fn main() {
     .add_plugins(systems::biome_encounters::BiomeEncountersPlugin)
     .add_plugins(systems::biome_content::BiomeContentPlugin)
     .add_plugins(systems::slime_rift::SlimeRiftPlugin)
+    .add_plugins(systems::prison::PrisonPlugin)
     .add_plugins(systems::terrain_cracks::TerrainCracksPlugin)
     .add_plugins(systems::dragon_flyover::DragonPlugin)
     .add_plugins(systems::energy_vfx::EnergyVfxPlugin)

@@ -178,6 +178,7 @@ fn setup_dev_panel(mut commands: Commands, settings: Res<GameSettings>) {
                     (PowerCommandType::Bees, "BEES"),
                     (PowerCommandType::Bolt, "BOLT"),
                     (PowerCommandType::Fuss, "FUSS"),
+                    (PowerCommandType::Prison, "PRISON"),
                 ] {
                     grid_button(
                         grid,

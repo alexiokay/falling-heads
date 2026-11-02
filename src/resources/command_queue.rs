@@ -78,4 +78,5 @@ pub enum PowerCommandType {
     BlackHole,  // Vortex pulls things in for 10 s, then pops them outward
     IceAge,     // Snow and slippery floors for 15 s
     Bees,       // Swarm chases a random head and stings lightly
+    Prison,     // Locked in a spinning zero-gravity space prison until you escape
 }

@@ -271,6 +271,7 @@ fn start_api_server() {
             "BLACKHOLE" | "BLACK_HOLE" | "HOLE" => Some(PowerCommandType::BlackHole),
             "ICEAGE" | "ICE_AGE" | "ICE" => Some(PowerCommandType::IceAge),
             "BEES" | "BEE" => Some(PowerCommandType::Bees),
+            "PRISON" | "JAIL" => Some(PowerCommandType::Prison),
             _ => None,
         };
 
@@ -489,7 +490,8 @@ fn process_commands(
             | PowerCommandType::Wind
             | PowerCommandType::BlackHole
             | PowerCommandType::IceAge
-            | PowerCommandType::Bees => {} // Dedicated systems consume PowerActivated.
+            | PowerCommandType::Bees
+            | PowerCommandType::Prison => {} // Dedicated systems consume PowerActivated.
             PowerCommandType::Tnt => {
                 if let (Ok((_, hero_transform)), Some(atlases), Some(mesh_cache)) = (
                     hero_query.single(),

@@ -74,8 +74,12 @@ pub(super) fn install(app: &mut App) {
                 .run_if(in_state(crate::states::InGame)),
         );
 }
-/// Swings each gate door open into the background (0..90 degrees about its hinge)
-/// and lets heads through while it is open; it blocks again once fully shut.
+/// How far an open door swings toward the camera: about 66 degrees, not 90,
+/// so its face stays visible (narrowed) like an open door in a 2D game. A full
+/// 90 degree swing is seen edge-on from the side and looked shut.
+const DOOR_OPEN_ANGLE: f32 = 1.15;
+/// Swings each gate door open on its hinge, toward the camera, and lets heads
+/// through while it is open; it blocks again once fully shut.
 fn animate_gates(
     mut commands: Commands,
     machines: Query<(Entity, &Machine, Has<ColliderDisabled>)>,
@@ -83,10 +87,10 @@ fn animate_gates(
 ) {
     for (hinge, mut t) in &mut hinges {
         if let Ok((_, m, _)) = machines.get(hinge.parent()) {
-            let angle = m.amount * std::f32::consts::FRAC_PI_2;
-            let rotation = Quat::from_rotation_y(angle);
-            if t.rotation != rotation {
-                t.rotation = rotation;
+            let swing = Transform::from_xyz(-30., 0., 0.)
+                .with_rotation(Quat::from_rotation_y(-m.amount * DOOR_OPEN_ANGLE));
+            if *t != swing {
+                *t = swing;
             }
         }
     }
@@ -263,8 +267,8 @@ fn spawn_selected(commands: &mut Commands, site: Site, art: &MachineArt, slime: 
             ))
             .id();
         if kind == Kind::Gate {
-            // The door turns on a hinge at its left edge (Minecraft-style) instead
-            // of sliding; `animate_gates` sets the hinge angle from `amount`.
+            // The door turns on a hinge at its left edge (Minecraft-style);
+            // `animate_gates` sets the hinge angle from `amount`.
             let hinge = commands
                 .spawn((
                     ChildOf(root),

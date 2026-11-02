@@ -32,6 +32,29 @@ fn place(world: &mut World, pos: Vec3, dynamic: bool) {
         },
     ));
 }
+/// True once the gate is shut. Any creature within reach opens a gate, so mobs
+/// that wandered or spawned near the fixture are cleared while it settles.
+fn settled_shut(world: &mut World, gate: Entity, waited: f32) -> bool {
+    let (amount, home) = {
+        let m = world.get::<Machine>(gate).unwrap();
+        (m.amount, m.home)
+    };
+    if amount < 0.01 {
+        return true;
+    }
+    let near: Vec<_> = world
+        .query_filtered::<(Entity, &Transform), (Or<(With<Enemy>, With<Villager>)>, Without<Hero>)>(
+        )
+        .iter(world)
+        .filter(|(_, t)| t.translation.xy().distance(home.xy()) < 500.)
+        .map(|(e, _)| e)
+        .collect();
+    for e in near {
+        world.despawn(e);
+    }
+    assert!(waited < 10., "gate never shut (amount {amount})");
+    false
+}
 pub(crate) fn run(world: &mut World) {
     world.init_resource::<Probe>();
     let now = world.resource::<Time<Real>>().elapsed_secs();
@@ -124,7 +147,9 @@ pub(crate) fn run(world: &mut World) {
             place(world, home + Vec3::new(400., 0., 40.), false);
         }
         1 if now > since + 2. => {
-            assert!(world.get::<Machine>(gate.unwrap()).unwrap().amount < 0.01);
+            if !settled_shut(world, gate.unwrap(), now - since) {
+                return;
+            }
             capture(world, "closed");
             let home = world.get::<Machine>(gate.unwrap()).unwrap().home;
             place(world, home + Vec3::new(180., 0., 40.), false);
@@ -142,7 +167,9 @@ pub(crate) fn run(world: &mut World) {
             place(world, home + Vec3::new(400., 0., 40.), false);
         }
         4 if now > since + 4. => {
-            assert!(world.get::<Machine>(gate.unwrap()).unwrap().amount < 0.01);
+            if !settled_shut(world, gate.unwrap(), now - since) {
+                return;
+            }
             capture(world, "closed-again");
             let home = world.get::<Machine>(piston.unwrap()).unwrap().home;
             place(world, home + Vec3::new(0., 65., 40.), true);

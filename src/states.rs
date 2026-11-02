@@ -6,6 +6,8 @@ pub enum GameState {
     Menu,
     Playing,
     Rift,
+    /// The space prison event (`!PRISON`); like the rift, the world keeps running.
+    Prison,
     Paused,
     Settings,
 }
@@ -20,6 +22,10 @@ impl ComputedStates for InGame {
     type SourceStates = GameState;
 
     fn compute(state: GameState) -> Option<Self> {
-        matches!(state, GameState::Playing | GameState::Rift).then_some(InGame)
+        matches!(
+            state,
+            GameState::Playing | GameState::Rift | GameState::Prison
+        )
+        .then_some(InGame)
     }
 }

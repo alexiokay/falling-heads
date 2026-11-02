@@ -103,6 +103,7 @@ fn setup_commands_panel(mut commands: Commands) {
                         "!BEES",
                         "!BOLT",
                         "!FUSS",
+                        "!PRISON",
                     ] {
                         list.spawn((
                             Text::new(cmd),
