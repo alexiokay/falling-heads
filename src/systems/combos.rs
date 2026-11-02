@@ -124,6 +124,8 @@ impl Plugin for CombosPlugin {
 }
 
 fn setup(mut commands: Commands, server: Res<AssetServer>) {
+    // Press Start 2P (SIL OFL) from the theme pack: chunky arcade lettering.
+    let font = server.load("fonts/PressStart2P-Regular.ttf");
     commands.insert_resource(ComboSounds {
         tick: server.load("audio/mechanisms/note_harp.ogg"),
         milestone: server.load("audio/mechanisms/bell_use1.ogg"),
@@ -134,16 +136,21 @@ fn setup(mut commands: Commands, server: Res<AssetServer>) {
         bevy::picking::Pickable::IGNORE,
         Text::new(""),
         TextFont {
-            font_size: FontSize::Px(34.),
+            font: font.into(),
+            font_size: FontSize::Px(18.),
             ..default()
         },
         TextColor(Color::WHITE),
-        TextLayout::justify(Justify::Center),
+        TextLayout::justify(Justify::Left),
+        bevy::ui::widget::TextShadow {
+            offset: Vec2::splat(2.0),
+            color: Color::srgba(0.0, 0.0, 0.0, 0.85),
+        },
+        // Bottom-left corner, just above the level bar.
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Percent(41.),
-            width: Val::Percent(100.),
-            justify_content: JustifyContent::Center,
+            left: Val::Px(12.),
+            bottom: Val::Px(84.),
             ..default()
         },
         GlobalZIndex(60),
@@ -331,7 +338,7 @@ fn end_combos(
         }
         if hero && c.count >= 3 {
             hud.flash = 2.2;
-            hud.flash_text = format!("x{} COMBO!  +{} XP", c.count, c.xp);
+            hud.flash_text = format!("x{} COMBO!\n+{} XP", c.count, c.xp);
             hud.flash_color = heat_color(c.count);
             if let Some(sounds) = &sounds {
                 commands.spawn((
@@ -368,25 +375,25 @@ fn combo_hud(
     let live = heroes.iter().next().map_or(0, |c| c.count);
     let (line, tint, size) = if live >= 2 {
         let tag = match live {
-            50.. => "  FRENZY",
-            25.. => "  UNSTOPPABLE",
-            10.. => "  ON FIRE",
+            50.. => "\nFRENZY",
+            25.. => "\nUNSTOPPABLE",
+            10.. => "\nON FIRE",
             _ => "",
         };
         (
             format!("x{live} COMBO{tag}"),
             heat_color(live),
-            30.0 + live.min(50) as f32 * 0.3 + hud_state.pulse * 10.0,
+            16.0 + live.min(50) as f32 * 0.12 + hud_state.pulse * 6.0,
         )
     } else if hud_state.flash > 0.0 {
         let fade = (hud_state.flash / 0.6).min(1.0);
         (
             hud_state.flash_text.clone(),
             hud_state.flash_color.with_alpha(fade),
-            32.0,
+            15.0,
         )
     } else {
-        (String::new(), Color::WHITE, 30.0)
+        (String::new(), Color::WHITE, 16.0)
     };
     if text.0 != line {
         text.0 = line;

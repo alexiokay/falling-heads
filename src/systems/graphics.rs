@@ -439,6 +439,8 @@ fn setup(
             base_color_texture: Some(server.load("textures/blocks/forest/oak_log/oak_log.png")),
             base_color: Color::WHITE,
             perceptual_roughness: 0.9,
+            // Lit by its own flame: never black in a dark cave or with lighting off.
+            unlit: true,
             ..default()
         }),
         flame: flames.add(FlameMaterial { effect: Vec4::ZERO }),

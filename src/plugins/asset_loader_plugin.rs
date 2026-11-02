@@ -6,7 +6,8 @@ pub struct AssetLoaderPlugin;
 
 impl Plugin for AssetLoaderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_all_assets);
+        app.add_systems(Startup, load_all_assets)
+            .add_systems(Update, unlit_model_materials);
         info!("AssetLoaderPlugin loaded - centralizing asset loading");
     }
 }
@@ -278,4 +279,25 @@ fn load_all_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(biome_music);
 
     info!("✅ All assets loaded successfully!");
+}
+
+/// Model meshes that just got their glTF material.
+type NewModelMaterial = (
+    Added<MeshMaterial3d<StandardMaterial>>,
+    With<bevy::gltf::GltfMaterialName>,
+);
+
+/// Models (the arrow) render unlit like the flat heads and items, so they keep
+/// their colours in dark caves and with lighting off instead of turning black.
+fn unlit_model_materials(
+    meshes: Query<&MeshMaterial3d<StandardMaterial>, NewModelMaterial>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for material in &meshes {
+        if let Some(mut m) = materials.get_mut(&material.0)
+            && !m.unlit
+        {
+            m.unlit = true;
+        }
+    }
 }

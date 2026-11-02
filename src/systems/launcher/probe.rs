@@ -163,7 +163,6 @@ pub(crate) fn smoke_probe(world: &mut World) {
         }
         4 if time > since + 3. => {
             verify_arrivals(world);
-            world.resource_mut::<LauncherState>().cooldown = 0.;
             let mut command =
                 PowerCommand::new(PowerCommandType::Launcher, "Eight passengers".into());
             command.launcher.direction = LaunchDirection::Left;

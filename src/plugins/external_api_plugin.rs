@@ -400,6 +400,15 @@ fn start_api_server() {
 }
 
 #[allow(clippy::too_many_arguments)] // Bevy system parameters
+/// The cooldown settings, when each power is ready, the on-screen notice and the clock.
+type Cooldowns<'w> = (
+    Res<'w, crate::systems::power_cooldowns::PowerCooldowns>,
+    ResMut<'w, crate::systems::power_cooldowns::PowerReadyAt>,
+    ResMut<'w, crate::systems::world_portals::PowerNotice>,
+    Res<'w, Time>,
+);
+
+#[allow(clippy::too_many_arguments)] // Bevy system parameters
 fn process_commands(
     mut commands: Commands,
     hero_query: Query<(Entity, &Transform), With<Hero>>,
@@ -435,6 +444,7 @@ fn process_commands(
     mut power_events: MessageWriter<PowerActivated>,
     mut damage_events: MessageWriter<crate::events::damage_events::EntityDamaged>,
     mut destroyed: MessageWriter<crate::events::block_events::BlockDestroyed>,
+    (cooldowns, mut ready_at, mut notice, time): Cooldowns,
 ) {
     let Some(queue) = COMMAND_QUEUE.get() else {
         return;
@@ -445,6 +455,16 @@ fn process_commands(
     };
 
     while let Some(command) = q.pop_front() {
+        // Per-power cooldowns from Settings > Cooldowns (0 = none).
+        if let Err(left) = ready_at.try_use(&cooldowns, command.command_type, time.elapsed_secs()) {
+            notice.text = format!(
+                "{} recharging: {:.0}s",
+                crate::systems::power_cooldowns::names(command.command_type).1,
+                left.ceil()
+            );
+            notice.remaining = 3.;
+            continue;
+        }
         power_events.write(PowerActivated {
             command: command.clone(),
         });

@@ -82,6 +82,12 @@ shake and a glowing trail. XP from blocks is multiplied (x1.5 from 5, x2 from 10
 25, capped) and long combos drop extra ores. Viewer heads keep their own combos; big
 ones are announced. A split twin's breaks count for its Splitter head.
 
+### Power cooldowns
+Settings > Cooldowns lists every power. Click one to step its cooldown (off, 5 s, 10 s,
+15 s, 30 s, 1 m, 2 m, 5 m, 10 m); every power starts off, so it can be used again right
+away. While a power recharges, a repeat shows "<Power> recharging: Ns" and is dropped.
+The choice is saved in `power-cooldowns.json` in the settings folder.
+
 ### Play styles
 Each viewer chooses how their heads play the ball. The choice is remembered,
 so heads they spawn later use it too. The streamer cycles the hero's style with **C**, or picks

@@ -77,7 +77,6 @@ pub struct LauncherState {
     pub preload: Option<Vec3>,
     pending: Option<PowerCommand>,
     active: Option<Flight>,
-    cooldown: f32,
     serial: u32,
 }
 struct Flight {
@@ -145,8 +144,10 @@ fn requests(
         .read()
         .filter(|e| e.command.command_type == PowerCommandType::Launcher)
     {
-        if state.active.is_some() || state.pending.is_some() || state.cooldown > 0. {
-            notice.text = format!("Launcher recharging: {:.0}s", state.cooldown.ceil());
+        // One flight at a time; any wait between flights is the Launcher cooldown
+        // under Settings > Cooldowns.
+        if state.active.is_some() || state.pending.is_some() {
+            notice.text = "Launcher already flying".into();
             notice.remaining = 3.;
         } else {
             state.pending = Some(event.command.clone());
@@ -402,7 +403,6 @@ fn update(world: &mut World) {
         }
     }
     let mut state = world.remove_resource::<LauncherState>().unwrap();
-    state.cooldown = (state.cooldown - dt).max(0.);
     let teleporting = world
         .get_resource::<super::biome_teleport::BiomeTeleport>()
         .is_some_and(|t| {
@@ -489,7 +489,6 @@ fn update(world: &mut World) {
                 saved,
             });
             state.preload = Some(end);
-            state.cooldown = 25.;
         }
     }
     if let Some(mut f) = state.active.take() {
@@ -517,7 +516,6 @@ fn update(world: &mut World) {
                         let _ = world.despawn(audio);
                     }
                     state.preload = None;
-                    state.cooldown = 0.;
                     if let Some(mut notice) =
                         world.get_resource_mut::<super::world_portals::PowerNotice>()
                     {

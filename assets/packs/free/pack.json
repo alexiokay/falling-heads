@@ -11,6 +11,7 @@
     "Lootbox icons: alexiokay (AI-generated, prompts in textures/ui/lootbox/prompts.txt)",
     "Arrow model: alexiokay (Blender)",
     "Rain, snow, hearts and XP bar: alexiokay (tools/Draw-FreePackArt.ps1)",
+    "Combo font: Press Start 2P by codeman38 (SIL Open Font License 1.1, fonts/PressStart2P-OFL.txt)",
     "Everything else: generated stand-ins from tools/Make-FreePack.ps1"
   ]
 }

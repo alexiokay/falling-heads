@@ -30,6 +30,8 @@ struct Probe {
     checked: bool,
     hero_start: Vec3,
     started: bool,
+    cooldown_at: Option<f32>,
+    second_bolt: bool,
 }
 
 fn capture(w: &mut World, name: &str) {
@@ -116,6 +118,44 @@ pub fn run(w: &mut World) {
     let probe = w.resource::<Probe>();
     let (index, fired_at, checked) = (probe.index, probe.fired_at, probe.checked);
     if index >= POWERS.len() {
+        // Settings > Cooldowns: with BOLT at 30 s, a second BOLT straight after
+        // the first is refused with a notice.
+        let Some(at) = w.resource::<Probe>().cooldown_at else {
+            w.resource_mut::<crate::systems::power_cooldowns::PowerCooldowns>()
+                .set(P::Bolt, 30);
+            if let Some(queue) = crate::plugins::external_api_plugin::get_command_queue() {
+                queue
+                    .lock()
+                    .unwrap()
+                    .push_back(PowerCommand::new(P::Bolt, "probe".into()));
+            }
+            w.resource_mut::<Probe>().cooldown_at = Some(now);
+            return;
+        };
+        // The second BOLT goes in after the first one's own notice.
+        if !w.resource::<Probe>().second_bolt {
+            if now - at > 0.5 {
+                if let Some(queue) = crate::plugins::external_api_plugin::get_command_queue() {
+                    queue
+                        .lock()
+                        .unwrap()
+                        .push_back(PowerCommand::new(P::Bolt, "probe".into()));
+                }
+                w.resource_mut::<Probe>().second_bolt = true;
+            }
+            return;
+        }
+        if now - at < 0.7 {
+            return;
+        }
+        let text = notice(w);
+        assert!(
+            text.contains("Bolt recharging"),
+            "COOLDOWN: no notice ({text})"
+        );
+        w.resource_mut::<crate::systems::power_cooldowns::PowerCooldowns>()
+            .set(P::Bolt, 0);
+        eprintln!("[POWERS] cooldown ok ({text})");
         eprintln!("[POWERS] all {} powers passed", POWERS.len());
         w.write_message(AppExit::Success);
         return;

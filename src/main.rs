@@ -215,6 +215,7 @@ fn main() {
     .add_plugins(systems::game_modes::GameModesPlugin)
     .add_plugins(systems::asset_packs::AssetPacksPlugin)
     .add_plugins(systems::character_select::CharacterSelectPlugin)
+    .add_plugins(systems::power_cooldowns::PowerCooldownsPlugin)
     .add_plugins(systems::combos::CombosPlugin)
     .add_plugins(systems::extra_powers::ExtraPowersPlugin)
     .add_plugins(systems::window_icon::WindowIconPlugin)

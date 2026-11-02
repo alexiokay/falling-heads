@@ -60,10 +60,10 @@ textures/blocks/nether/ancient_debris_top.png,vox:stone_browniron_alt.png,
 textures/blocks/nether/crimson_nylium.png,vox:grass_top.png,tint=C02040
 textures/blocks/nether/crimson_nylium_side.png,vox:dirt_grass.png,tint=C04050
 textures/blocks/nether/glowstone.png,vox:sand.png,tint=FFE080
-textures/blocks/nether/nether.png,vox:redstone.png,
+textures/blocks/nether/nether.png,vox:gravel_stone.png,tint=9A3A34
 textures/blocks/nether/nether_quartz_ore.png,vox:redstone_sand.png,
 textures/blocks/nether/netherite_block.png,vox:greystone.png,tint=4A4045
-textures/blocks/nether/netherrack.png,vox:redstone.png,
+textures/blocks/nether/netherrack.png,vox:gravel_stone.png,tint=9A3A34
 textures/blocks/nether/obsidian.png,vox:greystone.png,tint=302040
 textures/blocks/nether/soul_sand.png,vox:dirt_sand.png,tint=8A6A55
 textures/structures/chiseled_sandstone.png,vox:stone_sand.png,

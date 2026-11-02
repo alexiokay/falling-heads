@@ -167,20 +167,16 @@ fn discover(w: &mut World) {
             r.check_at = now + 2.;
             if r.request {
                 r.request = false;
-                if r.cooldown <= 0. || std::env::args().any(|a| a == "--rift-test") {
-                    // A requested encounter opens around the hero with a visible pull-in.
-                    if let Some((gate, _)) = r.gate.take() {
-                        w.despawn(gate);
-                    }
-                    let gate = visuals::gate(w, t.translation + Vec3::Z * 50., false);
-                    r.gate = Some((gate, t.translation));
-                    w.resource_mut::<NextState<GameState>>()
-                        .set(GameState::Rift);
-                } else {
-                    let mut n = w.resource_mut::<super::world_portals::PowerNotice>();
-                    n.text = format!("Rift ready in {:.0}s", r.cooldown.ceil());
-                    n.remaining = 3.;
+                // Requested rifts open at once; any wait is the Rift cooldown under
+                // Settings > Cooldowns. `r.cooldown` only paces natural rifts.
+                // A requested encounter opens around the hero with a visible pull-in.
+                if let Some((gate, _)) = r.gate.take() {
+                    w.despawn(gate);
                 }
+                let gate = visuals::gate(w, t.translation + Vec3::Z * 50., false);
+                r.gate = Some((gate, t.translation));
+                w.resource_mut::<NextState<GameState>>()
+                    .set(GameState::Rift);
             } else if r.cooldown <= 0. && r.gate.is_none() {
                 let biome = crate::utils::biome_utils::determine_biome_at_position(
                     t.translation.x,

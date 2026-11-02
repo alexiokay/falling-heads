@@ -155,7 +155,53 @@ pub(crate) fn run(world: &mut World) {
             let m = world.get::<Machine>(piston.unwrap()).unwrap();
             assert!(m.amount < 0.01);
         }
-        7 => {
+        // Escape: drop the hero onto the piston under normal gravity and steer
+        // away. A head must never stay pinned on or beside a piston.
+        7 if now > since + 2.4 => {
+            let home = world.get::<Machine>(piston.unwrap()).unwrap().home;
+            place(world, home + Vec3::new(0., 60., 30.), true);
+            let hero = world
+                .query_filtered::<Entity, With<Hero>>()
+                .single(world)
+                .unwrap();
+            world.entity_mut(hero).insert(GravityScale(1.5));
+            let mut keys = world.resource_mut::<ButtonInput<KeyCode>>();
+            keys.press(if anchor.x > home.x {
+                KeyCode::KeyD
+            } else {
+                KeyCode::KeyA
+            });
+        }
+        8 => {
+            let home = world.get::<Machine>(piston.unwrap()).unwrap().home;
+            let hero = world
+                .query_filtered::<&Transform, With<Hero>>()
+                .single(world)
+                .unwrap()
+                .translation;
+            if ((now - since) * 4.).fract() < 0.02 {
+                eprintln!(
+                    "[MECHANISM] escape t={:.2} hero=({:.0},{:.0}) piston=({:.0},{:.0})",
+                    now - since,
+                    hero.x,
+                    hero.y,
+                    home.x,
+                    home.y
+                );
+            }
+            if (hero.x - home.x).abs() < 160. {
+                assert!(
+                    now < since + 5.,
+                    "Hero stuck at the piston: hero {hero:?}, piston {home:?}"
+                );
+                return;
+            }
+            let mut keys = world.resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::KeyD);
+            keys.release(KeyCode::KeyA);
+            eprintln!("[MECHANISM] escaped the piston after {:.2}s", now - since);
+        }
+        9 => {
             if !super::contraption_probe::run(world, anchor) {
                 return;
             }

@@ -87,5 +87,6 @@ pub(crate) mod combos;
 pub(crate) mod extra_powers;
 pub(crate) mod game_modes;
 pub(crate) mod play_styles;
+pub(crate) mod power_cooldowns;
 pub(crate) mod terrain_shape;
 pub(crate) mod window_icon;

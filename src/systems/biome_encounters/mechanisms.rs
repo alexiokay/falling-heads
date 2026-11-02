@@ -96,9 +96,9 @@ fn animate_gates(
         }
         let open = m.amount > 0.02;
         if open && !disabled {
-            commands.entity(e).insert(ColliderDisabled);
+            commands.entity(e).try_insert(ColliderDisabled);
         } else if !open && disabled {
-            commands.entity(e).remove::<ColliderDisabled>();
+            commands.entity(e).try_remove::<ColliderDisabled>();
         }
     }
 }
@@ -177,7 +177,12 @@ fn positions(site: Site) -> (Option<IVec2>, Option<IVec2>) {
             if gate.is_some_and(|g| (g - p).abs().max_element() < 3) {
                 continue;
             }
-            if cells.contains(&p) && (1..=4).all(|dy| empty(p + IVec2::Y * dy)) {
+            // Open on both sides at head height above the piston body, so a head
+            // that lands on it can walk off instead of being caught in a shaft.
+            let walk_off = [-1, 1]
+                .into_iter()
+                .all(|dx| (2..=3).all(|dy| empty(p + IVec2::new(dx, dy))));
+            if cells.contains(&p) && (1..=4).all(|dy| empty(p + IVec2::Y * dy)) && walk_off {
                 piston = Some(p);
                 break;
             }
@@ -443,6 +448,12 @@ fn drive(
                             && p.0.y < m.home.y + 145.
                         {
                             v.y = v.y.max(if m.kind == Kind::Slime { 620. } else { 420. });
+                            // A sideways nudge, so the head lands beside the piston
+                            // rather than back on it for another launch.
+                            if v.x.abs() < 150. {
+                                let side = if p.0.x >= m.home.x { 1. } else { -1. };
+                                v.x = side * 180.;
+                            }
                         }
                     }
                     m.fired = true;
@@ -572,6 +583,9 @@ mod tests {
                     pistons += 1;
                     assert!(cells.contains(&p));
                     assert!((1..=4).all(|y| !cells.contains(&(p + IVec2::Y * y))));
+                    for dx in [-1, 1] {
+                        assert!((2..=3).all(|y| !cells.contains(&(p + IVec2::new(dx, y)))));
+                    }
                 }
             }
         }

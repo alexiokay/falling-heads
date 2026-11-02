@@ -165,7 +165,7 @@ fn apply_choice(
             m.base_color_texture = Some(server.load(CHARACTERS[chosen.character].face));
         }
         if style.copied() != Some(chosen.style) {
-            commands.entity(hero).insert(chosen.style);
+            commands.entity(hero).try_insert(chosen.style);
         }
     }
 }

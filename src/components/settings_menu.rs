@@ -47,6 +47,7 @@ pub enum SettingsPage {
     GameModes,
     Character,
     Theme,
+    Cooldowns,
 }
 #[derive(Resource, Default)]
 pub struct SettingsNavigation(pub SettingsPage);

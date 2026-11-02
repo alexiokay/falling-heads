@@ -41,7 +41,7 @@ impl PowerCommand {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum PowerCommandType {
     WaterBucket,
     LavaBucket,

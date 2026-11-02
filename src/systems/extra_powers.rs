@@ -624,7 +624,7 @@ fn feather_gravity(
     for (e, feather, mut gravity) in &mut actors {
         if now >= feather.until {
             gravity.0 = feather.base;
-            commands.entity(e).remove::<Feather>();
+            commands.entity(e).try_remove::<Feather>();
         } else if gravity.0 != feather.base * FEATHER_GRAVITY {
             gravity.0 = feather.base * FEATHER_GRAVITY;
         }
@@ -857,7 +857,7 @@ struct Bee {
 const ANVIL_MAX_BLOCKS: u8 = 6;
 const GOLEM_SECONDS: f32 = 30.0;
 const HOLE_SECONDS: f32 = 4.0;
-const HOLE_RADIUS: f32 = 600.0;
+const HOLE_RADIUS: f32 = 800.0;
 const BEE_SECONDS: f32 = 12.0;
 
 #[allow(clippy::too_many_arguments)]
@@ -921,7 +921,13 @@ fn start_spawned(
             }
             P::BlackHole => {
                 let side = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
-                let p = Vec3::new(at.x + side * 280.0, at.y + 140.0, 40.0);
+                // Well away from the hero (330-440 px) but still on screen: it pulls
+                // from a distance, not on top of them.
+                let p = Vec3::new(
+                    at.x + side * rng.random_range(200.0..280.0),
+                    at.y + rng.random_range(260.0..340.0),
+                    40.0,
+                );
                 spawn_black_hole(&mut commands, &art.hole, p, now);
                 play(&mut commands, &art.sounds.hole, p, 0.8, 0.7);
                 announce(&mut notice, by("BLACK HOLE", user));

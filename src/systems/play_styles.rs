@@ -115,7 +115,7 @@ fn hero_style_hotkey(
     }
     for (hero, current) in &heroes {
         let next = current.copied().unwrap_or_default().next();
-        commands.entity(hero).insert(next);
+        commands.entity(hero).try_insert(next);
         for old in &toasts {
             commands.entity(old).despawn();
         }
@@ -163,7 +163,7 @@ fn wall_cling(
     let now = time.elapsed_secs();
     for (entity, cling, mut velocity, style, hero, villager) in &mut clinging {
         if style != Some(&PlayStyle::Sticky) {
-            commands.entity(entity).remove::<WallCling>();
+            commands.entity(entity).try_remove::<WallCling>();
         } else if now < cling.release_at {
             velocity.0 = Vec3::new(0.0, -40.0, 0.0);
         } else {
@@ -175,7 +175,7 @@ fn wall_cling(
             if let Some(mut villager) = villager {
                 villager.move_direction = cling.side;
             }
-            commands.entity(entity).remove::<WallCling>();
+            commands.entity(entity).try_remove::<WallCling>();
         }
     }
 }
@@ -216,7 +216,7 @@ fn hero_style_buttons(
     let mut active = current.copied().unwrap_or_default();
     for (interaction, button, _) in &buttons {
         if *interaction == PickingInteraction::Pressed && button.0 != active {
-            commands.entity(hero).insert(button.0);
+            commands.entity(hero).try_insert(button.0);
             active = button.0;
         }
     }
@@ -349,7 +349,7 @@ fn split_heads(
 ) {
     let now = time.elapsed_secs();
     for (head, t, mesh, material, v, split, cooldown, style, request) in &mut requests {
-        commands.entity(head).remove::<SplitRequest>();
+        commands.entity(head).try_remove::<SplitRequest>();
         let ready = !split
             && cooldown.is_none_or(|c| now >= c.0)
             && style.copied() == Some(PlayStyle::Splitter);
@@ -379,7 +379,7 @@ fn split_heads(
                 (request.speed * 0.55).clamp(260.0, 460.0),
                 0.0,
             )));
-        commands.entity(head).insert(Split {
+        commands.entity(head).try_insert(Split {
             twin,
             until: now + SPLIT_SECONDS,
         });
@@ -422,7 +422,7 @@ fn merge_twins(
             continue;
         }
         let Some(returning) = returning else {
-            commands.entity(twin).insert((
+            commands.entity(twin).try_insert((
                 TwinReturning { since: now },
                 avian3d::prelude::RigidBody::Kinematic,
                 avian3d::prelude::LinearVelocity::ZERO,

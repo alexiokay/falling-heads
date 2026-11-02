@@ -130,7 +130,7 @@ pub fn setup_settings_menu(mut commands: Commands, settings: Res<GameSettings>) 
             root.spawn((
                 Node {
                     width: Val::Percent(92.),
-                    max_width: Val::Px(520.),
+                    max_width: Val::Px(600.),
                     max_height: Val::Percent(96.),
                     padding: UiRect::all(Val::Px(18.)),
                     flex_direction: FlexDirection::Column,
@@ -160,9 +160,11 @@ pub fn setup_settings_menu(mut commands: Commands, settings: Res<GameSettings>) 
                         (SettingsPage::GameModes, "Game modes"),
                         (SettingsPage::Character, "Character"),
                         (SettingsPage::Theme, "Theme"),
+                        (SettingsPage::Cooldowns, "Cooldowns"),
                     ] {
                         tabs.spawn(Node {
-                            width: Val::Percent(20.),
+                            flex_grow: 1.,
+                            flex_basis: Val::Px(0.),
                             ..default()
                         })
                         .with_children(|p| menu_button(p, label, SettingsTab(page)));
@@ -251,6 +253,17 @@ pub fn setup_settings_menu(mut commands: Commands, settings: Res<GameSettings>) 
                 // Filled by `asset_packs::fill_theme_page`.
                 p.spawn((
                     SettingsPageRoot(SettingsPage::Theme),
+                    Node {
+                        display: Display::None,
+                        width: Val::Percent(100.),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.),
+                        ..default()
+                    },
+                ));
+                // Filled by `power_cooldowns::fill_cooldown_page`.
+                p.spawn((
+                    SettingsPageRoot(SettingsPage::Cooldowns),
                     Node {
                         display: Display::None,
                         width: Val::Percent(100.),

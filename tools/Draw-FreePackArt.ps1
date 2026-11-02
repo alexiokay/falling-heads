@@ -1,4 +1,5 @@
 # Draws original art for the free pack where a stand-in blob looks wrong:
+#   textures/biome_content/pointed_dripstone_{up,down}_tip[_atlas].png  16x16 pixel spikes at 4x.
 #   textures/effects/rain.png, snow.png  weather sheets (256x1024): streaks, flakes.
 #     Each weather particle is a 192x768 quad showing one whole sheet.
 #   textures/effects/heart/{full,half,container}.png  9x9 pixel hearts at 4x (36x36).
@@ -108,3 +109,41 @@ Save-Bar 'experience_bar_background' 728 ([System.Drawing.Color]::FromArgb(230, 
 Save-Bar 'experience_bar_progress' 728 ([System.Drawing.Color]::FromArgb(255, 150, 255, 90)) ([System.Drawing.Color]::FromArgb(255, 70, 190, 40))
 Save-Bar 'experience_bar_current' 408 ([System.Drawing.Color]::FromArgb(255, 150, 255, 90)) ([System.Drawing.Color]::FromArgb(255, 70, 190, 40))
 "Hearts and XP bar written to $out"
+
+# Pointed dripstone: a brown stone spike, 16x16 pixels at 4x, lit from the left.
+# The atlas holds four 64x64 frames; each frame gets its own speckle pattern.
+$tiles = Join-Path $root 'assets/packs/free/textures/biome_content'
+$halfWidths = @(0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5)
+function Draw-Spike([System.Drawing.Graphics]$g, [int]$ox, [bool]$down, [int]$seed) {
+    $rng = New-Object System.Random $seed
+    for ($row = 0; $row -lt 16; $row++) {
+        $hw = $halfWidths[$row]
+        $y = if ($down) { 15 - $row } else { $row }
+        for ($x = 7 - $hw; $x -le 8 + $hw; $x++) {
+            $edge = ($x -eq 7 - $hw) -or ($x -eq 8 + $hw) -or $row -eq 0
+            $shade = if ($edge) { 0.5 } elseif ($x -lt 7) { 1.18 } elseif ($x -gt 9) { 0.82 } else { 1.0 }
+            $shade *= 0.92 + $rng.NextDouble() * 0.16
+            $c = [System.Drawing.Color]::FromArgb(255,
+                [math]::Min(255, [int](138 * $shade)), [math]::Min(255, [int](102 * $shade)), [math]::Min(255, [int](76 * $shade)))
+            $brush = New-Object System.Drawing.SolidBrush $c
+            $g.FillRectangle($brush, $ox + $x * 4, $y * 4, 4, 4)
+            $brush.Dispose()
+        }
+    }
+}
+foreach ($dir in 'up', 'down') {
+    $down = $dir -eq 'down'
+    $single = New-Object System.Drawing.Bitmap 64, 64, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($single)
+    Draw-Spike $g 0 $down 31
+    $g.Dispose()
+    $single.Save((Join-Path $tiles "pointed_dripstone_${dir}_tip.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    $single.Dispose()
+    $atlas = New-Object System.Drawing.Bitmap 256, 64, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($atlas)
+    for ($f = 0; $f -lt 4; $f++) { Draw-Spike $g ($f * 64) $down (31 + $f) }
+    $g.Dispose()
+    $atlas.Save((Join-Path $tiles "pointed_dripstone_${dir}_tip_atlas.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    $atlas.Dispose()
+}
+"Dripstone spikes written to $tiles"

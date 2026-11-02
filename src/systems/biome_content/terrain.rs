@@ -68,8 +68,6 @@ pub(crate) fn solid(x: i32, y: i32, b: B, seed: u32, base: BlockType) -> Option<
         } else {
             Tile::RootedDirt
         }),
-        B::Desert if y.rem_euclid(13) < 3 => Some(Tile::Terracotta),
-        B::Desert if patch < 5 => Some(Tile::RedSand),
         B::Mountains if patch < 4 => Some(Tile::Tuff),
         B::Mountains if patch == 4 => Some(Tile::Calcite),
         B::Underground => Some(if surface && hash(x, y, seed ^ 19).is_multiple_of(37) {
@@ -165,7 +163,7 @@ pub(crate) fn feature(x: i32, y: i32, b: B, seed: u32) -> Option<Tile> {
         if dy < 0 && dy > -heights[(dx + 4) as usize] {
             return Some(match b {
                 B::Plains => Tile::Farmland,
-                B::Desert => Tile::Terracotta,
+                B::Desert => Tile::Bone,
                 B::Nether => Tile::Blackstone,
                 B::End => Tile::EndBrick,
                 _ => Tile::MossyCobble,

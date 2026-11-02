@@ -157,7 +157,39 @@ pub fn run(w: &mut World) {
             }
             assert!(now - since < 8.0, "twin never merged back");
         }
+        // Settings > Cooldowns: the page lists every power; a click steps BOLT
+        // from off to 5 s.
         8 if now - since > 1.0 => {
+            w.resource_mut::<NextState<GameState>>()
+                .set(GameState::Settings);
+            next(w);
+        }
+        9 if now - since > 1.5 => {
+            use crate::systems::power_cooldowns::CooldownButton;
+            // Entering Settings resets the tab, so pick it once the menu is up.
+            if w.resource::<SettingsNavigation>().0 != SettingsPage::Cooldowns {
+                w.resource_mut::<SettingsNavigation>().0 = SettingsPage::Cooldowns;
+                return;
+            }
+            let buttons = w.query::<&CooldownButton>().iter(w).count();
+            assert_eq!(buttons, crate::systems::power_cooldowns::POWERS.len());
+            capture(w, "cooldowns");
+            if press::<CooldownButton>(w, |b| {
+                b.0 == crate::resources::command_queue::PowerCommandType::Bolt
+            }) {
+                next(w);
+            }
+        }
+        10 if now - since > 1.0 => {
+            use crate::resources::command_queue::PowerCommandType as P;
+            let mut c = w.resource_mut::<crate::systems::power_cooldowns::PowerCooldowns>();
+            assert_eq!(c.get(P::Bolt), 5, "BOLT cooldown not stepped");
+            c.set(P::Bolt, 0);
+            capture(w, "cooldowns-bolt");
+            eprintln!("[CHARACTER] cooldown page stepped BOLT to 5s");
+            next(w);
+        }
+        11 if now - since > 0.5 => {
             eprintln!("[CHARACTER] passed");
             w.write_message(AppExit::Success);
         }

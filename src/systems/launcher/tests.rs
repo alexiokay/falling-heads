@@ -37,7 +37,7 @@ fn left_and_right_launches_have_no_angle_wrap_snap_or_reverse_motion() {
     assert!(roll_angle(WARMUP) < std::f32::consts::FRAC_PI_2);
 }
 #[test]
-fn duplicate_and_cooldown_requests_are_not_queued() {
+fn duplicate_requests_are_not_queued_and_there_is_no_built_in_cooldown() {
     let mut app = App::new();
     app.init_resource::<LauncherState>()
         .init_resource::<super::super::world_portals::PowerNotice>()
@@ -56,13 +56,14 @@ fn duplicate_and_cooldown_requests_are_not_queued() {
             .remaining
             > 0.
     );
+    // Waiting between flights is the Settings > Cooldowns value, checked
+    // before the request gets here.
     app.world_mut().resource_mut::<LauncherState>().pending = None;
-    app.world_mut().resource_mut::<LauncherState>().cooldown = 2.;
     app.world_mut().write_message(PowerActivated {
         command: PowerCommand::new(PowerCommandType::Launcher, "test".into()),
     });
     app.update();
-    assert!(app.world().resource::<LauncherState>().pending.is_none());
+    assert!(app.world().resource::<LauncherState>().pending.is_some());
 }
 #[test]
 fn cancellation_restores_existing_physics_and_flying_state() {
