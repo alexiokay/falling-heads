@@ -323,13 +323,38 @@ fn update(w: &mut World) {
                 n.text = "A villager escaped!".into();
                 n.remaining = 2.;
             }
-            _ => {}
+            other => {
+                let text = match other {
+                    sim::Event::Alarm(level) => format!("ALARM LEVEL {level}!"),
+                    sim::Event::CaptainIn(_) => {
+                        "THE CAPTAIN IS HERE! Ram him for his key card".into()
+                    }
+                    sim::Event::Overload => "MAGNET OVERLOAD!".into(),
+                    sim::Event::Stunned => "STUNNED!".into(),
+                    sim::Event::ShieldBlock => "Shield blocked a hit!".into(),
+                    sim::Event::KeyDrop => "Key card knocked loose!".into(),
+                    sim::Event::PowerUpTaken(kind) => match kind {
+                        sim::PowerKind::Fuel => "FUEL! Double thrust".into(),
+                        sim::PowerKind::Shield => "SHIELD! Blocks the next hit".into(),
+                        sim::PowerKind::Key => "KEY CARD! Your next button holds the door".into(),
+                    },
+                    _ => String::new(),
+                };
+                if !text.is_empty() {
+                    let mut n = w.resource_mut::<super::world_portals::PowerNotice>();
+                    n.text = text;
+                    n.remaining = 2.5;
+                }
+            }
         }
     }
     let magnet_was = s.magnet_was;
     s.magnet_was = s.cell.magnet;
     if events.iter().any(|e| matches!(e, sim::Event::Blast(_))) {
-        s.shake = 0.35;
+        s.shake = s.shake.max(0.35);
+    }
+    if events.contains(&sim::Event::OverloadRelease) {
+        s.shake = 0.6;
     }
     s.shake = (s.shake - dt).max(0.);
     // Out of the cell: the escape rocket swoops in and takes the hero to Earth.

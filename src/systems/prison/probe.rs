@@ -11,6 +11,8 @@ use crate::resources::command_queue::PowerCommand;
 struct Probe {
     step: u8,
     since: f32,
+    /// The second visit's show of every effect is set up.
+    staged: bool,
 }
 
 fn capture(w: &mut World, name: &str) {
@@ -61,10 +63,11 @@ pub(crate) fn run(w: &mut World) {
         w.insert_resource(Probe {
             step: 0,
             since: now,
+            staged: false,
         });
         return;
     }
-    let Probe { step, since } = *w.resource::<Probe>();
+    let Probe { step, since, .. } = *w.resource::<Probe>();
     let next = |w: &mut World| {
         let mut p = w.resource_mut::<Probe>();
         p.step += 1;
@@ -167,6 +170,23 @@ pub(crate) fn run(w: &mut World) {
             {
                 c.bodies[0].p = Vec2::ZERO;
                 c.bodies[0].v = Vec2::ZERO;
+            }
+            // Shortly before the shot, stage every effect at once: alarm 3, an
+            // overload, the captain, all three power-ups, the shield, a stun.
+            if state(w) == GameState::Prison
+                && now - since > 8.2
+                && !w.resource::<Probe>().staged
+                && let Some(c) = cell(w)
+            {
+                c.alarm = 3;
+                c.overload = 1.5;
+                c.spawn_guard(1, sim::Kind::Captain);
+                c.add_powerup(sim::PowerKind::Fuel, Vec2::new(-150., 120.), Vec2::ZERO);
+                c.add_powerup(sim::PowerKind::Shield, Vec2::new(150., 120.), Vec2::ZERO);
+                c.add_powerup(sim::PowerKind::Key, Vec2::new(0., -160.), Vec2::ZERO);
+                c.shield = 5.;
+                c.bodies[0].stun = 2.;
+                w.resource_mut::<Probe>().staged = true;
             }
             if state(w) == GameState::Prison && now - since > 9. {
                 let guards = cell(w).map_or(0, |c| c.guards());

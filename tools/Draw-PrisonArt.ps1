@@ -4,6 +4,7 @@
 #   textures/prison/trapdoor.png       16x16 iron trapdoor at 4x
 #   textures/prison/button.png, button_pressed.png  16x16 buttons at 4x
 #   textures/prison/guard.png          16x16 guard face with police cap at 4x
+#   textures/prison/captain.png        16x16 guard captain: red cap with a gold band at 4x
 #   textures/prison/stars.png          512x512 starfield for the space backdrop
 #   textures/prison/earth.png          1024x512 Earth map (equirectangular) for the planet
 #   textures/prison/hazard.png         16x16 yellow-black hazard stripes at 4x
@@ -106,6 +107,15 @@ $pal['M'] = Rgb 140 70 60   # mouth
 $gd = New-Pixels
 for ($y = 0; $y -lt 16; $y++) { for ($x = 0; $x -lt 16; $x++) { Set-Pixel $gd $x $y $pal[$face[$y][$x]] } }
 Save $gd 'guard.png'
+
+# Captain: the guard face under a red cap with a gold band and star.
+$captainFace = $face.Clone()
+$captainFace[1] = 'GGGGGGGGGGGGGGGG'
+$pal['C'] = Rgb 150 22 30
+$pal['G'] = Rgb 240 190 50
+$cp = New-Pixels
+for ($y = 0; $y -lt 16; $y++) { for ($x = 0; $x -lt 16; $x++) { Set-Pixel $cp $x $y $pal[$captainFace[$y][$x]] } }
+Save $cp 'captain.png'
 
 # Starfield: black-blue space with stars of a few sizes and a faint nebula.
 $s = New-Object System.Drawing.Bitmap 512, 512, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)

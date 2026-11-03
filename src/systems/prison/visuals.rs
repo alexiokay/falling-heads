@@ -48,6 +48,11 @@ pub(super) struct Art {
     button: Handle<StandardMaterial>,
     button_pressed: Handle<StandardMaterial>,
     guard: Handle<StandardMaterial>,
+    captain: Handle<StandardMaterial>,
+    fuel_can: Handle<StandardMaterial>,
+    key_gold: Handle<StandardMaterial>,
+    bubble: Handle<StandardMaterial>,
+    star: Handle<StandardMaterial>,
     villager: Handle<StandardMaterial>,
     stars: Handle<StandardMaterial>,
     earth: Handle<StandardMaterial>,
@@ -91,6 +96,8 @@ pub(super) struct Art {
     bell: Handle<AudioSource>,
     hurt: Handle<AudioSource>,
     zap: Handle<AudioSource>,
+    alarm: Handle<AudioSource>,
+    pickup: Handle<AudioSource>,
 }
 
 /// The cell, turned with the simulation's angle.
@@ -116,6 +123,18 @@ struct Beacon(f32);
 /// One straight piece of an electric arc: magnet, arc, segment.
 #[derive(Component)]
 struct ArcSeg(usize, usize, usize);
+/// A red alarm light around the cell, pulsing with the alarm level.
+#[derive(Component)]
+struct AlarmLight(f32);
+/// A floating power-up (by its id).
+#[derive(Component)]
+struct PowerUpVisual(u32);
+/// The bubble around the hero while the shield lasts.
+#[derive(Component)]
+struct ShieldBubble;
+/// A star circling the stunned hero.
+#[derive(Component)]
+struct StunStar(usize);
 #[derive(Component)]
 struct HeadVisual(usize);
 #[derive(Component)]
@@ -204,6 +223,7 @@ pub(super) fn setup(
         Color::WHITE,
     );
     let guard = flat(Some(pixel("textures/prison/guard.png")), Color::WHITE);
+    let captain = flat(Some(pixel("textures/prison/captain.png")), Color::WHITE);
     let villager = flat(
         textures
             .as_ref()
@@ -345,6 +365,26 @@ pub(super) fn setup(
         false,
     );
     let puff = glow(Color::srgba(0.7, 0.72, 0.78, 0.16), LinearRgba::BLACK, true);
+    let fuel_can = glow(
+        Color::srgb(1., 0.5, 0.1),
+        LinearRgba::rgb(2.5, 0.9, 0.1),
+        false,
+    );
+    let key_gold = glow(
+        Color::srgb(1., 0.85, 0.2),
+        LinearRgba::rgb(2.5, 2., 0.3),
+        false,
+    );
+    let bubble = glow(
+        Color::srgba(0.4, 0.85, 1., 0.22),
+        LinearRgba::rgb(0.3, 0.8, 1.2),
+        true,
+    );
+    let star = glow(
+        Color::srgb(1., 0.95, 0.3),
+        LinearRgba::rgb(4., 3.5, 0.6),
+        false,
+    );
     let field = |mode: f32| PrisonField {
         params: Vec4::new(0., 0., mode, 0.),
     };
@@ -363,6 +403,11 @@ pub(super) fn setup(
         button,
         button_pressed,
         guard,
+        captain,
+        fuel_can,
+        key_gold,
+        bubble,
+        star,
         villager,
         stars,
         earth,
@@ -408,6 +453,8 @@ pub(super) fn setup(
         bell: server.load("audio/mechanisms/bell_use1.ogg"),
         hurt: server.load("audio/sfx/mobs/zombie/hurt1.ogg"),
         zap: server.load("audio/mechanisms/bell_resonate.ogg"),
+        alarm: server.load("audio/mechanisms/bell_use2.ogg"),
+        pickup: server.load("audio/mechanisms/bubble_pop.ogg"),
     });
 }
 
@@ -794,6 +841,42 @@ pub(super) fn scene(w: &mut World, origin: Vec3, hero: Entity) {
     }
     // The station ring and its four electromagnets around the spinning cell.
     station(w, &a, origin);
+    // Red alarm lights on two sides of the cell, dark until the alarm rises.
+    for (i, x) in [-1., 1.].into_iter().enumerate() {
+        w.spawn((
+            Scene,
+            AlarmLight(i as f32 * std::f32::consts::PI),
+            PointLight {
+                color: Color::srgb(1., 0.12, 0.08),
+                intensity: 0.,
+                range: 2200.,
+                radius: 80.,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::from_translation(origin + Vec3::new(x * 700., 300., 500.)),
+            RenderLayers::layer(1),
+        ));
+    }
+    // The hero's shield bubble and stun stars, shown when needed.
+    mesh(
+        w,
+        Some(root),
+        &a.sphere,
+        &a.bubble,
+        Transform::from_scale(Vec3::splat(46.)),
+        (ShieldBubble, Visibility::Hidden),
+    );
+    for i in 0..3 {
+        mesh(
+            w,
+            Some(root),
+            &a.cube,
+            &a.star,
+            Transform::from_scale(Vec3::splat(10.)),
+            (StunStar(i), Visibility::Hidden),
+        );
+    }
     for (i, dir) in sim::MAGNETS.iter().enumerate() {
         electromagnet(w, &a, origin, i, *dir);
     }
@@ -936,11 +1019,14 @@ fn spawn_head(w: &mut World, root: Entity, index: usize, kind: Kind) {
         Kind::Hero => w.resource::<HeroFace>().0.clone(),
         Kind::Villager => a.villager.clone(),
         Kind::Guard => a.guard.clone(),
+        Kind::Captain => a.captain.clone(),
     };
+    // The captain is a size bigger.
+    let scale = if kind == Kind::Captain { 1.3 } else { 1. };
     let head = w
         .spawn((
             HeadVisual(index),
-            Transform::from_xyz(0., 0., 30.),
+            Transform::from_xyz(0., 0., 30.).with_scale(Vec3::splat(scale)),
             Visibility::Inherited,
             ChildOf(root),
         ))
@@ -961,7 +1047,7 @@ fn spawn_head(w: &mut World, root: Entity, index: usize, kind: Kind) {
         Transform::from_xyz(0., 0., 25.5).with_scale(Vec3::new(52., 52., 1.)),
         (),
     );
-    if kind == Kind::Guard {
+    if kind.is_guard() {
         mesh(
             w,
             Some(head),
@@ -1376,6 +1462,9 @@ pub(super) fn animate(
         }
     }
     // The pulling magnet: hot pole face and flickering arcs to the cell.
+    // A magnet pulls when it is the chosen one, or all of them in an overload.
+    let overload = cell.overload > 0.;
+    let active = |m: usize| cell.magnet == Some(m) || overload;
     if cell.magnet.is_some() && cell.magnet != magnet_was {
         play(w, a.zap.clone(), 0.35);
     }
@@ -1383,11 +1472,7 @@ pub(super) fn animate(
         .query::<(&MagnetPole, &mut MeshMaterial3d<StandardMaterial>)>()
         .iter_mut(w)
     {
-        let mat = if cell.magnet == Some(pole.0) {
-            &a.pole_hot
-        } else {
-            &a.pole
-        };
+        let mat = if active(pole.0) { &a.pole_hot } else { &a.pole };
         if m.0 != *mat {
             m.0 = mat.clone();
         }
@@ -1397,7 +1482,7 @@ pub(super) fn animate(
         .query::<(&CoilWinding, &mut MeshMaterial3d<StandardMaterial>)>()
         .iter_mut(w)
     {
-        let mat = if cell.magnet == Some(coil.0) && coil.1 {
+        let mat = if active(coil.0) && coil.1 {
             &a.copper_hot
         } else if coil.1 {
             &a.copper
@@ -1412,7 +1497,7 @@ pub(super) fn animate(
         .query::<(&StatusLamp, &mut MeshMaterial3d<StandardMaterial>)>()
         .iter_mut(w)
     {
-        let mat = if cell.magnet == Some(lamp.0) {
+        let mat = if active(lamp.0) {
             &a.lamp_on
         } else {
             &a.lamp_idle
@@ -1435,11 +1520,7 @@ pub(super) fn animate(
         let mut fields = w.resource_mut::<Assets<PrisonField>>();
         for (i, h) in a.fields.iter().enumerate() {
             if let Some(mut f) = fields.get_mut(h) {
-                let on = if cell.magnet == Some(i) && !gone {
-                    1.
-                } else {
-                    0.
-                };
+                let on = if active(i) && !gone { 1. } else { 0. };
                 f.params = Vec4::new(now, on, 0., 0.);
             }
         }
@@ -1449,7 +1530,7 @@ pub(super) fn animate(
         if let Some(mut f) = fields.get_mut(&a.containment) {
             let strength = if gone {
                 0.
-            } else if cell.magnet.is_some() {
+            } else if cell.magnet.is_some() || overload {
                 1.
             } else {
                 0.3
@@ -1463,7 +1544,7 @@ pub(super) fn animate(
         .iter_mut(w)
     {
         let ArcSeg(m, arc, i) = *seg;
-        if cell.magnet != Some(m) || gone {
+        if !active(m) || gone {
             *v = Visibility::Hidden;
             continue;
         }
@@ -1493,6 +1574,129 @@ pub(super) fn animate(
         if !existing.contains(&i) {
             spawn_head(w, root, i, b.kind);
         }
+    }
+    // Alarm: red lights pulse harder with every level.
+    for (light, mut l) in w.query::<(&AlarmLight, &mut PointLight)>().iter_mut(w) {
+        let pulse = 0.5 + 0.5 * (cell.time * 7. + light.0).sin();
+        l.intensity = cell.alarm as f32 * 120_000_000. * pulse;
+    }
+    // Power-ups: one visual per item, spinning and bobbing where it floats.
+    let shown: Vec<(Entity, u32)> = w
+        .query::<(Entity, &PowerUpVisual)>()
+        .iter(w)
+        .map(|(e, p)| (e, p.0))
+        .collect();
+    for &(e, id) in &shown {
+        if !cell.powerups.iter().any(|p| p.id == id) {
+            w.despawn(e);
+        }
+    }
+    for pu in &cell.powerups {
+        if shown.iter().any(|(_, id)| *id == pu.id) {
+            continue;
+        }
+        let item = w
+            .spawn((
+                PowerUpVisual(pu.id),
+                Transform::from_translation(pu.p.extend(40.)),
+                Visibility::Inherited,
+                ChildOf(root),
+            ))
+            .id();
+        match pu.kind {
+            sim::PowerKind::Fuel => {
+                mesh(
+                    w,
+                    Some(item),
+                    &a.cylinder,
+                    &a.fuel_can,
+                    Transform::from_scale(Vec3::new(26., 40., 26.)),
+                    (),
+                );
+                mesh(
+                    w,
+                    Some(item),
+                    &a.cylinder,
+                    &a.nozzle,
+                    Transform::from_xyz(0., 24., 0.).with_scale(Vec3::new(14., 10., 14.)),
+                    (),
+                );
+            }
+            sim::PowerKind::Shield => {
+                mesh(
+                    w,
+                    Some(item),
+                    &a.sphere,
+                    &a.bubble,
+                    Transform::from_scale(Vec3::splat(22.)),
+                    (),
+                );
+                mesh(
+                    w,
+                    Some(item),
+                    &a.sphere,
+                    &a.spark,
+                    Transform::from_scale(Vec3::splat(9.)),
+                    (),
+                );
+            }
+            sim::PowerKind::Key => {
+                mesh(
+                    w,
+                    Some(item),
+                    &a.cube,
+                    &a.key_gold,
+                    Transform::from_scale(Vec3::new(40., 26., 5.)),
+                    (),
+                );
+                mesh(
+                    w,
+                    Some(item),
+                    &a.cube,
+                    &a.cable,
+                    Transform::from_xyz(-10., 0., 3.).with_scale(Vec3::new(10., 10., 2.)),
+                    (),
+                );
+            }
+        }
+    }
+    for (pv, mut t) in w.query::<(&PowerUpVisual, &mut Transform)>().iter_mut(w) {
+        if let Some(pu) = cell.powerups.iter().find(|p| p.id == pv.0) {
+            let bob = (cell.time * 3. + pv.0 as f32).sin() * 6.;
+            t.translation = (pu.p + Vec2::Y * bob).extend(40.);
+            // Upright on screen, turning slowly to show it is 3D.
+            t.rotation = turn.inverse() * Quat::from_rotation_y(cell.time * 2.);
+            t.scale = Vec3::splat(1.6);
+        }
+    }
+    // Shield bubble and stun stars around the hero.
+    let hero = cell.bodies[0];
+    for (mut t, mut v) in w
+        .query_filtered::<(&mut Transform, &mut Visibility), With<ShieldBubble>>()
+        .iter_mut(w)
+    {
+        t.translation = hero.p.extend(34.);
+        *v = if cell.shield > 0. && !hero.escaped {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
+    for (star, mut t, mut v) in w
+        .query::<(&StunStar, &mut Transform, &mut Visibility)>()
+        .iter_mut(w)
+    {
+        let angle = cell.time * 6. + star.0 as f32 * std::f32::consts::TAU / 3.;
+        let around = sim::rotate(
+            Vec2::new(angle.cos() * 34., 40. + angle.sin() * 8.),
+            -cell.angle,
+        );
+        t.translation = (hero.p + around).extend(60.);
+        *v = if hero.stun > 0. && !hero.escaped {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
     let spin = cell.time;
     for (h, mut t, mut v) in w
@@ -1600,6 +1804,17 @@ pub(super) fn animate(
             Event::GuardIn(_) => play(w, a.bell.clone(), 0.6),
             Event::HeroHit => play(w, a.hurt.clone(), 0.7),
             Event::VillagerOut => play(w, a.bell.clone(), 0.4),
+            Event::CaptainIn(_) => play(w, a.bell.clone(), 0.9),
+            Event::Stunned => play(w, a.hurt.clone(), 0.9),
+            Event::ShieldBlock => play(w, a.zap.clone(), 0.6),
+            Event::Alarm(_) => play(w, a.alarm.clone(), 0.8),
+            Event::Overload => play(w, a.zap.clone(), 1.),
+            Event::OverloadRelease => {
+                let i = (cell.time * 5.) as usize % 4;
+                play(w, a.boom[i].clone(), 0.7);
+            }
+            Event::PowerUpTaken(_) => play(w, a.pickup.clone(), 0.7),
+            Event::KeyDrop => play(w, a.click.clone(), 0.9),
         }
     }
     let dt = w.resource::<Time<Real>>().delta_secs();
@@ -1652,14 +1867,39 @@ pub(super) fn animate(
         **text = if escaping {
             "ESCAPED! Heading home to Earth...".into()
         } else {
+            // What the hero holds: fuel time, shield, key card.
+            let mut held = Vec::new();
+            if cell.fuel > 0. {
+                held.push(format!("FUEL {:.0}s", cell.fuel.ceil()));
+            }
+            if cell.shield > 0. {
+                held.push("SHIELD".to_string());
+            }
+            if cell.key {
+                held.push("KEY CARD".to_string());
+            }
+            let alarm = if cell.alarm > 0 {
+                format!("  |  ALARM {}", cell.alarm)
+            } else {
+                String::new()
+            };
+            let hint = if cell.overload > 0. {
+                "MAGNET OVERLOAD!"
+            } else if cell.bodies[0].stun > 0. {
+                "STUNNED!"
+            } else if doors_open > 0 {
+                "TRAPDOOR OPEN - GO!"
+            } else {
+                "Red button opens the far trapdoor"
+            };
             format!(
-                "SPACE PRISON  {clock}  |  villagers {}/{villagers}  |  guards {}\n{}  |  WASD thrust  |  Esc give up",
+                "SPACE PRISON  {clock}{alarm}  |  villagers {}/{villagers}  |  guards {}\n{hint}{}  |  WASD thrust  |  Esc give up",
                 cell.saved,
                 cell.guards(),
-                if doors_open > 0 {
-                    "TRAPDOOR OPEN - GO!"
+                if held.is_empty() {
+                    String::new()
                 } else {
-                    "Red button opens the far trapdoor"
+                    format!("  |  {}", held.join(" "))
                 }
             )
         };

@@ -91,7 +91,13 @@ villagers in the small ones) and dives to Earth with a shader engine plume, smok
 and a re-entry shock; you land home with every villager who got out: 100 XP, up to
 150 more for a quick escape, 40 per villager and a heart. There is no time limit by
 default: it ends when you escape, or when you give up with Esc (no reward).
-Settings > Game modes can set a limit (60 s to 3 min). The world is paused and
+Settings > Game modes can set a limit (60 s to 3 min). Every 30 s the alarm rises
+(up to level 4): red lights, a faster spin, more guards and blasts, and at level 2
+the guard captain (red cap; his baton stuns, ram him hard to knock his key card
+loose). Now and then all four magnets overload, pinning everyone to the walls
+before flinging them across the cell. Power-ups float in: thruster fuel (double
+thrust 5 s), a shield (blocks one hit) and a key card (your next button holds its
+trapdoor open 5 s). Villagers go for the buttons and dash for any open trapdoor. The world is paused and
 silent while you are inside. Its cooldown is under Settings > Cooldowns.
 
 ### Combo streaks
