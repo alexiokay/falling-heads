@@ -18,11 +18,26 @@ pub(super) fn setup(
     let metal = material(Color::srgb(0.72, 0.78, 0.83), 0.65);
     let red = material(Color::srgb(0.7, 0.12, 0.055), 0.25);
     let dark = material(Color::srgb(0.065, 0.08, 0.105), 0.5);
-    let glass = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.06, 0.42, 0.65),
-        emissive: LinearRgba::rgb(0.08, 0.6, 0.9),
+    let hull = material(Color::srgb(0.93, 0.93, 0.95), 0.3);
+    let panel = material(Color::srgb(0.55, 0.57, 0.62), 0.6);
+    // Porthole glass: a faint blue tint with a sharp shine.
+    let porthole = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.6, 0.8, 1., 0.22),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.05,
+        reflectance: 0.9,
         ..default()
     });
+    let mut light = |color: Color, emissive: LinearRgba| {
+        materials.add(StandardMaterial {
+            base_color: color,
+            emissive,
+            unlit: true,
+            ..default()
+        })
+    };
+    let nav_red = light(Color::srgb(1., 0.2, 0.15), LinearRgba::rgb(6., 0.5, 0.4));
+    let nav_green = light(Color::srgb(0.3, 1., 0.4), LinearRgba::rgb(0.5, 6., 0.8));
     let flame = flames.add(crate::systems::graphics::FlameMaterial { effect: Vec4::ZERO });
     let villager = materials.add(StandardMaterial {
         unlit: true,
@@ -32,135 +47,242 @@ pub(super) fn setup(
     commands.insert_resource(RocketAssets {
         cube: meshes.add(Cuboid::new(1., 1., 1.)),
         quad: meshes.add(Rectangle::new(64., 64.)),
+        cylinder: meshes.add(Cylinder::new(0.5, 1.)),
+        cone: meshes.add(Cone {
+            radius: 0.5,
+            height: 1.,
+        }),
         metal,
         red,
         dark,
-        glass,
+        hull,
+        panel,
+        porthole,
+        nav_red,
+        nav_green,
         flame,
         villager,
     });
 }
 
-pub(super) fn part(
+/// A head looking out of a porthole; kept upright and facing the camera by the
+/// flight update whichever way the rocket points.
+#[derive(Component)]
+pub(super) struct RocketHead;
+
+/// One part of the rocket: `mesh` at `p`, turned by `rotation`, scaled by `size`.
+fn piece(
     world: &mut World,
     root: Entity,
-    p: Vec3,
-    size: Vec3,
+    mesh: Handle<Mesh>,
     material: Handle<StandardMaterial>,
+    p: Vec3,
+    rotation: Quat,
+    size: Vec3,
 ) {
-    let mesh = world.resource::<RocketAssets>().cube.clone();
     world.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(material),
-        Transform::from_translation(p).with_scale(size),
+        Transform::from_translation(p)
+            .with_rotation(rotation)
+            .with_scale(size),
         ChildOf(root),
     ));
 }
 
-pub(super) fn ship(world: &mut World, position: Vec3) -> Entity {
+/// The LAUNCHER rocket, nose toward +X: a round white hull with panel lines and
+/// a red band, red nose with a metal tip, swept fins with navigation lights, an
+/// engine bell, and portholes on the camera side with the hero's head in the big
+/// one and up to three passengers' heads in the small ones.
+pub(super) fn ship(world: &mut World, position: Vec3, hero: Entity, passengers: u8) -> Entity {
     let root = world
         .spawn((Transform::from_translation(position), Visibility::Visible))
         .id();
     let a = world.resource::<RocketAssets>();
-    let (metal, red, dark, glass) = (
+    let (cube, cylinder, cone) = (a.cube.clone(), a.cylinder.clone(), a.cone.clone());
+    let (hull, metal, red, dark, panel, glass) = (
+        a.hull.clone(),
         a.metal.clone(),
         a.red.clone(),
         a.dark.clone(),
-        a.glass.clone(),
+        a.panel.clone(),
+        a.porthole.clone(),
     );
-    part(
+    let (nav_red, nav_green, villager) =
+        (a.nav_red.clone(), a.nav_green.clone(), a.villager.clone());
+    // Cylinders and cones are built along +Y; this lays them along +X (the nose).
+    let along = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2);
+    let facing = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
+    piece(
         world,
         root,
+        cylinder.clone(),
+        hull,
         Vec3::ZERO,
-        Vec3::new(130., 58., 52.),
-        metal.clone(),
+        along,
+        Vec3::new(68., 150., 68.),
     );
-    part(
-        world,
-        root,
-        Vec3::new(66., 0., 0.),
-        Vec3::new(32., 46., 42.),
-        red.clone(),
-    );
-    part(
-        world,
-        root,
-        Vec3::new(88., 0., 0.),
-        Vec3::new(18., 30., 28.),
-        metal.clone(),
-    );
-    part(
-        world,
-        root,
-        Vec3::new(102., 0., 0.),
-        Vec3::new(12., 14., 12.),
-        red.clone(),
-    );
-    part(
-        world,
-        root,
-        Vec3::new(-73., 0., 0.),
-        Vec3::new(22., 42., 42.),
-        dark.clone(),
-    );
-    for x in [-48., 45.] {
-        part(
+    for x in [-40., 8., 46.] {
+        piece(
             world,
             root,
-            Vec3::new(x, 0., 0.),
-            Vec3::new(8., 61., 55.),
-            dark.clone(),
+            cylinder.clone(),
+            panel.clone(),
+            Vec3::X * x,
+            along,
+            Vec3::new(70., 3., 70.),
         );
     }
-    for angle in [
-        0.,
-        std::f32::consts::FRAC_PI_2,
-        std::f32::consts::PI,
-        std::f32::consts::PI * 1.5,
-    ] {
-        let rotation = Quat::from_rotation_x(angle);
-        let p = rotation * Vec3::new(-48., 40., 0.);
-        let mesh = world.resource::<RocketAssets>().cube.clone();
+    piece(
+        world,
+        root,
+        cylinder.clone(),
+        red.clone(),
+        Vec3::X * -60.,
+        along,
+        Vec3::new(71., 14., 71.),
+    );
+    // Nose cone and metal tip.
+    piece(
+        world,
+        root,
+        cone.clone(),
+        red.clone(),
+        Vec3::X * 109.,
+        along,
+        Vec3::new(68., 68., 68.),
+    );
+    piece(
+        world,
+        root,
+        cone.clone(),
+        metal.clone(),
+        Vec3::X * 148.,
+        along,
+        Vec3::new(14., 14., 14.),
+    );
+    // Swept fins above and below the tail, with lights on their tips.
+    for s in [-1., 1.] {
+        piece(
+            world,
+            root,
+            cube.clone(),
+            red.clone(),
+            Vec3::new(-62., s * 42., 0.),
+            Quat::from_rotation_z(s * 0.5),
+            Vec3::new(52., 20., 10.),
+        );
+        piece(
+            world,
+            root,
+            cube.clone(),
+            panel.clone(),
+            Vec3::new(-50., s * 36., 0.),
+            Quat::from_rotation_z(s * 0.5),
+            Vec3::new(30., 4., 12.),
+        );
         world.spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(red.clone()),
-            Transform::from_translation(p)
-                .with_rotation(rotation * Quat::from_rotation_z(-0.22))
-                .with_scale(Vec3::new(48., 35., 8.)),
+            Mesh3d(cube.clone()),
+            MeshMaterial3d(if s < 0. {
+                nav_red.clone()
+            } else {
+                nav_green.clone()
+            }),
+            Transform::from_xyz(-84., s * 58., 6.).with_scale(Vec3::splat(9.)),
+            NavLight(if s < 0. { 0. } else { 0.5 }),
             ChildOf(root),
         ));
     }
-    for x in [-22., 18.] {
-        for z in [-1., 1.] {
-            part(
-                world,
-                root,
-                Vec3::new(x, 0., z * 28.),
-                Vec3::new(29., 32., 4.),
-                dark.clone(),
-            );
-            part(
-                world,
-                root,
-                Vec3::new(x, 0., z * 31.),
-                Vec3::new(23., 25., 3.),
-                glass.clone(),
-            );
-        }
+    // Engine bell at the tail.
+    piece(
+        world,
+        root,
+        cone.clone(),
+        dark.clone(),
+        Vec3::X * -88.,
+        along,
+        Vec3::new(54., 30., 54.),
+    );
+    // Portholes on the camera side (+Z): the hero's big one, passengers' small.
+    let hero_face = world
+        .get::<MeshMaterial3d<StandardMaterial>>(hero)
+        .and_then(|m| world.resource::<Assets<StandardMaterial>>().get(&m.0))
+        .and_then(|m| m.base_color_texture.clone());
+    let hero_face = world
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial {
+            base_color_texture: hero_face,
+            unlit: true,
+            alpha_mode: AlphaMode::Mask(0.4),
+            ..default()
+        });
+    let shown = passengers.min(3);
+    let mut windows = vec![(Vec3::new(34., 0., 0.), 40., Some(hero_face))];
+    for i in 0..3u8 {
+        let face = (i < shown).then(|| villager.clone());
+        windows.push((Vec3::new(-2. - i as f32 * 22., 0., 0.), 22., face));
     }
-    for x in [-34., 34.] {
-        for y in [-22., 22.] {
-            part(
-                world,
-                root,
-                Vec3::new(x, y, 28.),
-                Vec3::splat(5.),
-                dark.clone(),
-            );
+    for (at, size, face) in windows {
+        piece(
+            world,
+            root,
+            cylinder.clone(),
+            metal.clone(),
+            at + Vec3::Z * 32.,
+            facing,
+            Vec3::new(size + 8., 4., size + 8.),
+        );
+        piece(
+            world,
+            root,
+            cylinder.clone(),
+            dark.clone(),
+            at + Vec3::Z * 33.,
+            facing,
+            Vec3::new(size, 4., size),
+        );
+        if let Some(face) = face {
+            let head = world
+                .spawn((
+                    Transform::from_translation(at + Vec3::Z * 36.),
+                    Visibility::Inherited,
+                    RocketHead,
+                    ChildOf(root),
+                ))
+                .id();
+            world.spawn((
+                Mesh3d(cube.clone()),
+                MeshMaterial3d(dark.clone()),
+                Transform::from_scale(Vec3::new(size * 0.8, size * 0.8, 3.)),
+                ChildOf(head),
+            ));
+            world.spawn((
+                Mesh3d(a_quad(world)),
+                MeshMaterial3d(face),
+                Transform::from_xyz(0., 0., 2.).with_scale(Vec3::splat(size * 0.8 / 64.)),
+                ChildOf(head),
+            ));
         }
+        piece(
+            world,
+            root,
+            cylinder.clone(),
+            glass.clone(),
+            at + Vec3::Z * 40.,
+            facing,
+            Vec3::new(size, 2., size),
+        );
     }
     root
 }
+
+fn a_quad(world: &World) -> Handle<Mesh> {
+    world.resource::<RocketAssets>().quad.clone()
+}
+
+/// A blinking navigation light on the rocket, with its phase.
+#[derive(Component)]
+pub(super) struct NavLight(pub f32);
 
 pub(super) fn fragment(
     world: &mut World,
