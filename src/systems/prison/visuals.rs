@@ -51,7 +51,6 @@ pub(super) struct Art {
     villager: Handle<StandardMaterial>,
     stars: Handle<StandardMaterial>,
     earth: Handle<StandardMaterial>,
-    flash: Handle<StandardMaterial>,
     debris: Handle<StandardMaterial>,
     steel: Handle<StandardMaterial>,
     bolt: Handle<StandardMaterial>,
@@ -121,8 +120,16 @@ struct ArcSeg(usize, usize, usize);
 struct HeadVisual(usize);
 #[derive(Component)]
 struct Baton;
+/// A blast fireball: its own shader material (progress differs per blast)
+/// and the light it throws on the station.
 #[derive(Component)]
-struct Flash(f32);
+struct Fireball {
+    age: f32,
+    mat: Handle<PrisonField>,
+    light: Entity,
+}
+/// How long a blast fireball lasts, seconds.
+const FIREBALL: f32 = 0.7;
 #[derive(Component)]
 struct Debris {
     v: Vec3,
@@ -297,11 +304,6 @@ pub(super) fn setup(
             ..default()
         })
     };
-    let flash = glow(
-        Color::srgba(1., 0.75, 0.3, 0.75),
-        LinearRgba::rgb(4., 2.2, 0.6),
-        true,
-    );
     let pole_hot = glow(
         Color::srgb(0.7, 0.95, 1.),
         LinearRgba::rgb(2., 4., 6.),
@@ -364,7 +366,6 @@ pub(super) fn setup(
         villager,
         stars,
         earth,
-        flash,
         debris,
         steel,
         bolt,
@@ -1530,14 +1531,54 @@ pub(super) fn animate(
                 let i = (cell.time * 7.) as usize % 4;
                 play(w, a.boom[i].clone(), 0.5);
                 let world = origin + (turn * at.extend(40.));
+                let seed = (frame % 97) as f32;
+                let mat = w.resource_mut::<Assets<PrisonField>>().add(PrisonField {
+                    params: Vec4::new(0., 0., 5., seed),
+                });
+                let light = w
+                    .spawn((
+                        Scene,
+                        PointLight {
+                            color: Color::srgb(1., 0.6, 0.25),
+                            intensity: 400_000_000.,
+                            range: 1600.,
+                            radius: 60.,
+                            shadow_maps_enabled: false,
+                            ..default()
+                        },
+                        Transform::from_translation(world + Vec3::Z * 140.),
+                        RenderLayers::layer(1),
+                    ))
+                    .id();
                 mesh(
                     w,
                     None,
-                    &a.cube,
-                    &a.flash,
-                    Transform::from_translation(world).with_scale(Vec3::splat(40.)),
-                    Flash(0.),
+                    &a.quad,
+                    &mat,
+                    Transform::from_translation(world + Vec3::Z * 10.)
+                        .with_scale(Vec3::splat(460.)),
+                    Fireball {
+                        age: 0.,
+                        mat: mat.clone(),
+                        light,
+                    },
                 );
+                // Hot sparks, faster than the chips.
+                for k in 0..10 {
+                    let angle = k as f32 / 10. * std::f32::consts::TAU + jitter(k, frame) * 0.5;
+                    let speed = 900. + (jitter(frame, k + 40) + 1.) * 300.;
+                    mesh(
+                        w,
+                        None,
+                        &a.cube,
+                        &a.spark,
+                        Transform::from_translation(world).with_scale(Vec3::new(14., 4., 4.)),
+                        Debris {
+                            v: Vec3::new(angle.cos(), angle.sin(), 0.) * speed,
+                            age: 0.25,
+                        },
+                    );
+                }
                 for k in 0..12 {
                     let angle = k as f32 / 12. * std::f32::consts::TAU + jitter(frame, k) * 0.3;
                     let speed = 500. + (jitter(k, frame) + 1.) * 350.;
@@ -1563,14 +1604,24 @@ pub(super) fn animate(
     }
     let dt = w.resource::<Time<Real>>().delta_secs();
     let mut done = Vec::new();
-    for (e, mut f, mut t) in w
-        .query::<(Entity, &mut Flash, &mut Transform)>()
-        .iter_mut(w)
-    {
-        f.0 += dt;
-        t.scale = Vec3::splat(40. + f.0 * 900.);
-        if f.0 > 0.3 {
+    let now = w.resource::<Time<Real>>().elapsed_secs();
+    let mut burnt = Vec::new();
+    for (e, mut f) in w.query::<(Entity, &mut Fireball)>().iter_mut(w) {
+        f.age += dt;
+        burnt.push((e, f.age / FIREBALL, f.mat.clone(), f.light));
+    }
+    for (e, progress, mat, light) in burnt {
+        if let Some(mut m) = w.resource_mut::<Assets<PrisonField>>().get_mut(&mat) {
+            m.params.x = now;
+            m.params.y = progress;
+        }
+        if let Some(mut l) = w.get_mut::<PointLight>(light) {
+            l.intensity = 400_000_000. * (1. - progress).max(0.).powi(2);
+        }
+        if progress >= 1. {
             done.push(e);
+            done.push(light);
+            w.resource_mut::<Assets<PrisonField>>().remove(&mat);
         }
     }
     for (e, mut d, mut t) in w

@@ -85,6 +85,10 @@ pub(crate) fn run(w: &mut World) {
                     .filter(|(_, v)| **v != Visibility::Hidden)
                     .count();
                 assert_eq!(labels, 0, "world labels showing in the prison");
+                // A blast in the shot, to see the fireball.
+                if let Some(c) = cell(w) {
+                    c.blast(Vec2::new(-140., 90.));
+                }
                 capture(w, "cell");
                 next(w);
             }

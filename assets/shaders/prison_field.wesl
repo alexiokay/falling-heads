@@ -1,7 +1,7 @@
 import bevy_pbr::render::forward_io::VertexOutput;
 import bevy_pbr::render::mesh_view_bindings::view;
 // x: time, y: strength 0..1, z: mode (0 field beam, 1 atmosphere, 2 containment,
-// 3 engine plume, 4 re-entry shock).
+// 3 engine plume, 4 re-entry shock, 5 blast fireball; w: seed).
 @group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> params: vec4<f32>;
 
 fn hash(p: vec2<f32>) -> f32 {
@@ -51,6 +51,27 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         color = mix(color, vec3<f32>(0.75, 0.88, 1.0), core * (1.0 - y) * (0.7 + 0.3 * shock));
         let a = body * fade * (0.55 + 0.45 * n) * strength;
         return vec4<f32>(color * 3.2, clamp(a, 0.0, 1.0));
+    }
+    if mode > 4.5 {
+        // Blast fireball: y is the progress 0..1. A hot core with a ragged
+        // edge swells and cools to orange and smoke, while a shock ring rushes out.
+        let p = in.uv * 2.0 - 1.0;
+        let r = length(p);
+        let ang = atan2(p.y, p.x);
+        let prog = clamp(strength, 0.0, 1.0);
+        let seed = params.w;
+        let lumps = hash(vec2<f32>(floor(ang * 7.0 + seed), floor(seed * 3.0)));
+        let fine = hash(vec2<f32>(floor(ang * 23.0 + seed * 2.0), floor(r * 9.0 + prog * 12.0)));
+        let edge = 0.22 + 0.5 * sqrt(prog) + (lumps - 0.5) * 0.14 + (fine - 0.5) * 0.05;
+        let ball = 1.0 - smoothstep(edge * 0.75, edge, r);
+        let heat = (1.0 - prog) * (1.0 - smoothstep(0.0, edge, r));
+        var color = mix(vec3<f32>(0.22, 0.2, 0.2), vec3<f32>(1.0, 0.36, 0.03), smoothstep(0.0, 0.5, 1.0 - prog));
+        color = mix(color, vec3<f32>(1.0, 0.82, 0.3), clamp(heat * 1.8, 0.0, 1.0));
+        let ring_r = 0.15 + prog * 0.85;
+        let ring = (1.0 - smoothstep(0.0, 0.06, abs(r - ring_r))) * (1.0 - prog) * 0.7;
+        let a = ball * pow(1.0 - prog, 1.2) * (0.92 + 0.08 * fine) + ring;
+        let glow = 1.3 + 3.0 * heat;
+        return vec4<f32>(mix(color, vec3<f32>(1.0, 0.85, 0.6), ring) * glow, clamp(a, 0.0, 1.0));
     }
     if mode > 3.5 {
         // Re-entry shock: a glowing plasma arc bowed over the nose (uv.y 0 is the
