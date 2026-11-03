@@ -52,11 +52,14 @@ pub(super) fn setup(
                 },
                 cull_mode: None,
                 perceptual_roughness: 0.85,
+                // Magma glows through its own texture: the hot cracks shine and the
+                // dark crust stays dark (a flat glow made a solid orange cube).
                 emissive: if tile == Tile::Magma {
-                    LinearRgba::rgb(1.5, 0.3, 0.01)
+                    LinearRgba::rgb(1.8, 0.9, 0.4)
                 } else {
                     LinearRgba::BLACK
                 },
+                emissive_texture: (tile == Tile::Magma).then(|| load(&texture)),
                 ..default()
             }),
         );
@@ -177,5 +180,6 @@ pub(super) fn animate_magma(
     *last = frame;
     if let Some(mut m) = mats.get_mut(&art.tiles[&Tile::Magma]) {
         m.base_color_texture = Some(art.magma[frame].clone());
+        m.emissive_texture = Some(art.magma[frame].clone());
     }
 }
