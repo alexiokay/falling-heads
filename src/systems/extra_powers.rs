@@ -382,21 +382,21 @@ const WIND_KINDS: [WindKind; 3] = [
     WindKind {
         name: "breeze",
         speed: 260.0,
-        seconds: (2.0, 3.0),
+        seconds: (7.0, 9.0),
         volume: 0.5,
         pitch: 1.15,
     },
     WindKind {
         name: "strong",
         speed: 480.0,
-        seconds: (3.0, 4.0),
+        seconds: (9.0, 12.0),
         volume: 0.8,
         pitch: 0.9,
     },
     WindKind {
         name: "STORM",
         speed: 720.0,
-        seconds: (4.0, 5.0),
+        seconds: (11.0, 14.0),
         volume: 1.0,
         pitch: 0.7,
     },
@@ -798,7 +798,15 @@ const HOLE_CLOSE: f32 = 0.35;
 /// Core size in world units when fully open.
 const HOLE_SIZE: f32 = 64.0;
 
-fn spawn_black_hole(commands: &mut Commands, art: &HoleArt, at: Vec3, now: f32) {
+/// `hum` loops on the hole for its whole life and stops when it pops (the clip
+/// is shorter than the hole lasts).
+fn spawn_black_hole(
+    commands: &mut Commands,
+    art: &HoleArt,
+    hum: &Handle<AudioSource>,
+    at: Vec3,
+    now: f32,
+) {
     let layer = |mesh: &Handle<Mesh>, material: &Handle<StandardMaterial>, size: f32, z: f32| {
         (
             Mesh3d(mesh.clone()),
@@ -842,6 +850,13 @@ fn spawn_black_hole(commands: &mut Commands, art: &HoleArt, at: Vec3, now: f32) 
             });
             // The black core sits in front of everything it swallows.
             hole.spawn(layer(&art.sphere, &art.core, 1.0, 0.02));
+            hole.spawn((
+                AudioPlayer::new(hum.clone()),
+                PlaybackSettings::LOOP
+                    .with_volume(bevy::audio::Volume::Linear(0.8))
+                    .with_speed(0.7),
+                SoundAt(at.xy()),
+            ));
         });
 }
 
@@ -928,8 +943,7 @@ fn start_spawned(
                     at.y + rng.random_range(260.0..340.0),
                     40.0,
                 );
-                spawn_black_hole(&mut commands, &art.hole, p, now);
-                play(&mut commands, &art.sounds.hole, p, 0.8, 0.7);
+                spawn_black_hole(&mut commands, &art.hole, &art.sounds.hole, p, now);
                 announce(&mut notice, by("BLACK HOLE", user));
             }
             P::Bees => {

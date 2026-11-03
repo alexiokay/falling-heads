@@ -207,6 +207,7 @@ fn main() {
     .insert_resource(Gravity(Vec3::NEG_Y * 500.0)) // -500 gravity (matching old constant)
     .insert_resource(SubstepCount(1)) // Reduce substeps from default 6 to 1 for performance
     .add_systems(OnEnter(GameState::Paused), pause_physics)
+    .add_systems(OnEnter(GameState::Prison), pause_physics)
     .add_systems(OnEnter(GameState::Playing), resume_physics)
     .add_plugins(systems::biome_teleport::BiomeTeleportPlugin)
     .add_plugins(systems::biome_mist::BiomeMistPlugin)
@@ -995,11 +996,14 @@ fn initialize_material_cache(
 
 /// A command aimed at an entity despawned earlier in the frame (a mob killed, a
 /// chunk unloaded) only logs a warning instead of crashing the game. Anything
-/// else, such as a panicking system, keeps Bevy's default handling, so it still
-/// stops the game (and fails a test run instead of leaving it hanging).
+/// else, such as a panicking system, logs the error and exits with a failure
+/// code: re-panicking here is caught again by Bevy and leaves the game hanging.
 fn command_errors_warn(error: bevy::ecs::error::BevyError, ctx: bevy::ecs::error::ErrorContext) {
     match ctx {
         bevy::ecs::error::ErrorContext::Command { .. } => bevy::ecs::error::warn(error, ctx),
-        _ => bevy::ecs::error::match_severity(error, ctx),
+        _ => {
+            bevy::ecs::error::error(error, ctx);
+            std::process::exit(101);
+        }
     }
 }

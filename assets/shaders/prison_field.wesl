@@ -1,6 +1,7 @@
 import bevy_pbr::render::forward_io::VertexOutput;
 import bevy_pbr::render::mesh_view_bindings::view;
-// x: time, y: strength 0..1, z: mode (0 field beam, 1 atmosphere, 2 containment).
+// x: time, y: strength 0..1, z: mode (0 field beam, 1 atmosphere, 2 containment,
+// 3 engine plume, 4 re-entry shock).
 @group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> params: vec4<f32>;
 
 fn hash(p: vec2<f32>) -> f32 {
@@ -34,6 +35,35 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let rim = pow(1.0 - facing, 2.4);
         let haze = 0.08 * facing;
         return vec4<f32>(vec3<f32>(0.35, 0.65, 1.0) * 1.7, clamp(rim * 0.9 + haze, 0.0, 1.0));
+    }
+    if mode > 2.5 && mode < 3.5 {
+        // Engine plume: uv.y 0 at the nozzle, 1 at the tail. A blue-white core,
+        // orange flame widening and breaking up into flicker toward the tail.
+        let x = abs(in.uv.x - 0.5) * 2.0;
+        let y = in.uv.y;
+        let width = mix(0.45, 1.0, sqrt(y));
+        let body = 1.0 - smoothstep(width * 0.55, width, x);
+        let core = 1.0 - smoothstep(0.0, 0.3 * width, x);
+        let n = hash(vec2<f32>(floor(y * 22.0 - t * 34.0), floor(x * 7.0)));
+        let shock = 0.5 + 0.5 * sin(y * 40.0 - t * 50.0);
+        let fade = 1.0 - smoothstep(0.15, 1.0, y);
+        var color = mix(vec3<f32>(1.0, 0.45, 0.1), vec3<f32>(1.0, 0.85, 0.5), fade);
+        color = mix(color, vec3<f32>(0.75, 0.88, 1.0), core * (1.0 - y) * (0.7 + 0.3 * shock));
+        let a = body * fade * (0.55 + 0.45 * n) * strength;
+        return vec4<f32>(color * 3.2, clamp(a, 0.0, 1.0));
+    }
+    if mode > 3.5 {
+        // Re-entry shock: a glowing plasma arc bowed over the nose (uv.y 0 is the
+        // front), flickering orange to white-hot at its peak.
+        let p = vec2<f32>(in.uv.x * 2.0 - 1.0, 1.0 - in.uv.y * 2.0);
+        let d = length(p - vec2<f32>(0.0, -0.7));
+        let arc = 1.0 - smoothstep(0.0, 0.32, abs(d - 1.15));
+        let front = smoothstep(-0.35, 0.4, p.y);
+        let n = hash(vec2<f32>(floor(atan2(p.y, p.x) * 18.0), floor(t * 24.0)));
+        let hot = 1.0 - smoothstep(0.0, 0.12, abs(d - 1.15));
+        let color = mix(vec3<f32>(1.0, 0.4, 0.08), vec3<f32>(1.0, 0.95, 0.85), hot);
+        let a = arc * front * (0.6 + 0.4 * n) * strength;
+        return vec4<f32>(color * 3.5, clamp(a, 0.0, 1.0));
     }
     // Containment field: a shimmering band of cells around the spinning prison,
     // brighter while a magnet pulls.

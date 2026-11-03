@@ -49,6 +49,8 @@ pub(crate) struct Session {
     magnet_was: Option<usize>,
     /// Where the camera looks: drifts toward the hero inside the cell.
     look: Vec3,
+    /// World sounds (music included) paused for the visit, to resume after.
+    paused_audio: Vec<Entity>,
 }
 
 /// Seconds from the hero leaving the cell to landing back in the world.
@@ -198,12 +200,28 @@ fn enter(w: &mut World) {
         LinearVelocity::ZERO,
         ColliderDisabled,
     ));
+    // The world is paused (like the pause menu); silence its music and sounds.
+    let paused_audio: Vec<Entity> = w
+        .query::<(Entity, &AudioSink)>()
+        .iter(w)
+        .filter(|(_, sink)| !sink.is_paused())
+        .map(|(e, _)| e)
+        .collect();
+    for e in &paused_audio {
+        if let Some(sink) = w.get::<AudioSink>(*e) {
+            sink.pause();
+        }
+    }
     // Space: only the prison's own layer is drawn.
     w.entity_mut(camera).insert(RenderLayers::layer(1));
     let origin = start.translation + Vec3::new(0., 0., 4000.);
     let seed = (w.resource::<Time<Real>>().elapsed_secs() * 1000.) as u32 ^ 0x9e37_79b9;
     let villagers = 1 + (seed % 2) as usize;
-    let cell = sim::Cell::new(seed, villagers);
+    let mut cell = sim::Cell::new(seed, villagers);
+    let limit = w
+        .get_resource::<crate::systems::game_modes::GameModes>()
+        .map_or(0, |m| m.prison_seconds);
+    cell.limit = (limit > 0).then_some(limit as f32);
     visuals::scene(w, origin, hero);
     let mut n = w.resource_mut::<super::world_portals::PowerNotice>();
     n.text = format!("ARRESTED! (by {by}) Escape the space prison!");
@@ -226,6 +244,7 @@ fn enter(w: &mut World) {
         shake: 0.,
         magnet_was: None,
         look: origin,
+        paused_audio,
     });
 }
 
@@ -342,7 +361,7 @@ fn update(w: &mut World) {
     if let Some(r) = s.ride.as_mut() {
         r.t += dt;
         let (p, heading, flame, heat) = r.pose();
-        visuals::pose_rocket(w, p, heading, flame, heat);
+        visuals::pose_rocket(w, p, heading, flame, heat, r.t >= 0.9, dt);
         // Follow the rocket down, closing in as it dives.
         look = s.look.lerp(p, smooth(r.t / 1.2));
         back = distance + (950. - distance) * smooth((r.t - 0.9) / 1.6);
@@ -409,6 +428,11 @@ fn leave(w: &mut World) {
                 Position(s.start.translation),
             ));
         }
+        for e in &s.paused_audio {
+            if let Some(sink) = w.get::<AudioSink>(*e) {
+                sink.play();
+            }
+        }
         for (e, v) in s.hidden_text {
             if let Ok(mut label) = w.get_entity_mut(e) {
                 label.insert(v);
@@ -424,7 +448,7 @@ fn leave(w: &mut World) {
         }
         let text = match s.cell.outcome {
             Some(sim::Outcome::Escaped { seconds, saved }) => {
-                let amount = 100 + ((sim::TIME_LIMIT - seconds).max(0.) * 2.) as u32 + saved * 40;
+                let amount = 100 + ((sim::QUICK_ESCAPE - seconds).max(0.) * 2.) as u32 + saved * 40;
                 if let Some(mut hp) = w.get_mut::<Health>(s.hero) {
                     hp.current = (hp.current + 1).min(hp.max);
                 }

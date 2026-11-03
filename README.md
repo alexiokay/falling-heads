@@ -86,10 +86,13 @@ micro-blasts throw heads around. The station, cell and Earth are lit by the
 scene's own lights whatever Graphics > Lighting says. Hitting a red button opens the trapdoor
 across the room for 1.8 s; fly out through it (WASD or arrows thrust). Guards come
 in through the trapdoors and hit with batons (a hit costs a heart but never kills).
-Fly out and an escape rocket picks you up and dives to Earth (re-entry glow and
-all); you land home with every villager who got out: 100 XP, up to
-150 more for speed, 40 per villager and a heart. After 75 s, or Esc, the guards
-throw you out with nothing. Its cooldown is under Settings > Cooldowns.
+Fly out and an escape spaceship picks you up (your head in its big porthole, saved
+villagers in the small ones) and dives to Earth with a shader engine plume, smoke
+and a re-entry shock; you land home with every villager who got out: 100 XP, up to
+150 more for a quick escape, 40 per villager and a heart. There is no time limit by
+default: it ends when you escape, or when you give up with Esc (no reward).
+Settings > Game modes can set a limit (60 s to 3 min). The world is paused and
+silent while you are inside. Its cooldown is under Settings > Cooldowns.
 
 ### Combo streaks
 Break blocks within 1.5 s of each other to build a combo. The counter climbs with the
@@ -139,7 +142,7 @@ curl -X POST http://localhost:3029/command -H "Content-Type: application/json" \
 - `PEARL` ✅ - Ender pearl: hero jumps to a free spot up to 10 blocks away
 - `QUAKE` ✅ - Ores nearby pop out as drops, blocks crack, heads jolt
 - `SHRINK` ✅ - Friendly heads half size for 10 seconds (no block damage)
-- `WIND` ✅ - Gust pushes every head sideways for 3 seconds
+- `WIND` ✅ - Wind pushes every head sideways for 7-14 seconds (breeze, strong or storm)
 - `BLACKHOLE` ✅ - Vortex pulls things in for 10 seconds, then pops them outward
 - `ICEAGE` ✅ - Snow and slippery floors for 15 seconds
 - `BEES` ✅ - Swarm chases a random head; a big bounce shakes it off

@@ -72,7 +72,7 @@ pub enum PowerCommandType {
     Pearl,      // Ender pearl: hero jumps to a random free spot nearby
     Quake,      // Earthquake: ores pop out as drops, blocks crack, heads jolt
     Shrink,     // Friendly heads half size for 10 s (no block damage)
-    Wind,       // Gust pushes every head sideways for 3 s
+    Wind,       // Wind pushes every head sideways for 7-14 s
     BlackHole,  // Vortex pulls things in for 10 s, then pops them outward
     IceAge,     // Snow and slippery floors for 15 s
     Bees,       // Swarm chases a random head and stings lightly

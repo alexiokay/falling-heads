@@ -30,7 +30,9 @@ impl Plugin for WorldPortalPlugin {
                 (power_requests, attach, update, update_notice)
                     .chain()
                     .run_if(in_state(GameState::Playing)),
-            );
+            )
+            // Messages stay live in the space prison too (guards, escapes).
+            .add_systems(Update, update_notice.run_if(in_state(GameState::Prison)));
     }
 }
 

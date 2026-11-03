@@ -156,6 +156,14 @@ pub(crate) fn run(w: &mut World) {
             next(w);
         }
         7 => {
+            // No time limit: hold the hero in the middle while waiting for a guard,
+            // so blasts and buttons cannot let it escape on its own.
+            if state(w) == GameState::Prison
+                && let Some(c) = cell(w)
+            {
+                c.bodies[0].p = Vec2::ZERO;
+                c.bodies[0].v = Vec2::ZERO;
+            }
             if state(w) == GameState::Prison && now - since > 9. {
                 let guards = cell(w).map_or(0, |c| c.guards());
                 assert!(guards >= 1, "no guard came in");

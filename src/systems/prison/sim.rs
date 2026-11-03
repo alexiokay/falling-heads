@@ -11,8 +11,8 @@ pub const RADIUS: f32 = 26.;
 /// Half width of a trapdoor opening (two blocks wide).
 pub const DOOR_HALF: f32 = 64.;
 pub const STEP: f32 = 1. / 120.;
-/// Seconds to escape before the guards throw you out.
-pub const TIME_LIMIT: f32 = 75.;
+/// Escapes faster than this earn a speed bonus (2 XP per second left).
+pub const QUICK_ESCAPE: f32 = 75.;
 /// A button keeps its trapdoor open this long.
 pub const DOOR_OPEN: f32 = 1.8;
 /// Spin speed range (radians per second); it changes every few seconds and
@@ -106,6 +106,8 @@ pub struct Cell {
     pub events: Vec<Event>,
     pub outcome: Option<Outcome>,
     pub saved: u32,
+    /// Seconds before the guards throw you out; `None` (the default): no limit.
+    pub limit: Option<f32>,
     next_blast: f32,
     next_guard: f32,
     rng: u32,
@@ -185,6 +187,7 @@ impl Cell {
             events: Vec::new(),
             outcome: None,
             saved: 0,
+            limit: None,
             next_blast: 2.,
             next_guard: 6.,
             rng: seed | 1,
@@ -299,7 +302,7 @@ impl Cell {
                 seconds: self.time,
                 saved: self.saved,
             });
-        } else if self.time >= TIME_LIMIT {
+        } else if self.limit.is_some_and(|l| self.time >= l) {
             self.outcome = Some(Outcome::Caught);
         }
     }
@@ -542,7 +545,9 @@ mod tests {
         run(&mut cell, 20.);
         assert!(cell.guards() >= 1);
         assert!(cell.events.contains(&Event::HeroHit));
-        run(&mut cell, TIME_LIMIT);
+        assert!(cell.outcome.is_none(), "no time limit by default");
+        cell.limit = Some(30.);
+        run(&mut cell, 12.);
         assert_eq!(cell.outcome, Some(Outcome::Caught));
         assert!(cell.guards() <= MAX_GUARDS);
     }

@@ -56,6 +56,9 @@ pub struct GameModes {
     pub machines: bool,
     pub landmark_enemies: bool,
     pub chat_powers: bool,
+    /// Space prison time limit in seconds; 0 (the default) means none: it ends
+    /// only when you escape (or give up with Esc).
+    pub prison_seconds: u32,
 }
 
 impl Default for GameModes {
@@ -68,6 +71,7 @@ impl Default for GameModes {
             machines: true,
             landmark_enemies: true,
             chat_powers: true,
+            prison_seconds: 0,
         }
     }
 }
@@ -129,6 +133,20 @@ pub fn chat_powers_on() -> bool {
 #[derive(Component)]
 pub struct GameModeToggle(pub GameMode);
 
+/// Steps through the space prison time limits.
+#[derive(Component)]
+pub struct PrisonLimitButton;
+
+const PRISON_LIMITS: [u32; 5] = [0, 60, 90, 120, 180];
+
+fn prison_label(seconds: u32) -> String {
+    if seconds == 0 {
+        "Prison time limit: none (escape to leave)".into()
+    } else {
+        format!("Prison time limit: {seconds} s")
+    }
+}
+
 pub struct GameModesPlugin;
 
 impl Plugin for GameModesPlugin {
@@ -139,7 +157,11 @@ impl Plugin for GameModesPlugin {
             .add_systems(Update, save_game_modes)
             .add_systems(
                 Update,
-                (fill_game_modes_page, handle_game_mode_toggles)
+                (
+                    fill_game_modes_page,
+                    handle_game_mode_toggles,
+                    handle_prison_limit,
+                )
                     .chain()
                     .run_if(in_state(GameState::Settings)),
             );
@@ -198,6 +220,11 @@ fn fill_game_modes_page(
                     GameModeToggle(mode),
                 );
             }
+            crate::systems::settings_menu_system::menu_button(
+                p,
+                &prison_label(modes.prison_seconds),
+                PrisonLimitButton,
+            );
             // Where chat bots and VortiDeck send commands (the port can change
             // when Windows reserves the default one).
             p.spawn((
@@ -245,6 +272,35 @@ fn handle_game_mode_toggles(
             if let Ok(mut text) = texts.get_mut(*child)
                 && text.0 != label
             {
+                text.0 = label.clone();
+            }
+        }
+    }
+}
+
+/// The prison time-limit button, when its interaction changed.
+type PressedLimit = (Changed<PickingInteraction>, With<PrisonLimitButton>);
+
+/// A click steps the prison time limit: none, 60 s, 90 s, 2 min, 3 min, none...
+fn handle_prison_limit(
+    mut modes: ResMut<GameModes>,
+    buttons: Query<(Entity, &PickingInteraction, &Children), PressedLimit>,
+    mut texts: Query<&mut Text, With<ToggleButtonText>>,
+    mut presses: Local<crate::systems::settings_menu_system::PressTracker>,
+) {
+    for (entity, interaction, children) in &buttons {
+        if !presses.pressed(entity, *interaction) {
+            continue;
+        }
+        let now = modes.prison_seconds;
+        modes.prison_seconds = PRISON_LIMITS
+            .iter()
+            .copied()
+            .find(|&s| s > now)
+            .unwrap_or(0);
+        let label = prison_label(modes.prison_seconds);
+        for child in children {
+            if let Ok(mut text) = texts.get_mut(*child) {
                 text.0 = label.clone();
             }
         }
