@@ -39,7 +39,6 @@ impl Material for PrisonField {
 pub(super) struct Art {
     cube: Handle<Mesh>,
     quad: Handle<Mesh>,
-    cylinder: Handle<Mesh>,
     cone: Handle<Mesh>,
     sphere: Handle<Mesh>,
     bedrock: Handle<StandardMaterial>,
@@ -49,15 +48,19 @@ pub(super) struct Art {
     button_pressed: Handle<StandardMaterial>,
     guard: Handle<StandardMaterial>,
     captain: Handle<StandardMaterial>,
-    fuel_can: Handle<StandardMaterial>,
-    key_gold: Handle<StandardMaterial>,
+    item_fuel: Handle<StandardMaterial>,
+    item_shield: Handle<StandardMaterial>,
+    item_key: Handle<StandardMaterial>,
+    aura_fuel: Handle<StandardMaterial>,
+    aura_shield: Handle<StandardMaterial>,
+    aura_key: Handle<StandardMaterial>,
+    sparkle: Handle<StandardMaterial>,
     bubble: Handle<StandardMaterial>,
     star: Handle<StandardMaterial>,
     villager: Handle<StandardMaterial>,
     stars: Handle<StandardMaterial>,
     earth: Handle<StandardMaterial>,
     debris: Handle<StandardMaterial>,
-    steel: Handle<StandardMaterial>,
     bolt: Handle<StandardMaterial>,
     iron: Handle<StandardMaterial>,
     copper: Handle<StandardMaterial>,
@@ -79,15 +82,11 @@ pub(super) struct Art {
     baton: Handle<StandardMaterial>,
     body: Handle<StandardMaterial>,
     hull: Handle<StandardMaterial>,
-    red: Handle<StandardMaterial>,
-    glass: Handle<StandardMaterial>,
-    panel: Handle<StandardMaterial>,
-    nozzle: Handle<StandardMaterial>,
-    nav_red: Handle<StandardMaterial>,
-    nav_green: Handle<StandardMaterial>,
     puff: Handle<StandardMaterial>,
     plume: Handle<PrisonField>,
     shock: Handle<PrisonField>,
+    /// The escape shuttle (shared design with the LAUNCHER), kept lit.
+    shuttle: crate::systems::shuttle::ShuttleArt,
     fields: [Handle<PrisonField>; 4],
     atmosphere: Handle<PrisonField>,
     containment: Handle<PrisonField>,
@@ -129,6 +128,12 @@ struct AlarmLight(f32);
 /// A floating power-up (by its id).
 #[derive(Component)]
 struct PowerUpVisual(u32);
+/// The glow behind a power-up.
+#[derive(Component)]
+struct ItemAura;
+/// A twinkling sparkle by a power-up, with its phase.
+#[derive(Component)]
+struct Sparkle(f32);
 /// The bubble around the hero while the shield lasts.
 #[derive(Component)]
 struct ShieldBubble;
@@ -161,17 +166,11 @@ struct Earth;
 struct MagnetRoot;
 #[derive(Component)]
 struct Rocket;
-/// An engine plume quad; its length is scaled by the flame (factor: size).
+/// An engine plume quad, by the x of its nozzle (in the shuttle's space).
 #[derive(Component)]
 struct Plume(f32);
 #[derive(Component)]
 struct Shock;
-/// A head in a porthole (`true`: the hero, shown once picked up); kept upright.
-#[derive(Component)]
-struct RocketHead(bool);
-/// A blinking navigation light with its phase.
-#[derive(Component)]
-struct NavLight(f32);
 /// A puff of exhaust smoke drifting away and fading.
 #[derive(Component)]
 struct Puff {
@@ -234,6 +233,10 @@ pub(super) fn setup(
     let stars = flat(Some(server.load("textures/prison/stars.png")), Color::WHITE);
     let baton = flat(None, Color::srgb(0.12, 0.1, 0.1));
     let body = flat(None, Color::srgb(0.2, 0.2, 0.24));
+    // Power-up sprites (pixel art, unlit so their colours stay true).
+    let item_fuel = flat(Some(pixel("textures/prison/item_fuel.png")), Color::WHITE);
+    let item_shield = flat(Some(pixel("textures/prison/item_shield.png")), Color::WHITE);
+    let item_key = flat(Some(pixel("textures/prison/item_key.png")), Color::WHITE);
     // Lit surfaces: metal shines and shades under the scene's lights.
     let mut lit = |texture: Option<Handle<Image>>, color: Color, metal: f32, rough: f32| {
         let h = mats.add(StandardMaterial {
@@ -283,7 +286,6 @@ pub(super) fn setup(
         0.4,
         0.25,
     );
-    let steel = lit(None, Color::srgb(0.3, 0.32, 0.36), 0.9, 0.35);
     let bolt = lit(None, Color::srgb(0.75, 0.77, 0.8), 1., 0.25);
     let iron = lit(None, Color::srgb(0.5, 0.51, 0.55), 0.85, 0.4);
     let copper = lit(None, Color::srgb(0.95, 0.55, 0.3), 1., 0.28);
@@ -296,21 +298,6 @@ pub(super) fn setup(
     let cable = lit(None, Color::srgb(0.06, 0.06, 0.07), 0., 0.6);
     let debris = lit(None, Color::srgb(0.32, 0.32, 0.35), 0., 0.9);
     let hull = lit(None, Color::srgb(0.93, 0.93, 0.95), 0.3, 0.3);
-    let red = lit(None, Color::srgb(0.85, 0.15, 0.12), 0.2, 0.4);
-    let panel = lit(None, Color::srgb(0.55, 0.57, 0.62), 0.6, 0.4);
-    let nozzle = lit(None, Color::srgb(0.25, 0.25, 0.28), 1., 0.3);
-    // Porthole glass: a faint blue tint with a sharp shine.
-    let glass = {
-        let h = mats.add(StandardMaterial {
-            base_color: Color::srgba(0.6, 0.8, 1., 0.22),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 0.05,
-            reflectance: 0.9,
-            ..default()
-        });
-        keep.0.insert(h.id());
-        h
-    };
     let mut glow = |color: Color, emissive: LinearRgba, blend: bool| {
         mats.add(StandardMaterial {
             base_color: color,
@@ -354,27 +341,7 @@ pub(super) fn setup(
         LinearRgba::rgb(6., 0.8, 0.5),
         false,
     );
-    let nav_red = glow(
-        Color::srgb(1., 0.2, 0.15),
-        LinearRgba::rgb(6., 0.5, 0.4),
-        false,
-    );
-    let nav_green = glow(
-        Color::srgb(0.3, 1., 0.4),
-        LinearRgba::rgb(0.5, 6., 0.8),
-        false,
-    );
     let puff = glow(Color::srgba(0.7, 0.72, 0.78, 0.16), LinearRgba::BLACK, true);
-    let fuel_can = glow(
-        Color::srgb(1., 0.5, 0.1),
-        LinearRgba::rgb(2.5, 0.9, 0.1),
-        false,
-    );
-    let key_gold = glow(
-        Color::srgb(1., 0.85, 0.2),
-        LinearRgba::rgb(2.5, 2., 0.3),
-        false,
-    );
     let bubble = glow(
         Color::srgba(0.4, 0.85, 1., 0.22),
         LinearRgba::rgb(0.3, 0.8, 1.2),
@@ -385,13 +352,49 @@ pub(super) fn setup(
         LinearRgba::rgb(4., 3.5, 0.6),
         false,
     );
+    let shuttle = {
+        let mut ids = Vec::new();
+        let art = crate::systems::shuttle::ShuttleArt::new(&mut meshes, &mut mats, &mut ids);
+        keep.0.extend(ids);
+        art
+    };
+    // Soft glows behind the power-ups (tinted per item) and their sparkles.
+    let mut aura = |color: Color, emissive: LinearRgba, path: &str| {
+        mats.add(StandardMaterial {
+            base_color_texture: Some(server.load(path.to_string())),
+            base_color: color,
+            emissive,
+            unlit: true,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        })
+    };
+    let aura_fuel = aura(
+        Color::srgba(1., 0.55, 0.15, 0.7),
+        LinearRgba::rgb(1.6, 0.6, 0.1),
+        "textures/prison/aura.png",
+    );
+    let aura_shield = aura(
+        Color::srgba(0.3, 0.85, 1., 0.7),
+        LinearRgba::rgb(0.3, 1.2, 1.8),
+        "textures/prison/aura.png",
+    );
+    let aura_key = aura(
+        Color::srgba(1., 0.85, 0.25, 0.7),
+        LinearRgba::rgb(1.6, 1.3, 0.2),
+        "textures/prison/aura.png",
+    );
+    let sparkle = aura(
+        Color::WHITE,
+        LinearRgba::rgb(3., 3., 3.),
+        "textures/prison/sparkle.png",
+    );
     let field = |mode: f32| PrisonField {
         params: Vec4::new(0., 0., mode, 0.),
     };
     commands.insert_resource(Art {
         cube: meshes.add(Cuboid::new(1., 1., 1.)),
         quad: meshes.add(Rectangle::new(1., 1.)),
-        cylinder: meshes.add(Cylinder::new(0.5, 1.)),
         cone: meshes.add(Cone {
             radius: 0.5,
             height: 1.,
@@ -404,15 +407,19 @@ pub(super) fn setup(
         button_pressed,
         guard,
         captain,
-        fuel_can,
-        key_gold,
+        item_fuel,
+        item_shield,
+        item_key,
+        aura_fuel,
+        aura_shield,
+        aura_key,
+        sparkle,
         bubble,
         star,
         villager,
         stars,
         earth,
         debris,
-        steel,
         bolt,
         iron,
         copper,
@@ -434,15 +441,10 @@ pub(super) fn setup(
         baton,
         body,
         hull,
-        red,
-        glass,
-        panel,
-        nozzle,
-        nav_red,
-        nav_green,
         puff,
         plume: fields.add(field(3.)),
         shock: fields.add(field(4.)),
+        shuttle,
         fields: std::array::from_fn(|_| fields.add(field(0.))),
         atmosphere: fields.add(field(1.)),
         containment: fields.add(field(2.)),
@@ -1059,241 +1061,67 @@ fn spawn_head(w: &mut World, root: Entity, index: usize, kind: Kind) {
     }
 }
 
-/// A head seen through a porthole: a thin dark block with the face on front.
-fn porthole_head(
-    w: &mut World,
-    parent: Entity,
-    at: Vec3,
-    size: f32,
-    face: &Handle<StandardMaterial>,
-    hero: bool,
-) {
-    let a = w.resource::<Art>().clone();
-    let head = w
-        .spawn((
-            Transform::from_translation(at),
-            if hero {
-                Visibility::Hidden
-            } else {
-                Visibility::Inherited
-            },
-            RocketHead(hero),
-            ChildOf(parent),
-        ))
-        .id();
-    mesh(
-        w,
-        Some(head),
-        &a.cube,
-        &a.body,
-        Transform::from_scale(Vec3::new(size, size, 6.)),
-        (),
-    );
-    mesh(
-        w,
-        Some(head),
-        &a.quad,
-        face,
-        Transform::from_xyz(0., 0., 3.5).with_scale(Vec3::splat(size)),
-        (),
-    );
-}
+/// The shuttle inside the escape rocket's root: turned so its nose (+X in the
+/// shuttle's own space) points up (+Y), the way the ride poses the root.
+#[derive(Component)]
+struct ShuttleBase;
+const NOSE_UP: f32 = std::f32::consts::FRAC_PI_2;
 
-/// A round porthole facing the camera: steel rim, dark inside and glass.
-fn porthole(w: &mut World, parent: Entity, at: Vec3, size: f32) {
-    let a = w.resource::<Art>().clone();
-    let facing = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
-    mesh(
-        w,
-        Some(parent),
-        &a.cylinder,
-        &a.steel,
-        Transform::from_translation(at)
-            .with_rotation(facing)
-            .with_scale(Vec3::new(size + 14., 6., size + 14.)),
-        (),
-    );
-    mesh(
-        w,
-        Some(parent),
-        &a.cylinder,
-        &a.cable,
-        Transform::from_translation(at + Vec3::Z * 1.)
-            .with_rotation(facing)
-            .with_scale(Vec3::new(size, 6., size)),
-        (),
-    );
-    mesh(
-        w,
-        Some(parent),
-        &a.cylinder,
-        &a.glass,
-        Transform::from_translation(at + Vec3::Z * 12.)
-            .with_rotation(facing)
-            .with_scale(Vec3::new(size, 2., size)),
-        (),
-    );
-}
-
-/// The escape spaceship, built pointing up (+Y): a white hull with panel lines
-/// and a red band, red nose with a metal tip, swept fins with navigation
-/// lights, two side boosters, an engine bell with a shader plume (boosters
-/// too), a re-entry shock over the nose, and portholes with real heads: the
-/// hero's (shown once picked up) and the saved villagers'. Returns its root.
+/// The escape ship: the sleek shuttle shared with the LAUNCHER (hero in the
+/// cockpit once picked up, saved villagers in the side windows), with shader
+/// plumes on its three engines and a re-entry shock over the nose.
 pub(super) fn spawn_rocket(w: &mut World, at: Vec3, saved: u32) -> Entity {
     let a = w.resource::<Art>().clone();
     let face = w.resource::<HeroFace>().0.clone();
     let root = group(w, Transform::from_translation(at), Rocket);
-    // Hull, panel lines, red band.
-    mesh(
+    let base = w
+        .spawn((
+            ShuttleBase,
+            Transform::from_rotation(Quat::from_rotation_z(NOSE_UP)),
+            Visibility::Inherited,
+            ChildOf(root),
+        ))
+        .id();
+    let faces = vec![a.villager.clone(); saved.min(3) as usize];
+    let built = crate::systems::shuttle::build(
         w,
-        Some(root),
-        &a.cylinder,
-        &a.hull,
-        Transform::from_scale(Vec3::new(110., 240., 110.)),
-        (),
+        base,
+        &a.shuttle,
+        Some(RenderLayers::layer(1)),
+        face,
+        &faces,
     );
-    for y in [-62., 8., 78.] {
+    // Plumes stream back (-X) from each nozzle; the quad's top (+Y, where the
+    // shader starts the flame) is turned onto +X, toward the nozzle.
+    let toward_nozzle = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2);
+    for e in &built.engines {
         mesh(
             w,
-            Some(root),
-            &a.cylinder,
-            &a.panel,
-            Transform::from_xyz(0., y, 0.).with_scale(Vec3::new(112., 3., 112.)),
-            (),
-        );
-    }
-    mesh(
-        w,
-        Some(root),
-        &a.cylinder,
-        &a.red,
-        Transform::from_xyz(0., -96., 0.).with_scale(Vec3::new(113., 20., 113.)),
-        (),
-    );
-    // Nose and metal tip.
-    mesh(
-        w,
-        Some(root),
-        &a.cone,
-        &a.red,
-        Transform::from_xyz(0., 180., 0.).with_scale(Vec3::new(110., 120., 110.)),
-        (),
-    );
-    mesh(
-        w,
-        Some(root),
-        &a.cone,
-        &a.pole,
-        Transform::from_xyz(0., 246., 0.).with_scale(Vec3::new(22., 22., 22.)),
-        (),
-    );
-    // Swept fins with navigation lights on their tips (red left, green right).
-    for s in [-1., 1.] {
-        mesh(
-            w,
-            Some(root),
-            &a.cube,
-            &a.red,
-            Transform::from_xyz(s * 66., -108., 0.)
-                .with_rotation(Quat::from_rotation_z(s * 0.42))
-                .with_scale(Vec3::new(22., 100., 16.)),
-            (),
-        );
-        mesh(
-            w,
-            Some(root),
-            &a.cube,
-            &a.panel,
-            Transform::from_xyz(s * 58., -88., 0.)
-                .with_rotation(Quat::from_rotation_z(s * 0.42))
-                .with_scale(Vec3::new(6., 70., 18.)),
-            (),
-        );
-        mesh(
-            w,
-            Some(root),
-            &a.cube,
-            if s < 0. { &a.nav_red } else { &a.nav_green },
-            Transform::from_xyz(s * 92., -150., 10.).with_scale(Vec3::splat(12.)),
-            NavLight(if s < 0. { 0. } else { 0.5 }),
-        );
-        // Side booster with its own red cap, nozzle and plume.
-        let x = s * 74.;
-        mesh(
-            w,
-            Some(root),
-            &a.cylinder,
-            &a.hull,
-            Transform::from_xyz(x, -60., -20.).with_scale(Vec3::new(36., 120., 36.)),
-            (),
-        );
-        mesh(
-            w,
-            Some(root),
-            &a.cone,
-            &a.red,
-            Transform::from_xyz(x, 15., -20.).with_scale(Vec3::new(36., 30., 36.)),
-            (),
-        );
-        mesh(
-            w,
-            Some(root),
-            &a.cone,
-            &a.nozzle,
-            Transform::from_xyz(x, -128., -20.).with_scale(Vec3::new(30., 20., 30.)),
-            (),
-        );
-        mesh(
-            w,
-            Some(root),
+            Some(base),
             &a.quad,
             &a.plume,
-            Transform::from_xyz(x, -180., -16.).with_scale(Vec3::new(44., 80., 1.)),
-            Plume(0.5),
+            Transform::from_translation(*e + Vec3::Z * 3.)
+                .with_rotation(toward_nozzle)
+                .with_scale(Vec3::new(34., 120., 1.)),
+            Plume(e.x),
         );
     }
-    // Main engine bell and plume.
     mesh(
         w,
-        Some(root),
-        &a.cone,
-        &a.nozzle,
-        Transform::from_xyz(0., -140., 0.).with_scale(Vec3::new(80., 46., 80.)),
-        (),
-    );
-    mesh(
-        w,
-        Some(root),
-        &a.quad,
-        &a.plume,
-        Transform::from_xyz(0., -240., 2.).with_scale(Vec3::new(96., 160., 1.)),
-        Plume(1.),
-    );
-    // Re-entry shock over the nose.
-    mesh(
-        w,
-        Some(root),
+        Some(base),
         &a.quad,
         &a.shock,
-        Transform::from_xyz(0., 250., 70.).with_scale(Vec3::new(320., 240., 1.)),
+        Transform::from_translation(built.nose + Vec3::new(80., 0., 70.))
+            .with_rotation(toward_nozzle)
+            .with_scale(Vec3::new(320., 240., 1.)),
         Shock,
     );
-    // Portholes: the hero's big one, two small ones for villagers.
-    porthole(w, root, Vec3::new(0., 46., 52.), 74.);
-    porthole_head(w, root, Vec3::new(0., 46., 58.), 58., &face, true);
-    for (i, x) in [-26., 26.].into_iter().enumerate() {
-        porthole(w, root, Vec3::new(x, -34., 52.), 40.);
-        if (i as u32) < saved {
-            porthole_head(w, root, Vec3::new(x, -34., 58.), 30., &a.villager, false);
-        }
-    }
     root
 }
 
-/// Poses the escape spaceship: position, heading (direction of travel), flame
-/// (0..1) and re-entry heat (0..1). Heads appear once boarded and stay upright;
-/// navigation lights blink; the engines leave a smoke trail.
+/// Poses the escape ship: position, heading (direction of travel), flame
+/// (0..1) and re-entry heat (0..1). The hero shows in the cockpit once boarded;
+/// heads stay upright, lights blink, the engines leave a smoke trail.
 #[allow(clippy::too_many_arguments)] // One call per frame from the prison update.
 pub(super) fn pose_rocket(
     w: &mut World,
@@ -1304,7 +1132,7 @@ pub(super) fn pose_rocket(
     boarded: bool,
     dt: f32,
 ) {
-    // Turn only within the screen, so the side with the portholes always shows.
+    // Turn only within the screen, so the side with the windows always shows.
     let up = Vec3::new(heading.x, heading.y, 0.).normalize_or(Vec3::NEG_Y);
     let turn = Quat::from_rotation_arc(Vec3::Y, up);
     for mut t in w
@@ -1317,17 +1145,21 @@ pub(super) fn pose_rocket(
     let now = w.resource::<Time<Real>>().elapsed_secs();
     let flicker = 1. + (now * 40.).sin() * 0.12;
     for (plume, mut t) in w.query::<(&Plume, &mut Transform)>().iter_mut(w) {
-        let length = (60. + 220. * flame * flicker) * plume.0.max(0.4);
-        let top = if plume.0 >= 1. { -163. } else { -138. };
-        t.translation.y = top - length / 2.;
+        let length = 50. + 180. * flame * flicker;
+        t.translation.x = plume.0 - length / 2.;
         t.scale.y = length;
     }
-    for (head, mut t, mut v) in w
-        .query::<(&RocketHead, &mut Transform, &mut Visibility)>()
+    let bases: Vec<Entity> = w
+        .query_filtered::<Entity, With<ShuttleBase>>()
+        .iter(w)
+        .collect();
+    for base in bases {
+        crate::systems::shuttle::pose(w, base, turn * Quat::from_rotation_z(NOSE_UP), now);
+    }
+    for (head, mut v) in w
+        .query::<(&crate::systems::shuttle::ShuttleHead, &mut Visibility)>()
         .iter_mut(w)
     {
-        // Upright in the window whichever way the ship points.
-        t.rotation = turn.inverse();
         if head.0 {
             *v = if boarded {
                 Visibility::Inherited
@@ -1335,13 +1167,6 @@ pub(super) fn pose_rocket(
                 Visibility::Hidden
             };
         }
-    }
-    for (light, mut v) in w.query::<(&NavLight, &mut Visibility)>().iter_mut(w) {
-        *v = if (now + light.0) % 1. < 0.3 {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
     }
     let a = w.resource::<Art>().clone();
     {
@@ -1353,24 +1178,22 @@ pub(super) fn pose_rocket(
             f.params = Vec4::new(now, heat.clamp(0., 1.), 4., 0.);
         }
     }
-    // Smoke: puffs left behind the engine, drifting and growing.
+    // Smoke: puffs left behind the engines, drifting and growing.
     if flame > 0.55 {
-        let nozzle = at - up * 200. - Vec3::Z * 40.;
+        let nozzle = at - up * 175. - Vec3::Z * 40.;
         let k = (now * 1000.) as u32;
-        for i in 0..1 {
-            let side = Vec3::new(-up.y, up.x, 0.) * jitter(k, i) * 20.;
-            mesh(
-                w,
-                None,
-                &a.sphere,
-                &a.puff,
-                Transform::from_translation(nozzle + side).with_scale(Vec3::splat(12.)),
-                Puff {
-                    v: -up * 180. + side * 2.,
-                    age: 0.,
-                },
-            );
-        }
+        let side = Vec3::new(-up.y, up.x, 0.) * jitter(k, 0) * 20.;
+        mesh(
+            w,
+            None,
+            &a.sphere,
+            &a.puff,
+            Transform::from_translation(nozzle + side).with_scale(Vec3::splat(12.)),
+            Puff {
+                v: -up * 180. + side * 2.,
+                age: 0.,
+            },
+        );
     }
     let mut done = Vec::new();
     for (e, mut puff, mut t) in w.query::<(Entity, &mut Puff, &mut Transform)>().iter_mut(w) {
@@ -1603,71 +1426,60 @@ pub(super) fn animate(
                 ChildOf(root),
             ))
             .id();
-        match pu.kind {
-            sim::PowerKind::Fuel => {
-                mesh(
-                    w,
-                    Some(item),
-                    &a.cylinder,
-                    &a.fuel_can,
-                    Transform::from_scale(Vec3::new(26., 40., 26.)),
-                    (),
-                );
-                mesh(
-                    w,
-                    Some(item),
-                    &a.cylinder,
-                    &a.nozzle,
-                    Transform::from_xyz(0., 24., 0.).with_scale(Vec3::new(14., 10., 14.)),
-                    (),
-                );
-            }
-            sim::PowerKind::Shield => {
-                mesh(
-                    w,
-                    Some(item),
-                    &a.sphere,
-                    &a.bubble,
-                    Transform::from_scale(Vec3::splat(22.)),
-                    (),
-                );
-                mesh(
-                    w,
-                    Some(item),
-                    &a.sphere,
-                    &a.spark,
-                    Transform::from_scale(Vec3::splat(9.)),
-                    (),
-                );
-            }
-            sim::PowerKind::Key => {
-                mesh(
-                    w,
-                    Some(item),
-                    &a.cube,
-                    &a.key_gold,
-                    Transform::from_scale(Vec3::new(40., 26., 5.)),
-                    (),
-                );
-                mesh(
-                    w,
-                    Some(item),
-                    &a.cube,
-                    &a.cable,
-                    Transform::from_xyz(-10., 0., 3.).with_scale(Vec3::new(10., 10., 2.)),
-                    (),
-                );
-            }
+        // A pixel-art sprite in front of a soft aura in its colour, with two
+        // sparkles that twinkle around it.
+        let (sprite, aura) = match pu.kind {
+            sim::PowerKind::Fuel => (&a.item_fuel, &a.aura_fuel),
+            sim::PowerKind::Shield => (&a.item_shield, &a.aura_shield),
+            sim::PowerKind::Key => (&a.item_key, &a.aura_key),
+        };
+        mesh(
+            w,
+            Some(item),
+            &a.quad,
+            aura,
+            Transform::from_xyz(0., 0., -4.).with_scale(Vec3::splat(110.)),
+            ItemAura,
+        );
+        mesh(
+            w,
+            Some(item),
+            &a.quad,
+            sprite,
+            Transform::from_scale(Vec3::splat(52.)),
+            (),
+        );
+        for (i, at) in [Vec3::new(24., 22., 4.), Vec3::new(-22., -18., 4.)]
+            .into_iter()
+            .enumerate()
+        {
+            mesh(
+                w,
+                Some(item),
+                &a.quad,
+                &a.sparkle,
+                Transform::from_translation(at).with_scale(Vec3::splat(14.)),
+                Sparkle(i as f32 * 1.7 + pu.id as f32),
+            );
         }
     }
     for (pv, mut t) in w.query::<(&PowerUpVisual, &mut Transform)>().iter_mut(w) {
         if let Some(pu) = cell.powerups.iter().find(|p| p.id == pv.0) {
-            let bob = (cell.time * 3. + pv.0 as f32).sin() * 6.;
-            t.translation = (pu.p + Vec2::Y * bob).extend(40.);
-            // Upright on screen, turning slowly to show it is 3D.
-            t.rotation = turn.inverse() * Quat::from_rotation_y(cell.time * 2.);
-            t.scale = Vec3::splat(1.6);
+            let phase = cell.time * 3. + pv.0 as f32;
+            t.translation = (pu.p + Vec2::Y * phase.sin() * 7.).extend(40.);
+            // Upright on screen, swaying a little (never edge-on), pulsing.
+            t.rotation = turn.inverse() * Quat::from_rotation_y(phase.cos() * 0.45);
+            t.scale = Vec3::splat(1. + phase.sin() * 0.06);
         }
+    }
+    for (aura, mut t) in w.query::<(&ItemAura, &mut Transform)>().iter_mut(w) {
+        let _ = aura;
+        t.scale = Vec3::splat(110. + (cell.time * 4.).sin() * 10.);
+    }
+    for (spark, mut t) in w.query::<(&Sparkle, &mut Transform)>().iter_mut(w) {
+        let twinkle = (cell.time * 5. + spark.0).sin().max(0.);
+        t.scale = Vec3::splat(4. + twinkle * 14.);
+        t.rotation = Quat::from_rotation_z(cell.time * 2. + spark.0);
     }
     // Shield bubble and stun stars around the hero.
     let hero = cell.bodies[0];

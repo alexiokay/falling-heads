@@ -124,16 +124,10 @@ struct Fragment {
 struct RocketAssets {
     cube: Handle<Mesh>,
     quad: Handle<Mesh>,
-    cylinder: Handle<Mesh>,
-    cone: Handle<Mesh>,
     metal: Handle<StandardMaterial>,
     red: Handle<StandardMaterial>,
-    dark: Handle<StandardMaterial>,
-    hull: Handle<StandardMaterial>,
-    panel: Handle<StandardMaterial>,
-    porthole: Handle<StandardMaterial>,
-    nav_red: Handle<StandardMaterial>,
-    nav_green: Handle<StandardMaterial>,
+    /// The sleek shuttle shared with the space prison.
+    shuttle: super::shuttle::ShuttleArt,
     flame: Handle<super::graphics::FlameMaterial>,
     villager: Handle<StandardMaterial>,
 }
@@ -565,6 +559,9 @@ fn update(world: &mut World) {
             // A gentle rocking on the roll rhythm (not full barrel rolls), so the
             // portholes and the heads in them stay in view.
             let roll = 0.18 * roll_angle(f.elapsed).sin();
+            // Flying left, the shuttle rolls over (its other side is the same), so
+            // its cockpit stays on top instead of hanging upside down.
+            let left = pitch.cos() < 0.;
             if let Some(mut t) = world.get_mut::<Transform>(f.ship) {
                 t.translation = p + Vec3::Z * 180.;
                 t.rotation = Quat::from_rotation_z(pitch)
@@ -574,33 +571,14 @@ fn update(world: &mut World) {
                                 * (u * std::f32::consts::TAU).sin()
                                 * (std::f32::consts::PI * u).sin(),
                     )
-                    * Quat::from_rotation_x(roll);
+                    * Quat::from_rotation_x(roll + if left { std::f32::consts::PI } else { 0. });
             }
-            // Heads stay upright and face the camera inside their portholes.
+            // Heads stay upright and face the camera; the lights blink.
             let ship_turn = world
                 .get::<Transform>(f.ship)
                 .map_or(Quat::IDENTITY, |t| t.rotation);
             let now = world.resource::<Time>().elapsed_secs();
-            for (parent, mut t, head, light) in world
-                .query::<(
-                    &ChildOf,
-                    &mut Transform,
-                    Option<&visuals::RocketHead>,
-                    Option<&visuals::NavLight>,
-                )>()
-                .iter_mut(world)
-            {
-                if parent.parent() != f.ship {
-                    continue;
-                }
-                if head.is_some() {
-                    t.rotation = ship_turn.inverse();
-                }
-                if let Some(light) = light {
-                    let on = (now + light.0) % 1. < 0.3;
-                    t.scale = Vec3::splat(if on { 9. } else { 0. });
-                }
-            }
+            super::shuttle::pose(world, f.ship, ship_turn, now);
             if u > 0. && f.audio.is_none() {
                 f.audio = Some(super::rocket_audio::play(world, 1));
             }
@@ -634,7 +612,7 @@ fn update(world: &mut World) {
             };
             world.entity_mut(f.exhaust).insert((
                 Visibility::Visible,
-                Transform::from_translation(p - dir * (100. + length * 0.5) + Vec3::Z * 185.)
+                Transform::from_translation(p - dir * (122. + length * 0.5) + Vec3::Z * 185.)
                     .with_rotation(Quat::from_rotation_z(pitch + std::f32::consts::FRAC_PI_2))
                     .with_scale(Vec3::new(0.65, length / 64., 1.)),
             ));
