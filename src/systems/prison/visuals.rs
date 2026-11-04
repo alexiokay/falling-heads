@@ -85,8 +85,8 @@ pub(super) struct Art {
     puff: Handle<StandardMaterial>,
     plume: Handle<PrisonField>,
     shock: Handle<PrisonField>,
-    /// The escape shuttle (shared design with the LAUNCHER), kept lit.
-    shuttle: crate::systems::shuttle::ShuttleArt,
+    /// The escape rocket (the voxel block rocket shared with the LAUNCHER), kept lit.
+    rocket: crate::systems::block_rocket::RocketArt,
     fields: [Handle<PrisonField>; 4],
     atmosphere: Handle<PrisonField>,
     containment: Handle<PrisonField>,
@@ -166,7 +166,7 @@ struct Earth;
 struct MagnetRoot;
 #[derive(Component)]
 struct Rocket;
-/// An engine plume quad, by the x of its nozzle (in the shuttle's space).
+/// An engine plume quad, by the x of its nozzle (in the rocket's space).
 #[derive(Component)]
 struct Plume(f32);
 #[derive(Component)]
@@ -352,9 +352,10 @@ pub(super) fn setup(
         LinearRgba::rgb(4., 3.5, 0.6),
         false,
     );
-    let shuttle = {
+    let rocket = {
         let mut ids = Vec::new();
-        let art = crate::systems::shuttle::ShuttleArt::new(&mut meshes, &mut mats, &mut ids);
+        let art =
+            crate::systems::block_rocket::RocketArt::new(&mut meshes, &mut mats, &server, &mut ids);
         keep.0.extend(ids);
         art
     };
@@ -444,7 +445,7 @@ pub(super) fn setup(
         puff,
         plume: fields.add(field(3.)),
         shock: fields.add(field(4.)),
-        shuttle,
+        rocket,
         fields: std::array::from_fn(|_| fields.add(field(0.))),
         atmosphere: fields.add(field(1.)),
         containment: fields.add(field(2.)),
@@ -1061,13 +1062,13 @@ fn spawn_head(w: &mut World, root: Entity, index: usize, kind: Kind) {
     }
 }
 
-/// The shuttle inside the escape rocket's root: turned so its nose (+X in the
-/// shuttle's own space) points up (+Y), the way the ride poses the root.
+/// The block rocket inside the escape rocket's root: turned so its nose (+X in the
+/// rocket's own space) points up (+Y), the way the ride poses the root.
 #[derive(Component)]
-struct ShuttleBase;
+struct RocketBase;
 const NOSE_UP: f32 = std::f32::consts::FRAC_PI_2;
 
-/// The escape ship: the sleek shuttle shared with the LAUNCHER (hero in the
+/// The escape ship: the voxel block rocket shared with the LAUNCHER (hero in the
 /// cockpit once picked up, saved villagers in the side windows), with shader
 /// plumes on its three engines and a re-entry shock over the nose.
 pub(super) fn spawn_rocket(w: &mut World, at: Vec3, saved: u32) -> Entity {
@@ -1076,17 +1077,17 @@ pub(super) fn spawn_rocket(w: &mut World, at: Vec3, saved: u32) -> Entity {
     let root = group(w, Transform::from_translation(at), Rocket);
     let base = w
         .spawn((
-            ShuttleBase,
+            RocketBase,
             Transform::from_rotation(Quat::from_rotation_z(NOSE_UP)),
             Visibility::Inherited,
             ChildOf(root),
         ))
         .id();
     let faces = vec![a.villager.clone(); saved.min(3) as usize];
-    let built = crate::systems::shuttle::build(
+    let built = crate::systems::block_rocket::build(
         w,
         base,
-        &a.shuttle,
+        &a.rocket,
         Some(RenderLayers::layer(1)),
         face,
         &faces,
@@ -1150,14 +1151,14 @@ pub(super) fn pose_rocket(
         t.scale.y = length;
     }
     let bases: Vec<Entity> = w
-        .query_filtered::<Entity, With<ShuttleBase>>()
+        .query_filtered::<Entity, With<RocketBase>>()
         .iter(w)
         .collect();
     for base in bases {
-        crate::systems::shuttle::pose(w, base, turn * Quat::from_rotation_z(NOSE_UP), now);
+        crate::systems::block_rocket::pose(w, base, turn * Quat::from_rotation_z(NOSE_UP), now);
     }
     for (head, mut v) in w
-        .query::<(&crate::systems::shuttle::ShuttleHead, &mut Visibility)>()
+        .query::<(&crate::systems::block_rocket::RocketHead, &mut Visibility)>()
         .iter_mut(w)
     {
         if head.0 {
@@ -1180,7 +1181,7 @@ pub(super) fn pose_rocket(
     }
     // Smoke: puffs left behind the engines, drifting and growing.
     if flame > 0.55 {
-        let nozzle = at - up * 175. - Vec3::Z * 40.;
+        let nozzle = at - up * 200. - Vec3::Z * 40.;
         let k = (now * 1000.) as u32;
         let side = Vec3::new(-up.y, up.x, 0.) * jitter(k, 0) * 20.;
         mesh(

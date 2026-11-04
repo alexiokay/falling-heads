@@ -126,8 +126,8 @@ struct RocketAssets {
     quad: Handle<Mesh>,
     metal: Handle<StandardMaterial>,
     red: Handle<StandardMaterial>,
-    /// The sleek shuttle shared with the space prison.
-    shuttle: super::shuttle::ShuttleArt,
+    /// The voxel block rocket shared with the space prison.
+    rocket: super::block_rocket::RocketArt,
     flame: Handle<super::graphics::FlameMaterial>,
     villager: Handle<StandardMaterial>,
 }
@@ -559,7 +559,7 @@ fn update(world: &mut World) {
             // A gentle rocking on the roll rhythm (not full barrel rolls), so the
             // portholes and the heads in them stay in view.
             let roll = 0.18 * roll_angle(f.elapsed).sin();
-            // Flying left, the shuttle rolls over (its other side is the same), so
+            // Flying left, the rocket rolls over (its other side is the same), so
             // its cockpit stays on top instead of hanging upside down.
             let left = pitch.cos() < 0.;
             if let Some(mut t) = world.get_mut::<Transform>(f.ship) {
@@ -573,12 +573,12 @@ fn update(world: &mut World) {
                     )
                     * Quat::from_rotation_x(roll + if left { std::f32::consts::PI } else { 0. });
             }
-            // Heads stay upright and face the camera; the lights blink.
+            // Heads stay upright and face the camera; lamps blink, flames flicker.
             let ship_turn = world
                 .get::<Transform>(f.ship)
                 .map_or(Quat::IDENTITY, |t| t.rotation);
             let now = world.resource::<Time>().elapsed_secs();
-            super::shuttle::pose(world, f.ship, ship_turn, now);
+            super::block_rocket::pose(world, f.ship, ship_turn, now);
             if u > 0. && f.audio.is_none() {
                 f.audio = Some(super::rocket_audio::play(world, 1));
             }
@@ -612,7 +612,7 @@ fn update(world: &mut World) {
             };
             world.entity_mut(f.exhaust).insert((
                 Visibility::Visible,
-                Transform::from_translation(p - dir * (122. + length * 0.5) + Vec3::Z * 185.)
+                Transform::from_translation(p - dir * (108. + length * 0.5) + Vec3::Z * 185.)
                     .with_rotation(Quat::from_rotation_z(pitch + std::f32::consts::FRAC_PI_2))
                     .with_scale(Vec3::new(0.65, length / 64., 1.)),
             ));

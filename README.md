@@ -24,7 +24,7 @@ Control a falling hero as it bounces through an infinite chunk-based world with 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Rust 1.97.1 or higher
+- Rust 1.99.1 (the version pinned in `tools/build-environment.json`)
 - Bevy 0.20.0 and Avian 0.8.0 (registry dependencies)
 
 See [the upgrade and validation checklist](FALLING_HEADS_UPGRADE_2026-10-23.md) for current fixes, validation limits and gameplay proposals.
@@ -86,8 +86,8 @@ micro-blasts throw heads around. The station, cell and Earth are lit by the
 scene's own lights whatever Graphics > Lighting says. Hitting a red button opens the trapdoor
 across the room for 1.8 s; fly out through it (WASD or arrows thrust). Guards come
 in through the trapdoors and hit with batons (a hit costs a heart but never kills).
-Fly out and an escape shuttle picks you up (the same sleek shuttle as the LAUNCHER:
-your head under the cockpit canopy, saved villagers in the side windows) and dives to Earth with a shader engine plume, smoke
+Fly out and an escape rocket picks you up (the same voxel block rocket as the LAUNCHER:
+your head in the glass cockpit block, saved villagers in the portholes) and dives to Earth with a shader engine plume, smoke
 and a re-entry shock; you land home with every villager who got out: 100 XP, up to
 150 more for a quick escape, 40 per villager and a heart. There is no time limit by
 default: it ends when you escape, or when you give up with Esc (no reward).

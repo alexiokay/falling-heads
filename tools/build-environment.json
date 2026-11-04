@@ -1,1 +1,1 @@
-{"rustc":"1.98.1","bevy":"0.20.0","avian":"0.8.0","streamline":"2.14.16","nativeSdk":"See .cargo/config.toml; Vulkan/DLSS/clang SDK paths must exist on the build runner."}
+{"rustc":"1.99.1","bevy":"0.20.0","avian":"0.8.0","streamline":"2.14.16","nativeSdk":"See .cargo/config.toml; Vulkan/DLSS/clang SDK paths must exist on the build runner."}

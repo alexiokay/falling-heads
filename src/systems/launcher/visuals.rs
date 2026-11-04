@@ -5,7 +5,7 @@ pub(super) fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut flames: ResMut<Assets<crate::systems::graphics::FlameMaterial>>,
-    _server: Res<AssetServer>,
+    server: Res<AssetServer>,
 ) {
     let mut material = |color: Color, metallic: f32| {
         materials.add(StandardMaterial {
@@ -28,9 +28,10 @@ pub(super) fn setup(
         quad: meshes.add(Rectangle::new(64., 64.)),
         metal,
         red,
-        shuttle: crate::systems::shuttle::ShuttleArt::new(
+        rocket: crate::systems::block_rocket::RocketArt::new(
             &mut meshes,
             &mut materials,
+            &server,
             &mut Vec::new(),
         ),
         flame,
@@ -38,16 +39,16 @@ pub(super) fn setup(
     });
 }
 
-/// How big the shuttle flies in the world (it is built about 300 long).
-pub(super) const SHUTTLE_SCALE: f32 = 0.75;
+/// How big the rocket flies in the world (it is built about 360 long).
+pub(super) const ROCKET_SCALE: f32 = 0.62;
 
-/// The LAUNCHER shuttle (nose toward +X): the sleek ship shared with the space
-/// prison, with the hero's head in the cockpit and up to three passengers'
-/// heads in the side windows.
+/// The LAUNCHER rocket (nose toward +X): the voxel block rocket shared with the
+/// space prison, with the hero's head in the glass cockpit and up to three
+/// passengers' heads in the portholes.
 pub(super) fn ship(world: &mut World, position: Vec3, hero: Entity, passengers: u8) -> Entity {
     let root = world
         .spawn((
-            Transform::from_translation(position).with_scale(Vec3::splat(SHUTTLE_SCALE)),
+            Transform::from_translation(position).with_scale(Vec3::splat(ROCKET_SCALE)),
             Visibility::Visible,
         ))
         .id();
@@ -75,9 +76,9 @@ pub(super) fn ship(world: &mut World, position: Vec3, hero: Entity, passengers: 
     {
         m.base_color_texture = Some(texture);
     }
-    let art = world.resource::<RocketAssets>().shuttle.clone();
+    let art = world.resource::<RocketAssets>().rocket.clone();
     let faces = vec![villager; passengers.min(3) as usize];
-    crate::systems::shuttle::build(world, root, &art, None, hero_face, &faces);
+    crate::systems::block_rocket::build(world, root, &art, None, hero_face, &faces);
     root
 }
 
