@@ -10,6 +10,8 @@ rust-version = "1.97.1"
 # build a player release with `cargo build --release --no-default-features`.
 default = ["probes"]
 probes = []
+# Counts live Rust heap bytes in the performance log (diagnosis only).
+heap-stats = []
 
 [dependencies]
 # Same winit as bevy_winit; only used to set the window icon (no extra features).

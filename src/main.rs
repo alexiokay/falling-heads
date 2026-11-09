@@ -10,6 +10,8 @@ mod components;
 mod config;
 mod diagnostics;
 mod events;
+#[cfg(feature = "heap-stats")]
+mod heap_stats;
 mod plugins;
 mod resources;
 mod smoke_test;
@@ -34,6 +36,8 @@ mod fast_motion_probe;
 mod ghost_floor_probe;
 #[cfg(feature = "probes")]
 mod head_size_probe;
+#[cfg(feature = "probes")]
+mod memory_probe;
 #[cfg(feature = "probes")]
 mod night_probe;
 #[cfg(feature = "probes")]
@@ -94,7 +98,9 @@ use systems::damage_visual_system::DamageVisualPlugin;
 use systems::death_particle_system::DeathParticlePlugin;
 use systems::enemy_ai_system::EnemyAIPlugin;
 use systems::lootbox_system::LootboxPlugin;
-use systems::performance_diagnostics::{PerformanceTracker, log_performance_metrics};
+use systems::performance_diagnostics::{
+    PerformanceTracker, log_memory_metrics, log_performance_metrics,
+};
 use systems::projectile_system::ProjectilePlugin;
 use systems::random_events::RandomEventPlugin;
 use systems::randombox_system::RandomBoxPlugin;
@@ -282,7 +288,7 @@ fn main() {
     .add_systems(Update, initialize_mesh_cache)
     .add_systems(Update, initialize_material_cache)
     .add_systems(Update, diagnostics::snapshot)
-    .add_systems(Update, log_performance_metrics)
+    .add_systems(Update, (log_performance_metrics, log_memory_metrics))
     .add_systems(Update, apply_fps_limit);
 
     systems::native_gpu::install(&mut app);
@@ -300,6 +306,9 @@ fn main() {
         app.add_plugins(visual_probe::VisualProbePlugin);
     } else if smoke_test {
         app.add_plugins(smoke_test::SmokeTestPlugin);
+    } else if cfg!(feature = "probes") && std::env::args().any(|a| a == "--memory-probe") {
+        #[cfg(feature = "probes")]
+        app.add_plugins(memory_probe::MemoryProbePlugin);
     }
     let exit = app.run();
     let code = match exit {

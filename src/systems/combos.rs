@@ -364,16 +364,28 @@ fn combo_hud(
     time: Res<Time>,
     mut hud_state: ResMut<HudState>,
     heroes: Query<&Combo, With<Hero>>,
-    mut hud: Query<(&mut Text, &mut TextColor, &mut TextFont), With<ComboHud>>,
+    mut hud: Query<
+        (
+            &mut Text,
+            &mut TextColor,
+            &mut TextFont,
+            &mut bevy::ui::UiTransform,
+        ),
+        With<ComboHud>,
+    >,
 ) {
     let dt = time.delta_secs();
     hud_state.flash = (hud_state.flash - dt).max(0.0);
     hud_state.pulse = (hud_state.pulse - dt * 4.0).max(0.0);
-    let Ok((mut text, mut color, mut font)) = hud.single_mut() else {
+    let Ok((mut text, mut color, mut font, mut transform)) = hud.single_mut() else {
         return;
     };
     let live = heroes.iter().next().map_or(0, |c| c.count);
-    let (line, tint, size) = if live >= 2 {
+    // Bevy rasterizes a separate glyph atlas (a 512x512 texture) for every distinct
+    // font size and never frees it, so the size steps through a few whole pixels
+    // and the pulse is a node scale. Animating `font_size` per frame leaked about
+    // 2 GB per minute of combos until the process ran out of memory.
+    let (line, tint, size, pulse) = if live >= 2 {
         let tag = match live {
             50.. => "\nFRENZY",
             25.. => "\nUNSTOPPABLE",
@@ -383,7 +395,8 @@ fn combo_hud(
         (
             format!("x{live} COMBO{tag}"),
             heat_color(live),
-            16.0 + live.min(50) as f32 * 0.12 + hud_state.pulse * 6.0,
+            combo_font_px(live),
+            hud_state.pulse * 6.0,
         )
     } else if hud_state.flash > 0.0 {
         let fade = (hud_state.flash / 0.6).min(1.0);
@@ -391,15 +404,27 @@ fn combo_hud(
             hud_state.flash_text.clone(),
             hud_state.flash_color.with_alpha(fade),
             15.0,
+            0.0,
         )
     } else {
-        (String::new(), Color::WHITE, 16.0)
+        (String::new(), Color::WHITE, 16.0, 0.0)
     };
     if text.0 != line {
         text.0 = line;
     }
     color.0 = tint;
-    font.font_size = FontSize::Px(size);
+    if !matches!(font.font_size, FontSize::Px(px) if px == size) {
+        font.font_size = FontSize::Px(size);
+    }
+    let scale = Vec2::splat(1.0 + pulse / combo_font_px(live.max(2)));
+    if transform.scale != scale {
+        transform.scale = scale;
+    }
+}
+
+/// Whole-pixel HUD font size for a combo count: 16 px at x2 growing to 22 px at x50.
+fn combo_font_px(count: u32) -> f32 {
+    (16.0 + count.min(50) as f32 * 0.12).round()
 }
 
 /// A glowing trail behind the hero from x10, brighter and denser as it grows.
@@ -496,5 +521,21 @@ mod tests {
         assert_eq!(multiplier(500), 3.0);
         assert_eq!(milestone(10), Some("ON FIRE"));
         assert_eq!(milestone(11), None);
+    }
+
+    /// Every distinct font size costs a glyph atlas that is never freed, so the
+    /// combo HUD may only ever use a handful of whole-pixel sizes.
+    #[test]
+    fn combo_hud_uses_few_whole_pixel_font_sizes() {
+        let sizes: std::collections::BTreeSet<u32> = (0..10_000)
+            .map(|count| {
+                let px = combo_font_px(count);
+                assert_eq!(px.fract(), 0.0, "x{count} uses a fractional font size");
+                px as u32
+            })
+            .collect();
+        assert_eq!(sizes.first(), Some(&16));
+        assert_eq!(sizes.last(), Some(&22));
+        assert!(sizes.len() <= 7, "{sizes:?}");
     }
 }

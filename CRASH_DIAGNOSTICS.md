@@ -56,3 +56,27 @@ camera positions, and raster, DLSS and ray-traced renderer modes.
 ## Native startup observation — 27 October 2026
 
 Two new water-test launches and the previous published binary failed before loading the scene while a user game was open. Windows Application event 1000 identified `nvoglv64.dll` 32.0.16.1742, exception `0xc0000005`, offset `0xB857CF` for all three. The previous build also faulted and remained in crash handling until the owned test timeout. Evidence: `target/water-driver-startup-events.json`, `target/water-startup-driver-crash.log`, `target/water-old-baseline-err.log`. After the user closed the game, the new build completed all five water captures (raster, DLSS, RT) and shut down cleanly. This correlates the startup failures with simultaneous instances, but does not establish the root cause inside the driver/native initialization. It is distinct from the earlier historical 0xC0000409 report. No driver, registry, or pagefile settings were changed.
+
+## Out-of-memory during unattended play — 8 November 2026
+
+Build `20261105-001609-c0254780bb` grew about 2 GB of private bytes per minute while
+playing itself (OBS window capture, free pack) and failed an allocation at 23.7 GB after
+11.5 minutes (`memory allocation of 1048576 bytes failed`, exit `0xc0000409`), which
+froze other applications. Entities, meshes and materials stayed flat; image assets rose
+by roughly nine 1 MiB (512x512) textures per second. Cause: the combo HUD
+(`src/systems/combos.rs`, `combo_hud`) animated `TextFont::font_size` every frame
+during the break pulse. Bevy rasterizes a separate glyph atlas for every exact font size
+and never frees it. The leak reproduced with frame generation off, DLSS off and without
+the Streamline DLLs, so it was independent of the NVIDIA runtimes.
+
+Fix (build `20261109-084543-ac3fd2b548`): the HUD uses a few whole-pixel sizes and
+animates the pulse with `UiTransform` scale. Same conditions afterwards: flat at about
+1.9 GB over three minutes (previously 6.6 GB).
+
+Regression check: `tools/Test-FallingHeadsMemory.ps1 [-Executable ...] [-Minutes 5] [-Pack free]`
+runs `--memory-probe`. After a one-minute warm-up it fails on more than 48 glyph atlas
+sets, on more than 64 extra images or on more than 1 GiB extra private bytes. The old
+code fails within ten seconds. The performance log also prints a `Memory:` line
+(images, CPU image bytes, glyph atlas sets) every ten seconds. Never animate a text's
+font size; scale the node or `Transform` instead. The `heap-stats` cargo feature adds the
+live Rust heap size to that line for diagnosis.

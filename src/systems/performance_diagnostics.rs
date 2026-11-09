@@ -130,3 +130,42 @@ pub fn log_performance_metrics(
         info!("==========================================================");
     }
 }
+
+/// Every ten seconds: asset memory that can grow without new entities. Glyph atlas
+/// sets (one per font and exact font size) are never freed by Bevy; a steadily
+/// rising count means some text animates its font size.
+pub fn log_memory_metrics(
+    time: Res<Time>,
+    mut next: Local<f32>,
+    images: Res<Assets<Image>>,
+    meshes: Res<Assets<Mesh>>,
+    font_atlases: Res<bevy::text::FontAtlasSet>,
+) {
+    let now = time.elapsed_secs();
+    if now < *next {
+        return;
+    }
+    *next = now + 10.0;
+    let image_bytes: usize = images
+        .iter()
+        .map(|(_, i)| i.data.as_ref().map_or(0, Vec::len))
+        .sum();
+    let mesh_bytes: usize = meshes
+        .iter()
+        .map(|(_, m)| {
+            m.get_vertex_buffer_size() + m.get_index_buffer_bytes().map_or(0, <[u8]>::len)
+        })
+        .sum();
+    #[cfg(feature = "heap-stats")]
+    let heap = format!("{} MiB", crate::heap_stats::live_bytes() / 1_048_576);
+    #[cfg(not(feature = "heap-stats"))]
+    let heap = "untracked (feature heap-stats)";
+    info!(
+        "  Memory: rust heap {} | {} images ({} MiB cpu) | mesh cpu {} MiB | {} glyph atlas sets",
+        heap,
+        images.len(),
+        image_bytes / 1_048_576,
+        mesh_bytes / 1_048_576,
+        font_atlases.len()
+    );
+}
